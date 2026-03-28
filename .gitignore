@@ -1,0 +1,21 @@
+# Secret files - NEVER commit these
+.env
+*.env
+.env.local
+
+# Database files
+*.json
+price_data.json
+signups.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.Python
+venv/
+*.egg-info/
+
+# OS files
+.DS_Store
+Thumbs.db

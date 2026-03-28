@@ -1,0 +1,259 @@
+"""
+Price Drop Alert Bot - Monitor product prices and alert users
+"""
+
+import os
+import json
+from datetime import datetime
+from dotenv import load_dotenv
+from firecrawl import FirecrawlApp
+
+# Load environment variables
+load_dotenv()
+
+# Database file to store products and prices
+DB_FILE = "price_data.json"
+
+def load_database():
+    """Load the product database from JSON file"""
+    if os.path.exists(DB_FILE):
+        with open(DB_FILE, 'r') as f:
+            return json.load(f)
+    return {"products": []}
+
+def save_database(data):
+    """Save the product database to JSON file"""
+    with open(DB_FILE, 'w') as f:
+        json.dump(data, f, indent=2)
+
+def scrape_price(url):
+    """
+    Scrape the current price from a URL using Firecrawl
+    
+    Args:
+        url (str): Product URL to scrape
+        
+    Returns:
+        float: Current price, or None if failed
+    """
+    api_key = os.getenv('FIRECRAWL_API_KEY')
+    
+    if not api_key:
+        print("❌ Error: FIRECRAWL_API_KEY not found")
+        return None
+    
+    try:
+        app = FirecrawlApp(api_key=api_key)
+        
+        # Schema to extract price information
+        price_schema = {
+            "type": "object",
+            "properties": {
+                "price": {
+                    "type": "string",
+                    "description": "The product price (e.g., $19.99)"
+                },
+                "product_name": {
+                    "type": "string",
+                    "description": "The product name or title"
+                },
+                "availability": {
+                    "type": "string",
+                    "description": "Is the product in stock?"
+                }
+            }
+        }
+        
+        # Scrape with schema
+        result = app.scrape_url(url, {
+            'formats': ['extract'],
+            'extract': {
+                'schema': price_schema
+            }
+        })
+        
+        if result and 'extract' in result:
+            data = result['extract']
+            # Extract price (remove $ and convert to float)
+            if 'price' in data and data['price']:
+                price_str = data['price'].replace('$', '').replace(',', '')
+                try:
+                    return float(price_str)
+                except:
+                    return None
+        
+        return None
+        
+    except Exception as e:
+        print(f"❌ Error scraping {url}: {str(e)}")
+        return None
+
+def add_product(product_name, url, target_price, email):
+    """
+    Add a product to monitor
+    
+    Args:
+        product_name (str): Name of the product
+        url (str): Product URL
+        target_price (float): Price alert threshold
+        email (str): User's email for alerts
+    """
+    db = load_database()
+    
+    # Get current price
+    current_price = scrape_price(url)
+    
+    if current_price is None:
+        print(f"⚠️ Warning: Could not scrape initial price from {url}")
+        current_price = target_price
+    
+    product = {
+        "id": len(db["products"]) + 1,
+        "name": product_name,
+        "url": url,
+        "target_price": target_price,
+        "current_price": current_price,
+        "email": email,
+        "added_date": datetime.now().isoformat(),
+        "price_history": [
+            {
+                "price": current_price,
+                "date": datetime.now().isoformat()
+            }
+        ],
+        "alert_sent": False
+    }
+    
+    db["products"].append(product)
+    save_database(db)
+    
+    print(f"✅ Added: {product_name}")
+    print(f"   Current Price: ${current_price}")
+    print(f"   Target Price: ${target_price}")
+    print(f"   Alert Email: {email}")
+    return product
+
+def check_all_prices():
+    """
+    Check prices for all tracked products and send alerts if needed
+    """
+    db = load_database()
+    alerts_to_send = []
+    
+    print("\n🔍 Checking prices for all products...")
+    print("=" * 60)
+    
+    for product in db["products"]:
+        print(f"\nChecking: {product['name']}")
+        current_price = scrape_price(product['url'])
+        
+        if current_price is None:
+            print(f"⚠️ Could not scrape current price")
+            continue
+        
+        old_price = product['current_price']
+        product['current_price'] = current_price
+        product['price_history'].append({
+            "price": current_price,
+            "date": datetime.now().isoformat()
+        })
+        
+        print(f"   Old Price: ${old_price}")
+        print(f"   New Price: ${current_price}")
+        
+        # Check if price dropped below target
+        if current_price <= product['target_price']:
+            print(f"   🎉 ALERT! Price dropped below target!")
+            alerts_to_send.append({
+                "product": product['name'],
+                "current_price": current_price,
+                "target_price": product['target_price'],
+                "email": product['email'],
+                "url": product['url'],
+                "savings": old_price - current_price
+            })
+    
+    save_database(db)
+    
+    # Send alerts
+    if alerts_to_send:
+        print(f"\n📧 Sending {len(alerts_to_send)} price drop alerts...")
+        for alert in alerts_to_send:
+            send_alert(alert)
+    
+    return alerts_to_send
+
+def send_alert(alert):
+    """
+    Send a price drop alert (currently prints to console)
+    
+    TODO: Integrate email or Telegram notification
+    """
+    print(f"""
+    ═══════════════════════════════════════════════════════════
+    📧 PRICE DROP ALERT FOR: {alert['product']}
+    ═══════════════════════════════════════════════════════════
+    
+    New Price:    ${alert['current_price']}
+    Target Price: ${alert['target_price']}
+    You Save:     ${alert['savings']:.2f}
+    
+    Buy Now: {alert['url']}
+    
+    Sent to: {alert['email']}
+    ═══════════════════════════════════════════════════════════
+    """)
+
+def view_all_products():
+    """Display all monitored products"""
+    db = load_database()
+    
+    if not db["products"]:
+        print("No products being monitored yet.")
+        return
+    
+    print("\n📊 All Monitored Products:")
+    print("=" * 80)
+    
+    for product in db["products"]:
+        status = "✅ Active" if product['current_price'] > product['target_price'] else "🎉 Alert!"
+        print(f"""
+ID: {product['id']} - {status}
+Product: {product['name']}
+Current Price: ${product['current_price']}
+Target Price: ${product['target_price']}
+Email: {product['email']}
+URL: {product['url']}
+""")
+
+def demo():
+    """Run a demo with sample products"""
+    print("\n🎬 DEMO MODE - Adding sample products...\n")
+    
+    # Example products
+    add_product(
+        product_name="Apple AirPods Pro",
+        url="https://www.amazon.com/Apple-AirPods-Latest-Model/dp/B09JQMJHXY",
+        target_price=150.00,
+        email="user@example.com"
+    )
+    
+    add_product(
+        product_name="Sony WH-1000XM5 Headphones",
+        url="https://www.amazon.com/Sony-WH-1000XM5-Canceling-Headphones-Phone-Call/dp/B09RMTD726",
+        target_price=300.00,
+        email="user@example.com"
+    )
+    
+    print("\n✅ Demo products added!")
+    print("Run check_all_prices() to monitor them")
+
+if __name__ == "__main__":
+    # Run demo
+    demo()
+    
+    # View products
+    view_all_products()
+    
+    # Check prices
+    check_all_prices()
