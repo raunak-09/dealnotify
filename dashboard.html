@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Dashboard - Price Drop Alert Bot</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f0f2f5;
+            color: #333;
+            min-height: 100vh;
+        }
+
+        /* Header */
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 0;
+            position: fixed;
+            width: 100%;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 2px 20px rgba(0,0,0,0.15);
+        }
+
+        nav {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 18px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo { font-size: 22px; font-weight: 700; }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .user-avatar {
+            width: 38px;
+            height: 38px;
+            background: rgba(255,255,255,0.25);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        .user-name { font-size: 15px; font-weight: 500; }
+        .user-email { font-size: 12px; opacity: 0.8; }
+
+        /* Main content */
+        .main {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 100px 24px 40px;
+        }
+
+        /* Welcome banner */
+        .welcome-banner {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 16px;
+            padding: 30px 35px;
+            margin-bottom: 28px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 8px 25px rgba(102,126,234,0.35);
+        }
+
+        .welcome-text h1 { font-size: 26px; margin-bottom: 6px; }
+        .welcome-text p { opacity: 0.9; font-size: 15px; }
+
+        .trial-badge {
+            background: rgba(255,255,255,0.2);
+            border: 2px solid rgba(255,255,255,0.4);
+            border-radius: 50px;
+            padding: 10px 22px;
+            text-align: center;
+            min-width: 140px;
+        }
+
+        .trial-badge .days { font-size: 28px; font-weight: 700; }
+        .trial-badge .label { font-size: 12px; opacity: 0.9; }
+
+        .trial-badge.expired {
+            background: rgba(255,100,100,0.3);
+            border-color: rgba(255,100,100,0.5);
+        }
+
+        /* Stats row */
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 18px;
+            margin-bottom: 28px;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 12px;
+            padding: 22px 24px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .stat-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            flex-shrink: 0;
+        }
+
+        .stat-icon.purple { background: #f0eeff; }
+        .stat-icon.green { background: #edfaf1; }
+        .stat-icon.orange { background: #fff5ec; }
+
+        .stat-info .number { font-size: 26px; font-weight: 700; color: #333; }
+        .stat-info .label { font-size: 13px; color: #888; margin-top: 2px; }
+
+        /* Section header */
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 18px;
+        }
+
+        .section-header h2 { font-size: 20px; color: #333; }
+
+        .btn-add {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 10px 22px;
+            border-radius: 50px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 12px rgba(102,126,234,0.35);
+        }
+
+        .btn-add:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 18px rgba(102,126,234,0.45);
+        }
+
+        /* Product cards */
+        .products-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+            gap: 18px;
+            margin-bottom: 30px;
+        }
+
+        .product-card {
+            background: white;
+            border-radius: 14px;
+            padding: 22px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+            transition: transform 0.2s, box-shadow 0.2s;
+            border: 1px solid #f0f0f0;
+            position: relative;
+        }
+
+        .product-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.12);
+        }
+
+        .product-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 16px;
+        }
+
+        .store-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #f0eeff;
+            color: #667eea;
+            border-radius: 50px;
+            padding: 5px 14px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .status-badge {
+            border-radius: 50px;
+            padding: 4px 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .status-badge.monitoring {
+            background: #edfaf1;
+            color: #27ae60;
+        }
+
+        .status-badge.alert-sent {
+            background: #fff3cd;
+            color: #d68910;
+        }
+
+        .status-badge.inactive {
+            background: #f5f5f5;
+            color: #999;
+        }
+
+        .product-url {
+            display: block;
+            color: #667eea;
+            text-decoration: none;
+            font-size: 13px;
+            font-weight: 500;
+            margin-bottom: 16px;
+            padding: 10px 14px;
+            background: #f8f9ff;
+            border-radius: 8px;
+            border: 1px solid #e8ecff;
+            word-break: break-all;
+            line-height: 1.5;
+            transition: background 0.2s;
+        }
+
+        .product-url:hover { background: #eef0ff; }
+
+        .product-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .detail-box {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 12px 14px;
+        }
+
+        .detail-box .detail-label {
+            font-size: 11px;
+            color: #999;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+        }
+
+        .detail-box .detail-value {
+            font-size: 18px;
+            font-weight: 700;
+            color: #333;
+        }
+
+        .detail-box .detail-value.price { color: #27ae60; }
+        .detail-box .detail-value.current-price { color: #667eea; }
+        .detail-box .detail-value.na { color: #ccc; font-size: 14px; font-weight: 400; }
+
+        .product-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 14px;
+            border-top: 1px solid #f0f0f0;
+        }
+
+        .added-date { font-size: 12px; color: #bbb; }
+
+        .btn-remove {
+            background: none;
+            border: 1px solid #ffcccc;
+            color: #e74c3c;
+            padding: 6px 14px;
+            border-radius: 50px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-remove:hover { background: #fff0f0; border-color: #e74c3c; }
+
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            background: white;
+            border-radius: 14px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+        }
+
+        .empty-state .empty-icon { font-size: 60px; margin-bottom: 20px; }
+        .empty-state h3 { font-size: 20px; color: #333; margin-bottom: 10px; }
+        .empty-state p { color: #888; margin-bottom: 25px; font-size: 15px; }
+
+        /* Add Product Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 200;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.active { display: flex; }
+
+        .modal {
+            background: white;
+            border-radius: 16px;
+            padding: 35px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+            animation: modalIn 0.3s ease;
+        }
+
+        @keyframes modalIn {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .modal h2 { color: #667eea; margin-bottom: 8px; font-size: 22px; }
+        .modal p { color: #888; font-size: 14px; margin-bottom: 25px; }
+
+        .form-group { margin-bottom: 18px; }
+
+        .form-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 7px;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #eee;
+            border-radius: 10px;
+            font-size: 15px;
+            transition: border-color 0.2s;
+            outline: none;
+        }
+
+        .form-group input:focus { border-color: #667eea; }
+
+        .modal-buttons {
+            display: flex;
+            gap: 12px;
+            margin-top: 25px;
+        }
+
+        .btn-cancel {
+            flex: 1;
+            padding: 13px;
+            border: 2px solid #eee;
+            background: white;
+            border-radius: 10px;
+            font-size: 15px;
+            cursor: pointer;
+            color: #666;
+            transition: all 0.2s;
+        }
+
+        .btn-cancel:hover { border-color: #ccc; background: #f5f5f5; }
+
+        .btn-submit {
+            flex: 2;
+            padding: 13px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 12px rgba(102,126,234,0.35);
+        }
+
+        .btn-submit:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(102,126,234,0.45); }
+
+        /* Toast notifications */
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: #333;
+            color: white;
+            padding: 14px 22px;
+            border-radius: 10px;
+            font-size: 14px;
+            z-index: 300;
+            opacity: 0;
+            transform: translateY(20px);
+            transition: all 0.3s;
+            max-width: 350px;
+        }
+
+        .toast.show { opacity: 1; transform: translateY(0); }
+        .toast.success { background: #27ae60; }
+        .toast.error { background: #e74c3c; }
+
+        /* Loading */
+        .loading {
+            text-align: center;
+            padding: 80px 20px;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid #f0eeff;
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Error state */
+        .error-state {
+            text-align: center;
+            padding: 80px 20px;
+            background: white;
+            border-radius: 14px;
+        }
+
+        .error-state .error-icon { font-size: 60px; margin-bottom: 20px; }
+        .error-state h3 { font-size: 20px; color: #e74c3c; margin-bottom: 10px; }
+        .error-state p { color: #888; font-size: 15px; }
+
+        /* Info banner */
+        .info-banner {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 12px;
+            padding: 15px 20px;
+            margin-bottom: 22px;
+            font-size: 14px;
+            color: #856404;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .welcome-banner { flex-direction: column; gap: 20px; text-align: center; }
+            .products-grid { grid-template-columns: 1fr; }
+            .stats-row { grid-template-columns: 1fr 1fr; }
+            .welcome-text h1 { font-size: 20px; }
+            nav { padding: 14px 16px; }
+            .main { padding: 88px 16px 30px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <header>
+        <nav>
+            <div class="logo">💰 Price Drop Bot</div>
+            <div class="user-info">
+                <div>
+                    <div class="user-name" id="headerName">Loading...</div>
+                    <div class="user-email" id="headerEmail"></div>
+                </div>
+                <div class="user-avatar">👤</div>
+            </div>
+        </nav>
+    </header>
+
+    <!-- Main -->
+    <div class="main">
+
+        <!-- Loading state -->
+        <div id="loadingState" class="loading">
+            <div class="spinner"></div>
+            <p style="color:#888;">Loading your dashboard...</p>
+        </div>
+
+        <!-- Error state -->
+        <div id="errorState" class="error-state" style="display:none;">
+            <div class="error-icon">🔒</div>
+            <h3>Invalid or Expired Link</h3>
+            <p>This dashboard link is not valid. Please check your email for the correct link.<br><br>
+            <a href="/" style="color:#667eea;">← Back to Home</a></p>
+        </div>
+
+        <!-- Dashboard content -->
+        <div id="dashboardContent" style="display:none;">
+
+            <!-- Welcome banner -->
+            <div class="welcome-banner">
+                <div class="welcome-text">
+                    <h1 id="welcomeTitle">Welcome back! 👋</h1>
+                    <p id="welcomeSubtitle">Here's your price monitoring overview</p>
+                </div>
+                <div class="trial-badge" id="trialBadge">
+                    <div class="days" id="trialDays">7</div>
+                    <div class="label">Trial Days Left</div>
+                </div>
+            </div>
+
+            <!-- Info banner for trial expiry -->
+            <div class="info-banner" id="trialWarning" style="display:none;">
+                ⏰ <span>Your free trial is ending soon! <a href="/#pricing" style="color:#856404; font-weight:bold;">Upgrade to Pro</a> to keep monitoring without interruption.</span>
+            </div>
+
+            <!-- Stats row -->
+            <div class="stats-row">
+                <div class="stat-card">
+                    <div class="stat-icon purple">📦</div>
+                    <div class="stat-info">
+                        <div class="number" id="statProducts">0</div>
+                        <div class="label">Products Tracked</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon green">✅</div>
+                    <div class="stat-info">
+                        <div class="number" id="statActive">0</div>
+                        <div class="label">Actively Monitoring</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon orange">🔔</div>
+                    <div class="stat-info">
+                        <div class="number" id="statAlerts">0</div>
+                        <div class="label">Alerts Sent</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Products section -->
+            <div class="section-header">
+                <h2>🛍️ Your Tracked Products</h2>
+                <button class="btn-add" onclick="openAddModal()">+ Add Product</button>
+            </div>
+
+            <!-- Products grid -->
+            <div id="productsContainer"></div>
+
+        </div>
+    </div>
+
+    <!-- Add Product Modal -->
+    <div class="modal-overlay" id="addModal">
+        <div class="modal">
+            <h2>➕ Add New Product</h2>
+            <p>Paste the product URL and set your target price. We'll alert you when it drops!</p>
+            <div class="form-group">
+                <label>Product URL *</label>
+                <input type="url" id="newProductUrl" placeholder="https://amazon.com/product/..." required>
+            </div>
+            <div class="form-group">
+                <label>Target Price (USD) *</label>
+                <input type="number" id="newTargetPrice" placeholder="e.g. 49.99" step="0.01" min="0" required>
+            </div>
+            <div class="modal-buttons">
+                <button class="btn-cancel" onclick="closeAddModal()">Cancel</button>
+                <button class="btn-submit" onclick="addProduct()">🚀 Start Tracking</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast notification -->
+    <div class="toast" id="toast"></div>
+
+    <script>
+        const params = new URLSearchParams(window.location.search);
+        const token = params.get('token');
+        let userData = null;
+        let productsData = [];
+
+        // Load dashboard on page load
+        window.onload = function() {
+            if (!token) {
+                showError();
+                return;
+            }
+            loadDashboard();
+        };
+
+        function loadDashboard() {
+            fetch(`/api/dashboard?token=${token}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (!data.success) {
+                        showError();
+                        return;
+                    }
+                    userData = data.user;
+                    productsData = data.products || [];
+                    renderDashboard();
+                })
+                .catch(err => {
+                    console.error(err);
+                    showError();
+                });
+        }
+
+        function renderDashboard() {
+            document.getElementById('loadingState').style.display = 'none';
+            document.getElementById('dashboardContent').style.display = 'block';
+
+            // Header
+            document.getElementById('headerName').textContent = userData.name;
+            document.getElementById('headerEmail').textContent = userData.email;
+
+            // Welcome banner
+            document.getElementById('welcomeTitle').textContent = `Welcome back, ${userData.name.split(' ')[0]}! 👋`;
+            document.getElementById('welcomeSubtitle').textContent = `Member since ${formatDate(userData.signup_date)} · ${userData.email}`;
+
+            // Trial badge
+            const days = userData.trial_days_remaining;
+            document.getElementById('trialDays').textContent = days;
+            if (days <= 2) {
+                document.getElementById('trialBadge').classList.add('expired');
+                document.getElementById('trialWarning').style.display = 'flex';
+            }
+
+            // Stats
+            const activeCount = productsData.filter(p => p.status === 'monitoring').length;
+            const alertCount = productsData.filter(p => p.alert_sent).length;
+            document.getElementById('statProducts').textContent = productsData.length;
+            document.getElementById('statActive').textContent = activeCount;
+            document.getElementById('statAlerts').textContent = alertCount;
+
+            // Products
+            renderProducts();
+        }
+
+        function renderProducts() {
+            const container = document.getElementById('productsContainer');
+
+            if (productsData.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">📭</div>
+                        <h3>No products tracked yet</h3>
+                        <p>Add your first product to start monitoring prices and get deal alerts!</p>
+                        <button class="btn-add" onclick="openAddModal()">+ Add Your First Product</button>
+                    </div>`;
+                return;
+            }
+
+            container.innerHTML = `<div class="products-grid">${productsData.map(p => productCard(p)).join('')}</div>`;
+        }
+
+        function productCard(product) {
+            const statusClass = product.status === 'monitoring' ? 'monitoring' : product.alert_sent ? 'alert-sent' : 'inactive';
+            const statusLabel = product.status === 'monitoring' ? '🟢 Monitoring' : product.alert_sent ? '🔔 Alert Sent' : '⏸ Paused';
+            const targetPrice = product.target_price ? `$${parseFloat(product.target_price).toFixed(2)}` : '—';
+            const currentPrice = product.current_price ? `$${parseFloat(product.current_price).toFixed(2)}` : null;
+            const shortUrl = truncateUrl(product.url);
+
+            return `
+            <div class="product-card" id="product-${product.id}">
+                <div class="product-card-header">
+                    <div class="store-badge">${getStoreEmoji(product.url)} ${product.store || 'Online Store'}</div>
+                    <span class="status-badge ${statusClass}">${statusLabel}</span>
+                </div>
+                <a href="${product.url}" target="_blank" class="product-url" title="${product.url}">
+                    🔗 ${shortUrl}
+                </a>
+                <div class="product-details">
+                    <div class="detail-box">
+                        <div class="detail-label">Target Price</div>
+                        <div class="detail-value price">${targetPrice}</div>
+                    </div>
+                    <div class="detail-box">
+                        <div class="detail-label">Current Price</div>
+                        <div class="detail-value ${currentPrice ? 'current-price' : 'na'}">${currentPrice || 'Checking...'}</div>
+                    </div>
+                </div>
+                <div class="product-footer">
+                    <span class="added-date">Added ${formatDate(product.added_date)}</span>
+                    <button class="btn-remove" onclick="removeProduct(${product.id})">✕ Remove</button>
+                </div>
+            </div>`;
+        }
+
+        function openAddModal() {
+            document.getElementById('addModal').classList.add('active');
+            document.getElementById('newProductUrl').focus();
+        }
+
+        function closeAddModal() {
+            document.getElementById('addModal').classList.remove('active');
+            document.getElementById('newProductUrl').value = '';
+            document.getElementById('newTargetPrice').value = '';
+        }
+
+        function addProduct() {
+            const url = document.getElementById('newProductUrl').value.trim();
+            const targetPrice = document.getElementById('newTargetPrice').value.trim();
+
+            if (!url) { showToast('Please enter a product URL', 'error'); return; }
+            if (!targetPrice) { showToast('Please enter a target price', 'error'); return; }
+
+            const btn = document.querySelector('.btn-submit');
+            btn.textContent = 'Adding...';
+            btn.disabled = true;
+
+            fetch(`/api/add-product?token=${token}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url, target_price: targetPrice })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    productsData.push(data.product);
+                    renderProducts();
+                    updateStats();
+                    closeAddModal();
+                    showToast('✅ Product added! We\'ll alert you when the price drops.', 'success');
+                } else {
+                    showToast(data.error || 'Failed to add product', 'error');
+                }
+            })
+            .catch(() => showToast('Something went wrong. Please try again.', 'error'))
+            .finally(() => {
+                btn.textContent = '🚀 Start Tracking';
+                btn.disabled = false;
+            });
+        }
+
+        function removeProduct(productId) {
+            if (!confirm('Remove this product from tracking?')) return;
+
+            fetch(`/api/remove-product?token=${token}&product_id=${productId}`, { method: 'DELETE' })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    productsData = productsData.filter(p => p.id !== productId);
+                    renderProducts();
+                    updateStats();
+                    showToast('Product removed from tracking', 'success');
+                }
+            })
+            .catch(() => showToast('Failed to remove product', 'error'));
+        }
+
+        function updateStats() {
+            const activeCount = productsData.filter(p => p.status === 'monitoring').length;
+            const alertCount = productsData.filter(p => p.alert_sent).length;
+            document.getElementById('statProducts').textContent = productsData.length;
+            document.getElementById('statActive').textContent = activeCount;
+            document.getElementById('statAlerts').textContent = alertCount;
+        }
+
+        function showError() {
+            document.getElementById('loadingState').style.display = 'none';
+            document.getElementById('errorState').style.display = 'block';
+        }
+
+        function showToast(message, type = '') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast ${type} show`;
+            setTimeout(() => toast.classList.remove('show'), 4000);
+        }
+
+        function formatDate(dateStr) {
+            if (!dateStr) return '—';
+            const d = new Date(dateStr);
+            return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        }
+
+        function truncateUrl(url) {
+            if (!url) return '';
+            try {
+                const u = new URL(url);
+                const path = u.pathname.split('/').filter(Boolean);
+                const short = u.hostname.replace('www.', '') + (path.length ? '/' + path.slice(0, 2).join('/') : '');
+                return short.length > 60 ? short.substring(0, 60) + '...' : short;
+            } catch {
+                return url.length > 60 ? url.substring(0, 60) + '...' : url;
+            }
+        }
+
+        function getStoreEmoji(url) {
+            if (!url) return '🛒';
+            const u = url.toLowerCase();
+            if (u.includes('amazon')) return '📦';
+            if (u.includes('bestbuy')) return '💻';
+            if (u.includes('walmart')) return '🛒';
+            if (u.includes('target')) return '🎯';
+            if (u.includes('ebay')) return '🏷️';
+            return '🛍️';
+        }
+
+        // Close modal on overlay click
+        document.getElementById('addModal').addEventListener('click', function(e) {
+            if (e.target === this) closeAddModal();
+        });
+
+        // Allow Enter key to submit add product form
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') closeAddModal();
+            if (e.key === 'Enter' && document.getElementById('addModal').classList.contains('active')) {
+                addProduct();
+            }
+        });
+    </script>
+</body>
+</html>
