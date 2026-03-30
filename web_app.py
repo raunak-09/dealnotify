@@ -10,6 +10,7 @@ from datetime import datetime
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 from dotenv import load_dotenv
+from price_monitor import scrape_price
 
 load_dotenv()
 
@@ -184,6 +185,151 @@ hello@dealnotify.co | www.dealnotify.co
     except Exception as e:
         print(f"❌ Error sending welcome email: {str(e)}")
         return False
+
+
+def send_price_drop_alert(name, email, product_url, current_price, target_price, store, dashboard_url):
+    """Send price drop alert email via SendGrid"""
+    try:
+        api_key = os.getenv('SENDGRID_API_KEY')
+        from_email = os.getenv('SENDGRID_FROM_EMAIL', 'hello@dealnotify.co')
+
+        if not api_key:
+            return False
+
+        savings = float(target_price) - float(current_price)
+
+        html_content = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; background-color: #f5f5f5; padding: 20px;">
+        <div style="background-color: white; max-width: 600px; margin: 0 auto; padding: 30px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+
+        <h1 style="color: #27ae60; text-align: center;">🎉 Price Drop Alert, {name}!</h1>
+
+        <div style="background-color: #edfaf1; border: 2px solid #27ae60; border-radius: 10px; padding: 25px; margin: 25px 0; text-align: center;">
+        <p style="color: #555; font-size: 14px; margin-bottom: 10px;">A product you're tracking just dropped in price!</p>
+        <div style="display: flex; justify-content: center; gap: 30px; margin: 15px 0;">
+        <div>
+            <div style="font-size: 13px; color: #888;">Current Price</div>
+            <div style="font-size: 32px; font-weight: bold; color: #27ae60;">${float(current_price):.2f}</div>
+        </div>
+        <div style="font-size: 30px; color: #ccc; padding-top: 15px;">→</div>
+        <div>
+            <div style="font-size: 13px; color: #888;">Your Target</div>
+            <div style="font-size: 32px; font-weight: bold; color: #667eea;">${float(target_price):.2f}</div>
+        </div>
+        </div>
+        <div style="background: #27ae60; color: white; border-radius: 50px; padding: 8px 20px; display: inline-block; font-weight: bold; margin-top: 10px;">
+        🎯 You save ${savings:.2f}!
+        </div>
+        </div>
+
+        <div style="text-align: center; margin: 25px 0;">
+        <a href="{product_url}" style="display: inline-block; background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%); color: white; padding: 15px 40px; text-decoration: none; border-radius: 50px; font-weight: bold; font-size: 16px;">
+        🛒 Buy Now on {store}
+        </a>
+        </div>
+
+        <div style="text-align: center; margin: 15px 0;">
+        <a href="{dashboard_url}" style="color: #667eea; font-size: 14px;">View your full dashboard →</a>
+        </div>
+
+        <hr style="border: none; border-top: 2px solid #eee; margin: 30px 0;">
+        <p style="color: #333; font-size: 14px;">Best regards,<br>
+        <strong>The DealNotify Team</strong><br>
+        <a href="mailto:hello@dealnotify.co" style="color: #667eea;">hello@dealnotify.co</a> | <a href="https://www.dealnotify.co" style="color: #667eea;">www.dealnotify.co</a><br><br>
+        💰 <em>Never miss a price drop again!</em>
+        </p>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+        <p style="color: #999; font-size: 12px; text-align: center;">© 2026 DealNotify. All rights reserved.</p>
+        </div>
+        </body>
+        </html>
+        """
+
+        message = Mail(
+            from_email=from_email,
+            to_emails=email,
+            subject=f'🎉 Price Drop Alert! ${float(current_price):.2f} on {store}',
+            html_content=html_content
+        )
+
+        sg = SendGridAPIClient(api_key)
+        response = sg.send(message)
+        print(f"✅ Price alert sent to {email} (status: {response.status_code})")
+        return True
+
+    except Exception as e:
+        print(f"❌ Error sending price alert: {str(e)}")
+        return False
+
+
+@app.route('/api/check-prices', methods=['GET'])
+def check_prices_for_user():
+    """Check current prices for all of a user's products"""
+    token = request.args.get('token')
+    if not token:
+        return jsonify({'error': 'Token required'}), 400
+
+    signups = load_signups()
+    user = None
+    user_index = None
+    for i, s in enumerate(signups['signups']):
+        if s.get('token') == token:
+            user = s
+            user_index = i
+            break
+
+    if not user:
+        return jsonify({'error': 'Invalid token'}), 404
+
+    products = user.get('products', [])
+    updated_products = []
+    alerts_sent = 0
+
+    base_url = get_base_url()
+    dashboard_url = f"{base_url}/dashboard?token={token}"
+
+    for product in products:
+        url = product.get('url')
+        if not url:
+            updated_products.append(product)
+            continue
+
+        print(f"🔍 Checking price for: {url}")
+        current_price = scrape_price(url)
+
+        if current_price is not None:
+            product['current_price'] = current_price
+            product['last_checked'] = datetime.now().isoformat()
+
+            # Check if price dropped to or below target
+            target = product.get('target_price')
+            if target and float(current_price) <= float(target) and not product.get('alert_sent'):
+                product['status'] = 'alert_sent'
+                product['alert_sent'] = True
+                send_price_drop_alert(
+                    name=user['name'],
+                    email=user['email'],
+                    product_url=url,
+                    current_price=current_price,
+                    target_price=target,
+                    store=product.get('store', 'the store'),
+                    dashboard_url=dashboard_url
+                )
+                alerts_sent += 1
+                print(f"🔔 Alert sent for {user['email']} - price ${current_price} <= target ${target}")
+
+        updated_products.append(product)
+
+    signups['signups'][user_index]['products'] = updated_products
+    save_signups(signups)
+
+    return jsonify({
+        'success': True,
+        'products': updated_products,
+        'alerts_sent': alerts_sent,
+        'checked_at': datetime.now().isoformat()
+    }), 200
 
 
 @app.route('/')

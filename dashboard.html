@@ -161,6 +161,36 @@
             box-shadow: 0 6px 18px rgba(102,126,234,0.45);
         }
 
+        .btn-refresh {
+            background: white;
+            color: #27ae60;
+            border: 2px solid #27ae60;
+            padding: 9px 20px;
+            border-radius: 50px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-refresh:hover { background: #edfaf1; }
+        .btn-refresh:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        .last-checked {
+            font-size: 12px;
+            color: #bbb;
+            margin-top: 6px;
+        }
+
+        .price-drop {
+            color: #27ae60 !important;
+            font-weight: 700;
+        }
+
+        .price-above {
+            color: #e74c3c !important;
+        }
+
         /* Product cards */
         .products-grid {
             display: grid;
@@ -557,8 +587,12 @@
             <!-- Products section -->
             <div class="section-header">
                 <h2>🛍️ Your Tracked Products</h2>
-                <button class="btn-add" onclick="openAddModal()">+ Add Product</button>
+                <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                    <button class="btn-refresh" id="refreshBtn" onclick="refreshPrices()">🔄 Refresh Prices</button>
+                    <button class="btn-add" onclick="openAddModal()">+ Add Product</button>
+                </div>
             </div>
+            <div class="last-checked" id="lastCheckedText"></div>
 
             <!-- Products grid -->
             <div id="productsContainer"></div>
@@ -671,11 +705,17 @@
         }
 
         function productCard(product) {
-            const statusClass = product.status === 'monitoring' ? 'monitoring' : product.alert_sent ? 'alert-sent' : 'inactive';
-            const statusLabel = product.status === 'monitoring' ? '🟢 Monitoring' : product.alert_sent ? '🔔 Alert Sent' : '⏸ Paused';
+            const statusClass = product.alert_sent ? 'alert-sent' : product.status === 'monitoring' ? 'monitoring' : 'inactive';
+            const statusLabel = product.alert_sent ? '🔔 Alert Sent' : product.status === 'monitoring' ? '🟢 Monitoring' : '⏸ Paused';
             const targetPrice = product.target_price ? `$${parseFloat(product.target_price).toFixed(2)}` : '—';
-            const currentPrice = product.current_price ? `$${parseFloat(product.current_price).toFixed(2)}` : null;
+            const hasCurrentPrice = product.current_price !== null && product.current_price !== undefined;
+            const currentPriceVal = hasCurrentPrice ? parseFloat(product.current_price) : null;
+            const targetPriceVal = product.target_price ? parseFloat(product.target_price) : null;
+            const priceDropped = currentPriceVal !== null && targetPriceVal !== null && currentPriceVal <= targetPriceVal;
+            const priceClass = !hasCurrentPrice ? 'na' : priceDropped ? 'price-drop' : 'price-above';
+            const currentPriceDisplay = hasCurrentPrice ? `$${currentPriceVal.toFixed(2)}` : 'Click Refresh →';
             const shortUrl = truncateUrl(product.url);
+            const lastChecked = product.last_checked ? `Last checked: ${formatDate(product.last_checked)}` : 'Not checked yet';
 
             return `
             <div class="product-card" id="product-${product.id}">
@@ -693,14 +733,45 @@
                     </div>
                     <div class="detail-box">
                         <div class="detail-label">Current Price</div>
-                        <div class="detail-value ${currentPrice ? 'current-price' : 'na'}">${currentPrice || 'Checking...'}</div>
+                        <div class="detail-value ${priceClass}">${currentPriceDisplay}</div>
                     </div>
                 </div>
+                ${priceDropped ? `<div style="background:#edfaf1; border:1px solid #27ae60; border-radius:8px; padding:10px 14px; margin-bottom:12px; font-size:13px; color:#27ae60; font-weight:600;">🎉 Price dropped below your target! Check your email for the alert.</div>` : ''}
                 <div class="product-footer">
-                    <span class="added-date">Added ${formatDate(product.added_date)}</span>
+                    <span class="added-date">${lastChecked}</span>
                     <button class="btn-remove" onclick="removeProduct(${product.id})">✕ Remove</button>
                 </div>
             </div>`;
+        }
+
+        function refreshPrices() {
+            const btn = document.getElementById('refreshBtn');
+            btn.textContent = '⏳ Checking...';
+            btn.disabled = true;
+
+            fetch(`/api/check-prices?token=${token}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        productsData = data.products || [];
+                        renderProducts();
+                        updateStats();
+                        const now = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                        document.getElementById('lastCheckedText').textContent = `Last refreshed at ${now}`;
+                        if (data.alerts_sent > 0) {
+                            showToast(`🔔 ${data.alerts_sent} price drop alert(s) sent to your email!`, 'success');
+                        } else {
+                            showToast('✅ Prices updated! No drops below target yet.', 'success');
+                        }
+                    } else {
+                        showToast('Failed to fetch prices. Try again.', 'error');
+                    }
+                })
+                .catch(() => showToast('Something went wrong. Try again.', 'error'))
+                .finally(() => {
+                    btn.textContent = '🔄 Refresh Prices';
+                    btn.disabled = false;
+                });
         }
 
         function openAddModal() {
