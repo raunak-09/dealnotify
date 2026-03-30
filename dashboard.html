@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Dashboard - Price Drop Alert Bot</title>
+    <title>My Dashboard - DealNotify</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -12,6 +12,8 @@
             background: #f0f2f5;
             color: #333;
             min-height: 100vh;
+            display: flex;
+            flex-direction: column;
         }
 
         /* Header */
@@ -35,33 +37,34 @@
             align-items: center;
         }
 
-        .logo { font-size: 22px; font-weight: 700; }
-
-        .user-info {
-            display: flex;
-            align-items: center;
-            gap: 12px;
+        .logo {
+            font-size: 22px;
+            font-weight: 700;
+            color: white;
+            text-decoration: none;
+            transition: opacity 0.2s;
         }
+        .logo:hover { opacity: 0.85; }
+
+        .user-info { display: flex; align-items: center; gap: 12px; }
 
         .user-avatar {
-            width: 38px;
-            height: 38px;
+            width: 38px; height: 38px;
             background: rgba(255,255,255,0.25);
             border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            display: flex; align-items: center; justify-content: center;
             font-size: 18px;
         }
 
         .user-name { font-size: 15px; font-weight: 500; }
         .user-email { font-size: 12px; opacity: 0.8; }
 
-        /* Main content */
+        /* Main */
         .main {
             max-width: 1200px;
             margin: 0 auto;
             padding: 100px 24px 40px;
+            flex: 1;
         }
 
         /* Welcome banner */
@@ -88,16 +91,11 @@
             text-align: center;
             min-width: 140px;
         }
-
         .trial-badge .days { font-size: 28px; font-weight: 700; }
         .trial-badge .label { font-size: 12px; opacity: 0.9; }
+        .trial-badge.expired { background: rgba(255,100,100,0.3); border-color: rgba(255,100,100,0.5); }
 
-        .trial-badge.expired {
-            background: rgba(255,100,100,0.3);
-            border-color: rgba(255,100,100,0.5);
-        }
-
-        /* Stats row */
+        /* Stats */
         .stats-row {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -110,26 +108,18 @@
             border-radius: 12px;
             padding: 22px 24px;
             box-shadow: 0 2px 12px rgba(0,0,0,0.07);
-            display: flex;
-            align-items: center;
-            gap: 16px;
+            display: flex; align-items: center; gap: 16px;
         }
 
         .stat-icon {
-            width: 50px;
-            height: 50px;
+            width: 50px; height: 50px;
             border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 22px;
-            flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 22px; flex-shrink: 0;
         }
-
         .stat-icon.purple { background: #f0eeff; }
         .stat-icon.green { background: #edfaf1; }
         .stat-icon.orange { background: #fff5ec; }
-
         .stat-info .number { font-size: 26px; font-weight: 700; color: #333; }
         .stat-info .label { font-size: 13px; color: #888; margin-top: 2px; }
 
@@ -138,58 +128,31 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 18px;
+            margin-bottom: 8px;
         }
-
         .section-header h2 { font-size: 20px; color: #333; }
 
         .btn-add {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            padding: 10px 22px;
-            border-radius: 50px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
+            color: white; border: none;
+            padding: 10px 22px; border-radius: 50px;
+            font-size: 14px; font-weight: 600; cursor: pointer;
             transition: all 0.3s;
             box-shadow: 0 4px 12px rgba(102,126,234,0.35);
         }
-
-        .btn-add:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 18px rgba(102,126,234,0.45);
-        }
+        .btn-add:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(102,126,234,0.45); }
 
         .btn-refresh {
-            background: white;
-            color: #27ae60;
+            background: white; color: #27ae60;
             border: 2px solid #27ae60;
-            padding: 9px 20px;
-            border-radius: 50px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
+            padding: 9px 20px; border-radius: 50px;
+            font-size: 14px; font-weight: 600; cursor: pointer;
             transition: all 0.3s;
         }
-
         .btn-refresh:hover { background: #edfaf1; }
         .btn-refresh:disabled { opacity: 0.6; cursor: not-allowed; }
 
-        .last-checked {
-            font-size: 12px;
-            color: #bbb;
-            margin-top: 6px;
-        }
-
-        .price-drop {
-            color: #27ae60 !important;
-            font-weight: 700;
-        }
-
-        .price-above {
-            color: #e74c3c !important;
-        }
+        .last-checked { font-size: 12px; color: #bbb; margin-bottom: 18px; min-height: 18px; }
 
         /* Product cards */
         .products-grid {
@@ -201,18 +164,13 @@
 
         .product-card {
             background: white;
-            border-radius: 14px;
-            padding: 22px;
+            border-radius: 14px; padding: 22px;
             box-shadow: 0 2px 12px rgba(0,0,0,0.07);
             transition: transform 0.2s, box-shadow 0.2s;
             border: 1px solid #f0f0f0;
-            position: relative;
         }
-
-        .product-card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 8px 25px rgba(0,0,0,0.12);
-        }
+        .product-card:hover { transform: translateY(-3px); box-shadow: 0 8px 25px rgba(0,0,0,0.12); }
+        .product-card.deal { border: 2px solid #27ae60; }
 
         .product-card-header {
             display: flex;
@@ -222,87 +180,90 @@
         }
 
         .store-badge {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            background: #f0eeff;
-            color: #667eea;
-            border-radius: 50px;
-            padding: 5px 14px;
-            font-size: 13px;
-            font-weight: 600;
+            display: flex; align-items: center; gap: 8px;
+            background: #f0eeff; color: #667eea;
+            border-radius: 50px; padding: 5px 14px;
+            font-size: 13px; font-weight: 600;
         }
 
         .status-badge {
-            border-radius: 50px;
-            padding: 4px 12px;
-            font-size: 12px;
-            font-weight: 600;
+            border-radius: 50px; padding: 4px 12px;
+            font-size: 12px; font-weight: 600;
         }
-
-        .status-badge.monitoring {
-            background: #edfaf1;
-            color: #27ae60;
-        }
-
-        .status-badge.alert-sent {
-            background: #fff3cd;
-            color: #d68910;
-        }
-
-        .status-badge.inactive {
-            background: #f5f5f5;
-            color: #999;
-        }
+        .status-badge.monitoring { background: #edfaf1; color: #27ae60; }
+        .status-badge.alert-sent { background: #fff3cd; color: #d68910; }
+        .status-badge.inactive { background: #f5f5f5; color: #999; }
 
         .product-url {
-            display: block;
-            color: #667eea;
-            text-decoration: none;
-            font-size: 13px;
-            font-weight: 500;
-            margin-bottom: 16px;
-            padding: 10px 14px;
-            background: #f8f9ff;
-            border-radius: 8px;
+            display: block; color: #667eea; text-decoration: none;
+            font-size: 13px; font-weight: 500;
+            margin-bottom: 16px; padding: 10px 14px;
+            background: #f8f9ff; border-radius: 8px;
             border: 1px solid #e8ecff;
-            word-break: break-all;
-            line-height: 1.5;
+            word-break: break-all; line-height: 1.5;
             transition: background 0.2s;
         }
-
         .product-url:hover { background: #eef0ff; }
 
-        .product-details {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-            margin-bottom: 16px;
-        }
-
-        .detail-box {
+        /* Price comparison */
+        .price-comparison {
+            display: flex;
+            align-items: center;
+            gap: 10px;
             background: #f8f9fa;
-            border-radius: 10px;
-            padding: 12px 14px;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 14px;
         }
 
-        .detail-box .detail-label {
+        .price-box {
+            flex: 1;
+            text-align: center;
+        }
+
+        .price-box .price-label {
             font-size: 11px;
             color: #999;
             text-transform: uppercase;
             letter-spacing: 0.5px;
-            margin-bottom: 4px;
+            margin-bottom: 6px;
         }
 
-        .detail-box .detail-value {
-            font-size: 18px;
+        .price-box .price-value {
+            font-size: 22px;
             font-weight: 700;
-            color: #333;
         }
 
-        .detail-box .detail-value.price { color: #27ae60; }
-        .detail-box .detail-value.current-price { color: #667eea; }
-        .detail-box .detail-value.na { color: #ccc; font-size: 14px; font-weight: 400; }
+        .price-box .price-value.target { color: #667eea; }
+        .price-box .price-value.current-below { color: #27ae60; }
+        .price-box .price-value.current-above { color: #e74c3c; }
+        .price-box .price-value.current-na { color: #ccc; font-size: 14px; font-weight: 400; }
+
+        .price-arrow {
+            font-size: 20px;
+            color: #ccc;
+            flex-shrink: 0;
+        }
+
+        .price-savings {
+            text-align: center;
+            font-size: 12px;
+            font-weight: 600;
+            color: #27ae60;
+            margin-top: 4px;
+        }
+
+        .deal-banner {
+            background: #edfaf1;
+            border: 1px solid #27ae60;
+            border-radius: 8px;
+            padding: 10px 14px;
+            margin-bottom: 12px;
+            font-size: 13px;
+            color: #27ae60;
+            font-weight: 600;
+            text-align: center;
+        }
 
         .product-footer {
             display: flex;
@@ -316,184 +277,178 @@
 
         .btn-remove {
             background: none;
-            border: 1px solid #ffcccc;
-            color: #e74c3c;
-            padding: 6px 14px;
-            border-radius: 50px;
-            font-size: 12px;
-            cursor: pointer;
-            transition: all 0.2s;
+            border: 1px solid #ffcccc; color: #e74c3c;
+            padding: 6px 14px; border-radius: 50px;
+            font-size: 12px; cursor: pointer; transition: all 0.2s;
         }
-
         .btn-remove:hover { background: #fff0f0; border-color: #e74c3c; }
 
         /* Empty state */
         .empty-state {
-            text-align: center;
-            padding: 60px 20px;
-            background: white;
-            border-radius: 14px;
+            text-align: center; padding: 60px 20px;
+            background: white; border-radius: 14px;
             box-shadow: 0 2px 12px rgba(0,0,0,0.07);
         }
-
         .empty-state .empty-icon { font-size: 60px; margin-bottom: 20px; }
         .empty-state h3 { font-size: 20px; color: #333; margin-bottom: 10px; }
         .empty-state p { color: #888; margin-bottom: 25px; font-size: 15px; }
 
-        /* Add Product Modal */
+        /* Modal */
         .modal-overlay {
-            display: none;
-            position: fixed;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
+            display: none; position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.5);
-            z-index: 200;
-            align-items: center;
-            justify-content: center;
+            z-index: 200; align-items: center; justify-content: center;
         }
-
         .modal-overlay.active { display: flex; }
 
         .modal {
-            background: white;
-            border-radius: 16px;
-            padding: 35px;
-            width: 90%;
-            max-width: 500px;
+            background: white; border-radius: 16px; padding: 35px;
+            width: 90%; max-width: 500px;
             box-shadow: 0 20px 60px rgba(0,0,0,0.2);
             animation: modalIn 0.3s ease;
         }
-
         @keyframes modalIn {
             from { transform: translateY(20px); opacity: 0; }
             to { transform: translateY(0); opacity: 1; }
         }
-
         .modal h2 { color: #667eea; margin-bottom: 8px; font-size: 22px; }
         .modal p { color: #888; font-size: 14px; margin-bottom: 25px; }
 
         .form-group { margin-bottom: 18px; }
-
-        .form-group label {
-            display: block;
-            font-size: 13px;
-            font-weight: 600;
-            color: #555;
-            margin-bottom: 7px;
+        .form-group label { display: block; font-size: 13px; font-weight: 600; color: #555; margin-bottom: 7px; }
+        .form-group input, .form-group textarea {
+            width: 100%; padding: 12px 16px;
+            border: 2px solid #eee; border-radius: 10px;
+            font-size: 15px; transition: border-color 0.2s; outline: none;
+            font-family: inherit;
         }
+        .form-group textarea { resize: vertical; min-height: 100px; }
+        .form-group input:focus, .form-group textarea:focus { border-color: #667eea; }
 
-        .form-group input {
-            width: 100%;
-            padding: 12px 16px;
-            border: 2px solid #eee;
-            border-radius: 10px;
-            font-size: 15px;
-            transition: border-color 0.2s;
-            outline: none;
-        }
-
-        .form-group input:focus { border-color: #667eea; }
-
-        .modal-buttons {
-            display: flex;
-            gap: 12px;
-            margin-top: 25px;
-        }
+        .modal-buttons { display: flex; gap: 12px; margin-top: 25px; }
 
         .btn-cancel {
-            flex: 1;
-            padding: 13px;
-            border: 2px solid #eee;
-            background: white;
-            border-radius: 10px;
-            font-size: 15px;
-            cursor: pointer;
-            color: #666;
+            flex: 1; padding: 13px;
+            border: 2px solid #eee; background: white;
+            border-radius: 10px; font-size: 15px; cursor: pointer; color: #666;
             transition: all 0.2s;
         }
-
         .btn-cancel:hover { border-color: #ccc; background: #f5f5f5; }
 
         .btn-submit {
-            flex: 2;
-            padding: 13px;
+            flex: 2; padding: 13px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            border-radius: 10px;
-            font-size: 15px;
-            font-weight: 600;
-            cursor: pointer;
+            color: white; border: none; border-radius: 10px;
+            font-size: 15px; font-weight: 600; cursor: pointer;
             transition: all 0.3s;
             box-shadow: 0 4px 12px rgba(102,126,234,0.35);
         }
-
         .btn-submit:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(102,126,234,0.45); }
 
-        /* Toast notifications */
+        /* Toast */
         .toast {
-            position: fixed;
-            bottom: 30px;
-            right: 30px;
-            background: #333;
-            color: white;
-            padding: 14px 22px;
-            border-radius: 10px;
-            font-size: 14px;
-            z-index: 300;
-            opacity: 0;
-            transform: translateY(20px);
-            transition: all 0.3s;
-            max-width: 350px;
+            position: fixed; bottom: 30px; right: 30px;
+            background: #333; color: white;
+            padding: 14px 22px; border-radius: 10px;
+            font-size: 14px; z-index: 300;
+            opacity: 0; transform: translateY(20px);
+            transition: all 0.3s; max-width: 350px;
         }
-
         .toast.show { opacity: 1; transform: translateY(0); }
         .toast.success { background: #27ae60; }
         .toast.error { background: #e74c3c; }
 
         /* Loading */
-        .loading {
-            text-align: center;
-            padding: 80px 20px;
-        }
-
+        .loading { text-align: center; padding: 80px 20px; }
         .spinner {
-            width: 50px;
-            height: 50px;
-            border: 4px solid #f0eeff;
-            border-top-color: #667eea;
+            width: 50px; height: 50px;
+            border: 4px solid #f0eeff; border-top-color: #667eea;
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
             margin: 0 auto 20px;
         }
-
         @keyframes spin { to { transform: rotate(360deg); } }
 
         /* Error state */
-        .error-state {
-            text-align: center;
-            padding: 80px 20px;
-            background: white;
-            border-radius: 14px;
-        }
-
+        .error-state { text-align: center; padding: 80px 20px; background: white; border-radius: 14px; }
         .error-state .error-icon { font-size: 60px; margin-bottom: 20px; }
         .error-state h3 { font-size: 20px; color: #e74c3c; margin-bottom: 10px; }
         .error-state p { color: #888; font-size: 15px; }
 
         /* Info banner */
         .info-banner {
-            background: #fff3cd;
-            border: 1px solid #ffc107;
-            border-radius: 12px;
-            padding: 15px 20px;
-            margin-bottom: 22px;
+            background: #fff3cd; border: 1px solid #ffc107;
+            border-radius: 12px; padding: 15px 20px;
+            margin-bottom: 22px; font-size: 14px; color: #856404;
+            display: flex; align-items: center; gap: 10px;
+        }
+
+        /* Footer */
+        footer {
+            background: #1a1a2e;
+            color: #aaa;
+            padding: 40px 24px 24px;
+            margin-top: auto;
+        }
+
+        .footer-inner {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .footer-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr;
+            gap: 40px;
+            margin-bottom: 30px;
+        }
+
+        .footer-brand .footer-logo {
+            font-size: 20px;
+            font-weight: 700;
+            color: white;
+            text-decoration: none;
+            display: block;
+            margin-bottom: 12px;
+        }
+
+        .footer-brand p {
             font-size: 14px;
-            color: #856404;
+            line-height: 1.7;
+            color: #888;
+        }
+
+        .footer-col h4 {
+            color: white;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .footer-col ul { list-style: none; }
+        .footer-col ul li { margin-bottom: 10px; }
+        .footer-col ul li a {
+            color: #888; text-decoration: none;
+            font-size: 14px; transition: color 0.2s;
+        }
+        .footer-col ul li a:hover { color: #667eea; }
+
+        .footer-bottom {
+            border-top: 1px solid #2a2a3e;
+            padding-top: 20px;
             display: flex;
+            justify-content: space-between;
             align-items: center;
+            font-size: 13px;
+            color: #666;
+            flex-wrap: wrap;
             gap: 10px;
         }
+
+        .footer-bottom a { color: #667eea; text-decoration: none; }
 
         /* Responsive */
         @media (max-width: 768px) {
@@ -503,6 +458,8 @@
             .welcome-text h1 { font-size: 20px; }
             nav { padding: 14px 16px; }
             .main { padding: 88px 16px 30px; }
+            .footer-grid { grid-template-columns: 1fr; gap: 24px; }
+            .footer-bottom { flex-direction: column; text-align: center; }
         }
     </style>
 </head>
@@ -511,7 +468,7 @@
     <!-- Header -->
     <header>
         <nav>
-            <div class="logo">💰 Price Drop Bot</div>
+            <a href="/" class="logo">💰 DealNotify</a>
             <div class="user-info">
                 <div>
                     <div class="user-name" id="headerName">Loading...</div>
@@ -525,21 +482,21 @@
     <!-- Main -->
     <div class="main">
 
-        <!-- Loading state -->
+        <!-- Loading -->
         <div id="loadingState" class="loading">
             <div class="spinner"></div>
             <p style="color:#888;">Loading your dashboard...</p>
         </div>
 
-        <!-- Error state -->
+        <!-- Error -->
         <div id="errorState" class="error-state" style="display:none;">
             <div class="error-icon">🔒</div>
             <h3>Invalid or Expired Link</h3>
-            <p>This dashboard link is not valid. Please check your email for the correct link.<br><br>
+            <p>This dashboard link is not valid. Please check your welcome email for the correct link.<br><br>
             <a href="/" style="color:#667eea;">← Back to Home</a></p>
         </div>
 
-        <!-- Dashboard content -->
+        <!-- Dashboard -->
         <div id="dashboardContent" style="display:none;">
 
             <!-- Welcome banner -->
@@ -554,12 +511,12 @@
                 </div>
             </div>
 
-            <!-- Info banner for trial expiry -->
+            <!-- Trial warning -->
             <div class="info-banner" id="trialWarning" style="display:none;">
                 ⏰ <span>Your free trial is ending soon! <a href="/#pricing" style="color:#856404; font-weight:bold;">Upgrade to Pro</a> to keep monitoring without interruption.</span>
             </div>
 
-            <!-- Stats row -->
+            <!-- Stats -->
             <div class="stats-row">
                 <div class="stat-card">
                     <div class="stat-icon purple">📦</div>
@@ -604,7 +561,7 @@
     <div class="modal-overlay" id="addModal">
         <div class="modal">
             <h2>➕ Add New Product</h2>
-            <p>Paste the product URL and set your target price. We'll alert you when it drops!</p>
+            <p>Paste the product URL and set your target price. We'll alert you the moment it drops!</p>
             <div class="form-group">
                 <label>Product URL *</label>
                 <input type="url" id="newProductUrl" placeholder="https://amazon.com/product/..." required>
@@ -615,13 +572,71 @@
             </div>
             <div class="modal-buttons">
                 <button class="btn-cancel" onclick="closeAddModal()">Cancel</button>
-                <button class="btn-submit" onclick="addProduct()">🚀 Start Tracking</button>
+                <button class="btn-submit" id="addBtn" onclick="addProduct()">🚀 Start Tracking</button>
             </div>
         </div>
     </div>
 
-    <!-- Toast notification -->
+    <!-- Contact Us Modal -->
+    <div class="modal-overlay" id="contactModal">
+        <div class="modal">
+            <h2>✉️ Contact Us</h2>
+            <p>Have a question or issue? We're here to help! We'll get back to you within 24 hours.</p>
+            <div class="form-group">
+                <label>Your Name *</label>
+                <input type="text" id="contactName" placeholder="Your name" required>
+            </div>
+            <div class="form-group">
+                <label>Your Email *</label>
+                <input type="email" id="contactEmail" placeholder="your@email.com" required>
+            </div>
+            <div class="form-group">
+                <label>Message *</label>
+                <textarea id="contactMessage" placeholder="How can we help you?"></textarea>
+            </div>
+            <div class="modal-buttons">
+                <button class="btn-cancel" onclick="closeContactModal()">Cancel</button>
+                <button class="btn-submit" id="contactBtn" onclick="sendContact()">📨 Send Message</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
     <div class="toast" id="toast"></div>
+
+    <!-- Footer -->
+    <footer>
+        <div class="footer-inner">
+            <div class="footer-grid">
+                <div class="footer-brand">
+                    <a href="/" class="footer-logo">💰 DealNotify</a>
+                    <p>Never miss a price drop again. We monitor your favorite products 24/7 and send you instant alerts when prices hit your target.</p>
+                </div>
+                <div class="footer-col">
+                    <h4>Quick Links</h4>
+                    <ul>
+                        <li><a href="/">Home</a></li>
+                        <li><a href="/#features">Features</a></li>
+                        <li><a href="/#pricing">Pricing</a></li>
+                        <li><a href="/#signup">Sign Up</a></li>
+                    </ul>
+                </div>
+                <div class="footer-col">
+                    <h4>Support</h4>
+                    <ul>
+                        <li><a href="mailto:hello@dealnotify.co">hello@dealnotify.co</a></li>
+                        <li><a href="#" onclick="openContactModal(); return false;">Contact Us</a></li>
+                        <li><a href="/">Privacy Policy</a></li>
+                        <li><a href="/">Terms of Service</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <span>© 2026 DealNotify. All rights reserved. Made with ❤️ for smart shoppers.</span>
+                <span>Questions? <a href="mailto:hello@dealnotify.co">hello@dealnotify.co</a></span>
+            </div>
+        </div>
+    </footer>
 
     <script>
         const params = new URLSearchParams(window.location.search);
@@ -629,12 +644,8 @@
         let userData = null;
         let productsData = [];
 
-        // Load dashboard on page load
         window.onload = function() {
-            if (!token) {
-                showError();
-                return;
-            }
+            if (!token) { showError(); return; }
             loadDashboard();
         };
 
@@ -642,33 +653,23 @@
             fetch(`/api/dashboard?token=${token}`)
                 .then(res => res.json())
                 .then(data => {
-                    if (!data.success) {
-                        showError();
-                        return;
-                    }
+                    if (!data.success) { showError(); return; }
                     userData = data.user;
                     productsData = data.products || [];
                     renderDashboard();
                 })
-                .catch(err => {
-                    console.error(err);
-                    showError();
-                });
+                .catch(() => showError());
         }
 
         function renderDashboard() {
             document.getElementById('loadingState').style.display = 'none';
             document.getElementById('dashboardContent').style.display = 'block';
 
-            // Header
             document.getElementById('headerName').textContent = userData.name;
             document.getElementById('headerEmail').textContent = userData.email;
-
-            // Welcome banner
             document.getElementById('welcomeTitle').textContent = `Welcome back, ${userData.name.split(' ')[0]}! 👋`;
             document.getElementById('welcomeSubtitle').textContent = `Member since ${formatDate(userData.signup_date)} · ${userData.email}`;
 
-            // Trial badge
             const days = userData.trial_days_remaining;
             document.getElementById('trialDays').textContent = days;
             if (days <= 2) {
@@ -676,15 +677,12 @@
                 document.getElementById('trialWarning').style.display = 'flex';
             }
 
-            // Stats
-            const activeCount = productsData.filter(p => p.status === 'monitoring').length;
-            const alertCount = productsData.filter(p => p.alert_sent).length;
-            document.getElementById('statProducts').textContent = productsData.length;
-            document.getElementById('statActive').textContent = activeCount;
-            document.getElementById('statAlerts').textContent = alertCount;
-
-            // Products
+            updateStats();
             renderProducts();
+
+            // Pre-fill contact form with user info
+            document.getElementById('contactName').value = userData.name || '';
+            document.getElementById('contactEmail').value = userData.email || '';
         }
 
         function renderProducts() {
@@ -705,20 +703,24 @@
         }
 
         function productCard(product) {
-            const statusClass = product.alert_sent ? 'alert-sent' : product.status === 'monitoring' ? 'monitoring' : 'inactive';
-            const statusLabel = product.alert_sent ? '🔔 Alert Sent' : product.status === 'monitoring' ? '🟢 Monitoring' : '⏸ Paused';
-            const targetPrice = product.target_price ? `$${parseFloat(product.target_price).toFixed(2)}` : '—';
             const hasCurrentPrice = product.current_price !== null && product.current_price !== undefined;
             const currentPriceVal = hasCurrentPrice ? parseFloat(product.current_price) : null;
             const targetPriceVal = product.target_price ? parseFloat(product.target_price) : null;
             const priceDropped = currentPriceVal !== null && targetPriceVal !== null && currentPriceVal <= targetPriceVal;
-            const priceClass = !hasCurrentPrice ? 'na' : priceDropped ? 'price-drop' : 'price-above';
-            const currentPriceDisplay = hasCurrentPrice ? `$${currentPriceVal.toFixed(2)}` : 'Click Refresh →';
+            const savings = priceDropped && currentPriceVal !== null ? (targetPriceVal - currentPriceVal).toFixed(2) : null;
+
+            const statusClass = product.alert_sent ? 'alert-sent' : 'monitoring';
+            const statusLabel = product.alert_sent ? '🔔 Alert Sent' : '🟢 Monitoring';
+
+            const currentPriceClass = !hasCurrentPrice ? 'current-na' : priceDropped ? 'current-below' : 'current-above';
+            const currentPriceDisplay = hasCurrentPrice ? `$${currentPriceVal.toFixed(2)}` : '—';
+            const targetPriceDisplay = targetPriceVal ? `$${targetPriceVal.toFixed(2)}` : '—';
+
             const shortUrl = truncateUrl(product.url);
-            const lastChecked = product.last_checked ? `Last checked: ${formatDate(product.last_checked)}` : 'Not checked yet';
+            const lastChecked = product.last_checked ? `Last checked: ${formatDate(product.last_checked)}` : 'Click Refresh to check price';
 
             return `
-            <div class="product-card" id="product-${product.id}">
+            <div class="product-card ${priceDropped ? 'deal' : ''}" id="product-${product.id}">
                 <div class="product-card-header">
                     <div class="store-badge">${getStoreEmoji(product.url)} ${product.store || 'Online Store'}</div>
                     <span class="status-badge ${statusClass}">${statusLabel}</span>
@@ -726,17 +728,22 @@
                 <a href="${product.url}" target="_blank" class="product-url" title="${product.url}">
                     🔗 ${shortUrl}
                 </a>
-                <div class="product-details">
-                    <div class="detail-box">
-                        <div class="detail-label">Target Price</div>
-                        <div class="detail-value price">${targetPrice}</div>
+
+                <div class="price-comparison">
+                    <div class="price-box">
+                        <div class="price-label">Your Target</div>
+                        <div class="price-value target">${targetPriceDisplay}</div>
                     </div>
-                    <div class="detail-box">
-                        <div class="detail-label">Current Price</div>
-                        <div class="detail-value ${priceClass}">${currentPriceDisplay}</div>
+                    <div class="price-arrow">→</div>
+                    <div class="price-box">
+                        <div class="price-label">Current Price</div>
+                        <div class="price-value ${currentPriceClass}">${currentPriceDisplay}</div>
+                        ${savings ? `<div class="price-savings">You save $${savings}! 🎉</div>` : ''}
                     </div>
                 </div>
-                ${priceDropped ? `<div style="background:#edfaf1; border:1px solid #27ae60; border-radius:8px; padding:10px 14px; margin-bottom:12px; font-size:13px; color:#27ae60; font-weight:600;">🎉 Price dropped below your target! Check your email for the alert.</div>` : ''}
+
+                ${priceDropped ? `<div class="deal-banner">🎉 Price is at or below your target! Check your email for the alert.</div>` : ''}
+
                 <div class="product-footer">
                     <span class="added-date">${lastChecked}</span>
                     <button class="btn-remove" onclick="removeProduct(${product.id})">✕ Remove</button>
@@ -746,7 +753,7 @@
 
         function refreshPrices() {
             const btn = document.getElementById('refreshBtn');
-            btn.textContent = '⏳ Checking...';
+            btn.textContent = '⏳ Fetching prices...';
             btn.disabled = true;
 
             fetch(`/api/check-prices?token=${token}`)
@@ -757,11 +764,11 @@
                         renderProducts();
                         updateStats();
                         const now = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-                        document.getElementById('lastCheckedText').textContent = `Last refreshed at ${now}`;
+                        document.getElementById('lastCheckedText').textContent = `✅ Prices last refreshed at ${now}`;
                         if (data.alerts_sent > 0) {
                             showToast(`🔔 ${data.alerts_sent} price drop alert(s) sent to your email!`, 'success');
                         } else {
-                            showToast('✅ Prices updated! No drops below target yet.', 'success');
+                            showToast('Prices updated! No drops below target yet.', 'success');
                         }
                     } else {
                         showToast('Failed to fetch prices. Try again.', 'error');
@@ -788,11 +795,10 @@
         function addProduct() {
             const url = document.getElementById('newProductUrl').value.trim();
             const targetPrice = document.getElementById('newTargetPrice').value.trim();
-
             if (!url) { showToast('Please enter a product URL', 'error'); return; }
             if (!targetPrice) { showToast('Please enter a target price', 'error'); return; }
 
-            const btn = document.querySelector('.btn-submit');
+            const btn = document.getElementById('addBtn');
             btn.textContent = 'Adding...';
             btn.disabled = true;
 
@@ -808,7 +814,7 @@
                     renderProducts();
                     updateStats();
                     closeAddModal();
-                    showToast('✅ Product added! We\'ll alert you when the price drops.', 'success');
+                    showToast('✅ Product added! Click Refresh Prices to see the current price.', 'success');
                 } else {
                     showToast(data.error || 'Failed to add product', 'error');
                 }
@@ -834,6 +840,50 @@
                 }
             })
             .catch(() => showToast('Failed to remove product', 'error'));
+        }
+
+        function openContactModal() {
+            document.getElementById('contactModal').classList.add('active');
+        }
+
+        function closeContactModal() {
+            document.getElementById('contactModal').classList.remove('active');
+            document.getElementById('contactMessage').value = '';
+        }
+
+        function sendContact() {
+            const name = document.getElementById('contactName').value.trim();
+            const email = document.getElementById('contactEmail').value.trim();
+            const message = document.getElementById('contactMessage').value.trim();
+
+            if (!name || !email || !message) {
+                showToast('Please fill in all fields', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('contactBtn');
+            btn.textContent = 'Sending...';
+            btn.disabled = true;
+
+            fetch('/api/contact', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, email, message })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    closeContactModal();
+                    showToast('✅ Message sent! We\'ll get back to you within 24 hours.', 'success');
+                } else {
+                    showToast('Failed to send message. Please email us directly at hello@dealnotify.co', 'error');
+                }
+            })
+            .catch(() => showToast('Failed to send. Please email us at hello@dealnotify.co', 'error'))
+            .finally(() => {
+                btn.textContent = '📨 Send Message';
+                btn.disabled = false;
+            });
         }
 
         function updateStats() {
@@ -885,16 +935,17 @@
             return '🛍️';
         }
 
-        // Close modal on overlay click
-        document.getElementById('addModal').addEventListener('click', function(e) {
-            if (e.target === this) closeAddModal();
+        // Modal close on overlay click
+        ['addModal', 'contactModal'].forEach(id => {
+            document.getElementById(id).addEventListener('click', function(e) {
+                if (e.target === this) this.classList.remove('active');
+            });
         });
 
-        // Allow Enter key to submit add product form
         document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') closeAddModal();
-            if (e.key === 'Enter' && document.getElementById('addModal').classList.contains('active')) {
-                addProduct();
+            if (e.key === 'Escape') {
+                document.getElementById('addModal').classList.remove('active');
+                document.getElementById('contactModal').classList.remove('active');
             }
         });
     </script>

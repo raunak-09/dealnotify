@@ -302,9 +302,9 @@ def check_prices_for_user():
             product['current_price'] = current_price
             product['last_checked'] = datetime.now().isoformat()
 
-            # Check if price dropped to or below target
+            # Check if price dropped to or below target — always alert, not just once
             target = product.get('target_price')
-            if target and float(current_price) <= float(target) and not product.get('alert_sent'):
+            if target and float(current_price) <= float(target):
                 product['status'] = 'alert_sent'
                 product['alert_sent'] = True
                 send_price_drop_alert(
@@ -527,6 +527,77 @@ def remove_product():
         return jsonify({'success': True, 'message': 'Product removed'}), 200
 
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/contact', methods=['POST'])
+def contact():
+    """Handle contact form submissions"""
+    try:
+        data = request.json
+        name = data.get('name', '').strip()
+        email = data.get('email', '').strip()
+        message = data.get('message', '').strip()
+
+        if not name or not email or not message:
+            return jsonify({'error': 'All fields are required'}), 400
+
+        api_key = os.getenv('SENDGRID_API_KEY')
+        from_email = os.getenv('SENDGRID_FROM_EMAIL', 'hello@dealnotify.co')
+
+        if not api_key:
+            return jsonify({'error': 'Email service not configured'}), 500
+
+        html_content = f"""
+        <html><body style="font-family: Arial, sans-serif; padding: 20px;">
+        <h2 style="color: #667eea;">📬 New Contact Form Submission</h2>
+        <table style="border-collapse: collapse; width: 100%; max-width: 600px;">
+        <tr><td style="padding: 10px; font-weight: bold; color: #555;">Name:</td><td style="padding: 10px;">{name}</td></tr>
+        <tr style="background:#f9f9f9;"><td style="padding: 10px; font-weight: bold; color: #555;">Email:</td><td style="padding: 10px;"><a href="mailto:{email}">{email}</a></td></tr>
+        <tr><td style="padding: 10px; font-weight: bold; color: #555;">Message:</td><td style="padding: 10px;">{message}</td></tr>
+        </table>
+        <p style="color: #888; font-size: 12px; margin-top: 20px;">Sent from DealNotify Contact Form</p>
+        </body></html>
+        """
+
+        msg = Mail(
+            from_email=from_email,
+            to_emails='hello@dealnotify.co',
+            subject=f'📬 DealNotify Contact: Message from {name}',
+            html_content=html_content
+        )
+
+        sg = SendGridAPIClient(api_key)
+        sg.send(msg)
+
+        # Send confirmation to user
+        confirm_html = f"""
+        <html><body style="font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px;">
+        <div style="background: white; max-width: 600px; margin: 0 auto; padding: 30px; border-radius: 10px;">
+        <h2 style="color: #667eea;">✅ We got your message, {name}!</h2>
+        <p style="color: #333;">Thank you for reaching out. Our team will get back to you within <strong>24 hours</strong>.</p>
+        <div style="background: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0;">
+        <p style="color: #666; font-size: 14px; margin: 0;"><strong>Your message:</strong><br>{message}</p>
+        </div>
+        <p style="color: #333; font-size: 14px;">Best regards,<br><strong>The DealNotify Team</strong><br>
+        <a href="mailto:hello@dealnotify.co" style="color: #667eea;">hello@dealnotify.co</a> | <a href="https://www.dealnotify.co" style="color: #667eea;">www.dealnotify.co</a><br><br>
+        💰 <em>Never miss a price drop again!</em></p>
+        </div></body></html>
+        """
+
+        confirm_msg = Mail(
+            from_email=from_email,
+            to_emails=email,
+            subject='✅ We received your message - DealNotify Support',
+            html_content=confirm_html
+        )
+        sg.send(confirm_msg)
+
+        print(f"📬 Contact form: {name} ({email})")
+        return jsonify({'success': True}), 200
+
+    except Exception as e:
+        print(f"❌ Contact error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 
