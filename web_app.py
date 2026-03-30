@@ -79,7 +79,7 @@ def send_welcome_email(name, email, dashboard_url):
     """Send welcome email to new customer via SendGrid"""
     try:
         api_key = os.getenv('SENDGRID_API_KEY')
-        from_email = os.getenv('SENDGRID_FROM_EMAIL', 'manisha.jmc@gmail.com')
+        from_email = os.getenv('SENDGRID_FROM_EMAIL', 'hello@dealnotify.co')
 
         if not api_key:
             print("⚠️ Warning: SENDGRID_API_KEY not found - welcome email not sent")
@@ -127,8 +127,13 @@ def send_welcome_email(name, email, dashboard_url):
         </div>
 
         <hr style="border: none; border-top: 2px solid #eee; margin: 30px 0;">
-        <p style="color: #666; font-size: 12px; text-align: center;">If you have any questions, reply to this email.</p>
-        <p style="color: #999; font-size: 12px; text-align: center;">© 2026 Price Drop Alert Bot. All rights reserved.</p>
+        <p style="color: #333; font-size: 14px;">Best regards,<br>
+        <strong>The DealNotify Team</strong><br>
+        <a href="mailto:hello@dealnotify.co" style="color: #667eea;">hello@dealnotify.co</a> | <a href="https://www.dealnotify.co" style="color: #667eea;">www.dealnotify.co</a><br><br>
+        💰 <em>Never miss a price drop again!</em>
+        </p>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+        <p style="color: #999; font-size: 12px; text-align: center;">© 2026 DealNotify. All rights reserved.</p>
         </div>
         </body>
         </html>
@@ -152,9 +157,14 @@ YOUR FREE TRIAL:
 You have 7 days free to try all features!
 After that, it's just $4.99/month for unlimited monitoring.
 
-Questions? Reply to this email!
+Questions? Reply to this email at hello@dealnotify.co
 
-© 2026 Price Drop Alert Bot
+Best regards,
+The DealNotify Team
+hello@dealnotify.co | www.dealnotify.co
+💰 Never miss a price drop again!
+
+© 2026 DealNotify. All rights reserved.
         """
 
         message = Mail(
