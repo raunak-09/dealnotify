@@ -26,64 +26,112 @@ def save_database(data):
     with open(DB_FILE, 'w') as f:
         json.dump(data, f, indent=2)
 
+def extract_price_from_text(text):
+    """Extract a price from raw text using regex fallback"""
+    import re
+    if not text:
+        return None
+    patterns = [
+        r'\$\s*([\d,]+\.?\d*)',
+        r'USD\s*([\d,]+\.?\d*)',
+        r'Price[:\s]+\$?([\d,]+\.?\d*)',
+        r'"price"[:\s]+"?\$?([\d,]+\.?\d*)',
+    ]
+    for pattern in patterns:
+        matches = re.findall(pattern, text, re.IGNORECASE)
+        for match in matches:
+            try:
+                price = float(match.replace(',', ''))
+                if 0.01 < price < 100000:
+                    return price
+            except:
+                continue
+    return None
+
+
 def scrape_price(url):
     """
-    Scrape the current price from a URL using Firecrawl
-    
+    Scrape the current price from a URL using Firecrawl.
+    Tries schema extraction first, falls back to markdown regex parsing.
+
     Args:
         url (str): Product URL to scrape
-        
+
     Returns:
         float: Current price, or None if failed
     """
     api_key = os.getenv('FIRECRAWL_API_KEY')
-    
+
     if not api_key:
         print("❌ Error: FIRECRAWL_API_KEY not found")
         return None
-    
+
     try:
         app = FirecrawlApp(api_key=api_key)
-        
-        # Schema to extract price information
+
         price_schema = {
             "type": "object",
             "properties": {
                 "price": {
                     "type": "string",
-                    "description": "The product price (e.g., $19.99)"
+                    "description": "The current sale price of the product (e.g., $19.99)"
                 },
                 "product_name": {
                     "type": "string",
                     "description": "The product name or title"
-                },
-                "availability": {
-                    "type": "string",
-                    "description": "Is the product in stock?"
                 }
             }
         }
-        
-        # Scrape with schema
+
         result = app.scrape_url(url, {
-            'formats': ['extract'],
-            'extract': {
-                'schema': price_schema
-            }
+            'formats': ['extract', 'markdown'],
+            'extract': {'schema': price_schema}
         })
-        
-        if result and 'extract' in result:
+
+        print(f"   → Firecrawl result keys: {list(result.keys()) if result else 'None'}")
+
+        if not result:
+            print("   → No result from Firecrawl")
+            return None
+
+        # Method 1: 'extract' key
+        if 'extract' in result and result['extract']:
             data = result['extract']
-            # Extract price (remove $ and convert to float)
-            if 'price' in data and data['price']:
-                price_str = data['price'].replace('$', '').replace(',', '')
+            print(f"   → Extract data: {data}")
+            price_val = data.get('price') or data.get('Price') or data.get('current_price')
+            if price_val:
+                price_str = str(price_val).replace('$', '').replace(',', '').strip()
                 try:
-                    return float(price_str)
+                    price = float(price_str)
+                    print(f"   ✅ Price from extract: ${price}")
+                    return price
                 except:
-                    return None
-        
+                    pass
+
+        # Method 2: 'data' key (some SDK versions)
+        if 'data' in result and isinstance(result['data'], dict):
+            data = result['data']
+            price_val = data.get('price') or data.get('Price')
+            if price_val:
+                price_str = str(price_val).replace('$', '').replace(',', '').strip()
+                try:
+                    price = float(price_str)
+                    print(f"   ✅ Price from data: ${price}")
+                    return price
+                except:
+                    pass
+
+        # Method 3: Regex on markdown
+        markdown = result.get('markdown') or result.get('content') or ''
+        if markdown:
+            price = extract_price_from_text(markdown[:3000])
+            if price:
+                print(f"   ✅ Price from markdown regex: ${price}")
+                return price
+
+        print("   ⚠️ Could not extract price from any method")
         return None
-        
+
     except Exception as e:
         print(f"❌ Error scraping {url}: {str(e)}")
         return None

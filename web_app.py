@@ -297,6 +297,7 @@ def check_prices_for_user():
 
         print(f"🔍 Checking price for: {url}")
         current_price = scrape_price(url)
+        print(f"   → scrape_price returned: {current_price}")
 
         if current_price is not None:
             product['current_price'] = current_price
