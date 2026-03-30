@@ -27,25 +27,48 @@ def save_database(data):
         json.dump(data, f, indent=2)
 
 def extract_price_from_text(text):
-    """Extract a price from raw text using regex fallback"""
+    """
+    Extract the main product price from markdown text.
+    Prioritises prices near keywords like 'price', 'buy', 'add to cart'.
+    Skips coupon/discount amounts and very low prices.
+    """
     import re
     if not text:
         return None
-    patterns = [
-        r'\$\s*([\d,]+\.?\d*)',
-        r'USD\s*([\d,]+\.?\d*)',
-        r'Price[:\s]+\$?([\d,]+\.?\d*)',
-        r'"price"[:\s]+"?\$?([\d,]+\.?\d*)',
+
+    # Step 1: Look for price near strong buying-intent keywords (most reliable)
+    priority_patterns = [
+        r'(?:current price|sale price|our price|buy new|price)[^\n]{0,30}\$\s*([\d,]+\.\d{2})',
+        r'\$\s*([\d,]+\.\d{2})\s*(?:add to cart|buy now|in stock)',
+        r'(?:^\s*|\*\*)\$\s*([\d,]+\.\d{2})(?:\*\*|\s*$)',  # bold/prominent price in markdown
     ]
-    for pattern in patterns:
-        matches = re.findall(pattern, text, re.IGNORECASE)
+    for pattern in priority_patterns:
+        matches = re.findall(pattern, text, re.IGNORECASE | re.MULTILINE)
         for match in matches:
             try:
                 price = float(match.replace(',', ''))
-                if 0.01 < price < 100000:
+                if 5.0 < price < 100000:  # skip prices under $5 (coupons/shipping)
                     return price
             except:
                 continue
+
+    # Step 2: Collect ALL prices in the text and return the most frequent / prominent one
+    all_prices = re.findall(r'\$\s*([\d,]+\.\d{2})', text)
+    candidates = []
+    for p in all_prices:
+        try:
+            price = float(p.replace(',', ''))
+            if 5.0 < price < 100000:
+                candidates.append(price)
+        except:
+            continue
+
+    if candidates:
+        # Return the most frequently occurring price (most likely the main product price)
+        from collections import Counter
+        counter = Counter(candidates)
+        return counter.most_common(1)[0][0]
+
     return None
 
 
@@ -83,10 +106,14 @@ def scrape_price(url):
             }
         }
 
-        result = app.scrape_url(url, {
-            'formats': ['extract', 'markdown'],
-            'extract': {'schema': price_schema}
-        })
+        # Try newer SDK format first, fall back to older format
+        try:
+            result = app.scrape_url(url, formats=['extract', 'markdown'], extract={'schema': price_schema})
+        except TypeError:
+            result = app.scrape_url(url, {
+                'formats': ['extract', 'markdown'],
+                'extract': {'schema': price_schema}
+            })
 
         print(f"   → Firecrawl result keys: {list(result.keys()) if result else 'None'}")
 
