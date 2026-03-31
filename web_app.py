@@ -24,8 +24,13 @@ app = Flask(__name__, static_folder='.', static_url_path='')
 # ─────────────────────────────────────────────
 
 def get_db_conn():
-    """Get a PostgreSQL connection from DATABASE_URL using pg8000 (pure Python)"""
-    db_url = os.getenv('DATABASE_URL')
+    """Get a PostgreSQL connection using pg8000 (pure Python, no libpq needed).
+    Prefers DATABASE_PUBLIC_URL (public internet) over DATABASE_URL (internal network)
+    so it works without Railway Private Networking being enabled."""
+    db_url = (
+        os.getenv('DATABASE_PUBLIC_URL') or
+        os.getenv('DATABASE_URL')
+    )
     if not db_url:
         raise Exception("DATABASE_URL environment variable not set")
     # Normalise scheme so urlparse works
