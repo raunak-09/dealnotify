@@ -936,7 +936,6 @@
         }
 
         function showUpgradePrompt(message) {
-            // Remove any existing upgrade prompt
             const existing = document.getElementById('upgradePrompt');
             if (existing) existing.remove();
 
@@ -953,21 +952,21 @@
                     <div style="font-size:48px; margin-bottom:12px;">🚀</div>
                     <h2 style="color:#333; margin-bottom:10px;">Upgrade to Pro</h2>
                     <p style="color:#666; font-size:15px; margin-bottom:24px; line-height:1.6;">
-                        ${message || 'You\'ve reached the 3-product limit on the free plan.'}
+                        ${message || "You've reached the 3-product limit on the free plan."}
                     </p>
                     <div style="background:#f0f7ff; border-radius:12px; padding:20px; margin-bottom:24px; text-align:left;">
                         <p style="color:#667eea; font-weight:700; margin:0 0 10px;">⭐ Pro — $4.99/month</p>
-                        <p style="color:#555; font-size:14px; margin:4px 0;">✓ Unlimited products</p>
+                        <p style="color:#555; font-size:14px; margin:4px 0;">✓ Unlimited products tracked</p>
                         <p style="color:#555; font-size:14px; margin:4px 0;">✓ Hourly automatic price checks</p>
-                        <p style="color:#555; font-size:14px; margin:4px 0;">✓ Instant email alerts</p>
+                        <p style="color:#555; font-size:14px; margin:4px 0;">✓ Instant email alerts on price drops</p>
                         <p style="color:#555; font-size:14px; margin:4px 0;">✓ Priority support</p>
                     </div>
-                    <a href="mailto:hello@dealnotify.co?subject=Upgrade to Pro&body=Hi, I'd like to upgrade to DealNotify Pro!"
-                       style="display:block; background:linear-gradient(135deg,#667eea,#764ba2); color:white;
-                              padding:14px 28px; border-radius:50px; text-decoration:none; font-weight:700;
-                              font-size:16px; margin-bottom:12px;">
+                    <button id="checkoutBtn" onclick="startCheckout()"
+                            style="width:100%; background:linear-gradient(135deg,#667eea,#764ba2); color:white;
+                                   padding:14px 28px; border-radius:50px; border:none; cursor:pointer;
+                                   font-weight:700; font-size:16px; margin-bottom:12px;">
                         Upgrade Now — $4.99/mo
-                    </a>
+                    </button>
                     <button onclick="document.getElementById('upgradePrompt').remove()"
                             style="background:none; border:none; color:#999; cursor:pointer; font-size:14px;">
                         Maybe later
@@ -976,6 +975,29 @@
             `;
             document.body.appendChild(el);
             el.addEventListener('click', (e) => { if (e.target === el) el.remove(); });
+        }
+
+        async function startCheckout() {
+            const btn = document.getElementById('checkoutBtn');
+            if (!btn) return;
+            btn.textContent = '⏳ Loading checkout...';
+            btn.disabled = true;
+
+            try {
+                const res  = await fetch(`/api/create-checkout-session?token=${token}`, { method: 'POST' });
+                const data = await res.json();
+                if (data.checkout_url) {
+                    window.location.href = data.checkout_url;
+                } else {
+                    showToast(data.error || 'Could not start checkout. Try again.', 'error');
+                    btn.textContent = 'Upgrade Now — $4.99/mo';
+                    btn.disabled = false;
+                }
+            } catch (e) {
+                showToast('Something went wrong. Please try again.', 'error');
+                btn.textContent = 'Upgrade Now — $4.99/mo';
+                btn.disabled = false;
+            }
         }
 
         function formatDate(dateStr) {

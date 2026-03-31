@@ -5,3 +5,4 @@ requests==2.31.0
 sendgrid==6.10.0
 pg8000
 APScheduler>=3.10.0
+stripe>=7.0.0

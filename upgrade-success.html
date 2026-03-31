@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to Pro! - DealNotify</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .card {
+            background: white;
+            border-radius: 20px;
+            padding: 50px 40px;
+            max-width: 480px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 25px 60px rgba(0,0,0,0.2);
+        }
+        .icon { font-size: 64px; margin-bottom: 16px; }
+        h1 { color: #333; font-size: 28px; margin-bottom: 10px; }
+        .subtitle { color: #666; font-size: 16px; line-height: 1.6; margin-bottom: 30px; }
+        .features {
+            background: #f0f7ff;
+            border-radius: 12px;
+            padding: 20px 24px;
+            text-align: left;
+            margin-bottom: 30px;
+        }
+        .features p { font-weight: 700; color: #667eea; margin-bottom: 12px; font-size: 15px; }
+        .feature-item {
+            display: flex; align-items: center; gap: 8px;
+            color: #444; font-size: 14px; padding: 5px 0;
+        }
+        .feature-item span { font-size: 16px; }
+        .btn {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 16px 40px;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 16px;
+            transition: opacity 0.2s;
+            width: 100%;
+        }
+        .btn:hover { opacity: 0.9; }
+        .note { color: #999; font-size: 13px; margin-top: 16px; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="icon">🎉</div>
+        <h1>You're now on Pro!</h1>
+        <p class="subtitle">
+            Thank you for upgrading. Your account has been upgraded to Pro
+            and unlimited product tracking is now active.
+        </p>
+
+        <div class="features">
+            <p>⭐ Your Pro benefits are active</p>
+            <div class="feature-item"><span>✅</span> Unlimited products tracked</div>
+            <div class="feature-item"><span>✅</span> Hourly automatic price checks</div>
+            <div class="feature-item"><span>✅</span> Instant email alerts on price drops</div>
+            <div class="feature-item"><span>✅</span> Priority support</div>
+        </div>
+
+        <a id="dashboardBtn" href="/" class="btn">Go to My Dashboard →</a>
+        <p class="note">You'll also receive a receipt from Stripe at your email address.</p>
+    </div>
+
+    <script>
+        // Redirect straight back to the user's dashboard if token is in URL
+        const token = new URLSearchParams(window.location.search).get('token');
+        if (token) {
+            document.getElementById('dashboardBtn').href = `/dashboard?token=${token}`;
+        }
+    </script>
+</body>
+</html>

@@ -14,6 +14,7 @@ from price_monitor import scrape_price
 import pg8000.dbapi as pg8000
 from urllib.parse import urlparse
 from apscheduler.schedulers.background import BackgroundScheduler
+import stripe
 
 load_dotenv()
 
@@ -66,7 +67,7 @@ def _fetchall(cur):
 
 
 def init_db():
-    """Create tables if they don't exist"""
+    """Create tables and run any pending migrations"""
     conn = get_db_conn()
     cur = conn.cursor()
     try:
@@ -95,6 +96,9 @@ def init_db():
                 alert_sent BOOLEAN NOT NULL DEFAULT FALSE
             );
         """)
+        # Stripe migration — add columns if they don't exist yet
+        cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT;")
+        cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT;")
         conn.commit()
         print("✅ Database tables ready")
     except Exception as e:
@@ -856,6 +860,135 @@ def admin():
     </body>
     </html>
     """
+
+
+# ─────────────────────────────────────────────
+# STRIPE PAYMENT ROUTES
+# ─────────────────────────────────────────────
+
+@app.route('/api/create-checkout-session', methods=['POST'])
+def create_checkout_session():
+    """
+    Create a Stripe Checkout session for upgrading to Pro.
+    The user's token is stored as client_reference_id so the webhook
+    can identify them after payment.
+    """
+    token = request.args.get('token')
+    if not token:
+        return jsonify({'error': 'Token required'}), 400
+
+    user, _ = get_user_by_token(token)
+    if not user:
+        return jsonify({'error': 'Invalid token'}), 404
+
+    if user.get('status') == 'pro':
+        return jsonify({'error': 'Already on Pro plan'}), 400
+
+    stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
+    price_id = os.getenv('STRIPE_PRICE_ID')
+
+    if not stripe.api_key or not price_id:
+        return jsonify({'error': 'Payment not configured yet'}), 500
+
+    try:
+        base_url = get_base_url()
+        session = stripe.checkout.Session.create(
+            mode='subscription',
+            payment_method_types=['card'],
+            line_items=[{'price': price_id, 'quantity': 1}],
+            customer_email=user['email'],
+            client_reference_id=token,          # used in webhook to find the user
+            success_url=f"{base_url}/upgrade-success?token={token}",
+            cancel_url=f"{base_url}/dashboard?token={token}",
+        )
+        return jsonify({'checkout_url': session.url}), 200
+
+    except Exception as e:
+        print(f"❌ Checkout session error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/stripe-webhook', methods=['POST'])
+def stripe_webhook():
+    """
+    Handle Stripe webhook events to keep the database in sync with
+    subscription status. Must be reachable publicly — register it in
+    the Stripe dashboard pointing to https://www.dealnotify.co/api/stripe-webhook
+    """
+    stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
+    webhook_secret = os.getenv('STRIPE_WEBHOOK_SECRET')
+    payload    = request.get_data()
+    sig_header = request.headers.get('Stripe-Signature', '')
+
+    try:
+        event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
+    except ValueError:
+        print("❌ Stripe webhook: invalid payload")
+        return 'Invalid payload', 400
+    except stripe.error.SignatureVerificationError:
+        print("❌ Stripe webhook: invalid signature")
+        return 'Invalid signature', 400
+
+    event_type = event['type']
+    print(f"🔔 Stripe event: {event_type}")
+
+    if event_type == 'checkout.session.completed':
+        session       = event['data']['object']
+        token         = session.get('client_reference_id')
+        customer_id   = session.get('customer')
+        subscription_id = session.get('subscription')
+
+        if token:
+            conn = get_db_conn()
+            cur  = conn.cursor()
+            try:
+                cur.execute("""
+                    UPDATE users
+                    SET status = 'pro',
+                        stripe_customer_id = %s,
+                        stripe_subscription_id = %s
+                    WHERE token = %s
+                """, (customer_id, subscription_id, token))
+                conn.commit()
+                print(f"✅ User upgraded to Pro (token ...{token[-8:]})")
+            except Exception as e:
+                conn.rollback()
+                print(f"❌ Webhook DB error: {e}")
+            finally:
+                cur.close()
+                conn.close()
+
+    elif event_type == 'customer.subscription.deleted':
+        subscription_id = event['data']['object']['id']
+        conn = get_db_conn()
+        cur  = conn.cursor()
+        try:
+            cur.execute("""
+                UPDATE users
+                SET status = 'active',
+                    stripe_subscription_id = NULL
+                WHERE stripe_subscription_id = %s
+            """, (subscription_id,))
+            conn.commit()
+            print(f"⬇️  User downgraded from Pro (subscription cancelled)")
+        except Exception as e:
+            conn.rollback()
+            print(f"❌ Webhook downgrade DB error: {e}")
+        finally:
+            cur.close()
+            conn.close()
+
+    elif event_type == 'invoice.payment_failed':
+        # Log it — optionally send a payment failure email in future
+        customer_id = event['data']['object'].get('customer')
+        print(f"⚠️  Payment failed for customer {customer_id}")
+
+    return jsonify({'received': True}), 200
+
+
+@app.route('/upgrade-success')
+def upgrade_success():
+    return send_from_directory('.', 'upgrade-success.html')
 
 
 # ─────────────────────────────────────────────
