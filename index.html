@@ -1122,6 +1122,23 @@
         <p class="section-label">Transparent pricing</p>
         <h2 class="section-title">Start free. Upgrade when you're ready.</h2>
         <p class="section-sub">No hidden fees. No auto-charges on the free trial. Cancel anytime.</p>
+
+        <!-- Billing toggle -->
+        <div style="display:flex; align-items:center; justify-content:center; gap:14px; margin-bottom:36px;">
+            <span id="toggleLabelMonthly" style="font-size:15px; font-weight:600; color:var(--primary);">Monthly</span>
+            <div onclick="toggleBilling()" id="billingToggle"
+                 style="width:52px; height:28px; background:var(--primary); border-radius:50px;
+                        cursor:pointer; position:relative; transition:background 0.2s; flex-shrink:0;">
+                <div id="toggleKnob"
+                     style="width:22px; height:22px; background:white; border-radius:50%;
+                            position:absolute; top:3px; left:3px; transition:transform 0.2s;"></div>
+            </div>
+            <span id="toggleLabelAnnual" style="font-size:15px; font-weight:500; color:var(--text-light);">
+                Annual <span style="background:#22c55e; color:white; font-size:11px; font-weight:700;
+                                    padding:2px 8px; border-radius:50px; margin-left:4px;">Save 33%</span>
+            </span>
+        </div>
+
         <div class="pricing-cards">
 
             <!-- Free Card -->
@@ -1129,7 +1146,7 @@
                 <h3>Free Trial</h3>
                 <p class="plan-desc">Try everything, no card needed</p>
                 <div class="price-amount">$0<span>/7 days</span></div>
-                <p class="price-note">Then $4.99/mo to continue — or just stop, no charge</p>
+                <p class="price-note">Then upgrade to Pro — or just stop, no charge</p>
                 <hr class="price-divider">
                 <ul class="price-features">
                     <li><span class="check">✓</span> Track up to 3 products</li>
@@ -1146,8 +1163,8 @@
                 <div class="price-badge">⭐ Most Popular</div>
                 <h3>Pro</h3>
                 <p class="plan-desc">For serious shoppers who want to save big</p>
-                <div class="price-amount">$4.99<span>/month</span></div>
-                <p class="price-note">Less than a coffee. Cancel anytime.</p>
+                <div class="price-amount" id="proPrice">$4.99<span>/month</span></div>
+                <p class="price-note" id="proNote">Less than a coffee. Cancel anytime.</p>
                 <hr class="price-divider">
                 <ul class="price-features">
                     <li><span class="check">✓</span> <strong>Unlimited products</strong></li>
@@ -1157,7 +1174,7 @@
                     <li><span class="check">✓</span> Personal dashboard</li>
                     <li><span class="check">✓</span> Priority email support</li>
                 </ul>
-                <button class="btn-plan btn-plan-pro" onclick="handleProSignup()">Get Pro Now →</button>
+                <button class="btn-plan btn-plan-pro" id="proBtn" onclick="handleProSignup()">Get Pro Now →</button>
             </div>
         </div>
     </div>
@@ -1639,11 +1656,49 @@ function submitReset(e) {
 }
 
 /* ─────────────────────────────────────
+   BILLING TOGGLE (monthly / annual)
+───────────────────────────────────── */
+let billingAnnual = false;
+
+function toggleBilling() {
+    billingAnnual = !billingAnnual;
+    const knob   = document.getElementById('toggleKnob');
+    const mLabel = document.getElementById('toggleLabelMonthly');
+    const aLabel = document.getElementById('toggleLabelAnnual');
+    const price  = document.getElementById('proPrice');
+    const note   = document.getElementById('proNote');
+    const btn    = document.getElementById('proBtn');
+
+    if (billingAnnual) {
+        knob.style.transform = 'translateX(24px)';
+        mLabel.style.color = 'var(--text-light)';
+        mLabel.style.fontWeight = '500';
+        aLabel.style.color = 'var(--primary)';
+        aLabel.style.fontWeight = '600';
+        price.innerHTML = '$3.33<span>/month</span>';
+        note.innerHTML  = 'Billed as $39.99/year — save $19.89 vs monthly';
+        btn.textContent = 'Get Annual Pro →';
+        sessionStorage.setItem('dealnotify_billing', 'annual');
+    } else {
+        knob.style.transform = 'translateX(0)';
+        mLabel.style.color = 'var(--primary)';
+        mLabel.style.fontWeight = '600';
+        aLabel.style.color = 'var(--text-light)';
+        aLabel.style.fontWeight = '500';
+        price.innerHTML = '$4.99<span>/month</span>';
+        note.innerHTML  = 'Less than a coffee. Cancel anytime.';
+        btn.textContent = 'Get Pro Now →';
+        sessionStorage.setItem('dealnotify_billing', 'monthly');
+    }
+}
+
+/* ─────────────────────────────────────
    PRO SIGNUP
 ───────────────────────────────────── */
 function handleProSignup() {
     sessionStorage.setItem('dealnotify_plan', 'pro');
-    document.getElementById('signupSubtitle').textContent = '⭐ Creating your Pro account';
+    document.getElementById('signupSubtitle').textContent =
+        billingAnnual ? '⭐ Creating your Annual Pro account' : '⭐ Creating your Pro account';
     openModal('signup');
 }
 
