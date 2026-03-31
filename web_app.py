@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 from price_monitor import scrape_price
 import pg8000.dbapi as pg8000
 from urllib.parse import urlparse
+from apscheduler.schedulers.background import BackgroundScheduler
 
 load_dotenv()
 
@@ -847,6 +848,157 @@ def admin():
     """
 
 
+# ─────────────────────────────────────────────
+# AUTOMATED HOURLY PRICE CHECK JOB
+# ─────────────────────────────────────────────
+
+def check_all_prices_job():
+    """
+    Hourly background job: check prices for every tracked product across
+    all active users and send email alerts whenever a price drops to target.
+    """
+    started_at = datetime.now().isoformat()
+    print(f"\n⏰ === Hourly price check started at {started_at} ===")
+
+    total_checked = 0
+    total_alerts  = 0
+    total_errors  = 0
+
+    try:
+        # Fetch all active users
+        conn = get_db_conn()
+        cur  = conn.cursor()
+        try:
+            cur.execute("SELECT * FROM users WHERE status = 'active'")
+            users = _fetchall(cur)
+        finally:
+            cur.close()
+            conn.close()
+
+        print(f"   → {len(users)} active user(s) to check")
+
+        for user in users:
+            user_id      = user['id']
+            token        = user['token']
+            dashboard_url = f"{get_base_url()}/dashboard?token={token}"
+
+            # Fetch this user's products
+            conn = get_db_conn()
+            cur  = conn.cursor()
+            try:
+                cur.execute(
+                    "SELECT * FROM products WHERE user_id = %s ORDER BY added_date ASC",
+                    (user_id,)
+                )
+                products = _fetchall(cur)
+            finally:
+                cur.close()
+                conn.close()
+
+            for product in products:
+                url = product.get('url')
+                if not url:
+                    continue
+
+                print(f"🔍 [{user['email']}] {url[:70]}")
+                try:
+                    current_price = scrape_price(url)
+                    total_checked += 1
+                except Exception as scrape_err:
+                    print(f"   ❌ Scrape error: {scrape_err}")
+                    total_errors += 1
+                    continue
+
+                if current_price is None:
+                    print(f"   ⚠️  Price not found")
+                    total_errors += 1
+                    # Still record the check time even if price wasn't found
+                    conn = get_db_conn()
+                    cur  = conn.cursor()
+                    try:
+                        cur.execute(
+                            "UPDATE products SET last_checked = %s WHERE id = %s AND user_id = %s",
+                            (datetime.now(), product['id'], user_id)
+                        )
+                        conn.commit()
+                    except Exception:
+                        conn.rollback()
+                    finally:
+                        cur.close()
+                        conn.close()
+                    continue
+
+                # Check if price meets target
+                target     = product.get('target_price')
+                alert_sent = False
+                if target and float(current_price) <= float(target):
+                    alert_sent = True
+                    send_price_drop_alert(
+                        name=user['name'],
+                        email=user['email'],
+                        product_url=url,
+                        current_price=current_price,
+                        target_price=target,
+                        store=product.get('store', 'the store'),
+                        dashboard_url=dashboard_url
+                    )
+                    total_alerts += 1
+                    print(f"   🔔 Alert sent — ${current_price} <= target ${target}")
+
+                # Persist updated price to DB
+                conn = get_db_conn()
+                cur  = conn.cursor()
+                try:
+                    cur.execute("""
+                        UPDATE products
+                        SET current_price = %s,
+                            last_checked  = %s,
+                            status        = %s,
+                            alert_sent    = %s
+                        WHERE id = %s AND user_id = %s
+                    """, (
+                        current_price,
+                        datetime.now(),
+                        'alert_sent' if alert_sent else 'monitoring',
+                        alert_sent,
+                        product['id'],
+                        user_id
+                    ))
+                    conn.commit()
+                except Exception as db_err:
+                    conn.rollback()
+                    print(f"   ❌ DB update error: {db_err}")
+                finally:
+                    cur.close()
+                    conn.close()
+
+    except Exception as e:
+        print(f"❌ Hourly job fatal error: {e}")
+
+    print(
+        f"✅ Hourly check done — "
+        f"{total_checked} checked, {total_alerts} alerts sent, {total_errors} errors\n"
+    )
+    return {'checked': total_checked, 'alerts': total_alerts, 'errors': total_errors}
+
+
+@app.route('/api/check-all-prices', methods=['GET'])
+def check_all_prices_admin():
+    """
+    Admin endpoint to manually trigger a full price check for all users.
+    Protected by ADMIN_KEY env var — pass as ?key=<ADMIN_KEY> or X-Admin-Key header.
+    """
+    admin_key = request.args.get('key') or request.headers.get('X-Admin-Key', '')
+    expected  = os.getenv('ADMIN_KEY', '')
+
+    if not expected or admin_key != expected:
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    # Run synchronously so the caller gets the result
+    result = check_all_prices_job()
+    return jsonify({'success': True, **result, 'triggered_at': datetime.now().isoformat()}), 200
+
+
 if __name__ == '__main__':
     print("=" * 70)
     print("🚀 DEALNOTIFY - WEB APP")
@@ -860,5 +1012,21 @@ if __name__ == '__main__':
         init_db()
     except Exception as e:
         print(f"⚠️  Could not init DB: {e}")
+
+    # Start hourly background price check scheduler
+    try:
+        scheduler = BackgroundScheduler()
+        scheduler.add_job(
+            check_all_prices_job,
+            trigger='interval',
+            hours=1,
+            id='hourly_price_check',
+            max_instances=1,       # never run two at once
+            misfire_grace_time=300 # if delayed up to 5 min, still run it
+        )
+        scheduler.start()
+        print("⏰ Hourly price check scheduler started\n")
+    except Exception as e:
+        print(f"⚠️  Scheduler could not start: {e}\n")
 
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
