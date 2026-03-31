@@ -11,8 +11,8 @@ from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 from dotenv import load_dotenv
 from price_monitor import scrape_price
-import psycopg2
-from psycopg2.extras import RealDictCursor
+import pg8000.dbapi as pg8000
+from urllib.parse import urlparse
 
 load_dotenv()
 
@@ -24,14 +24,39 @@ app = Flask(__name__, static_folder='.', static_url_path='')
 # ─────────────────────────────────────────────
 
 def get_db_conn():
-    """Get a PostgreSQL connection from DATABASE_URL"""
+    """Get a PostgreSQL connection from DATABASE_URL using pg8000 (pure Python)"""
     db_url = os.getenv('DATABASE_URL')
     if not db_url:
         raise Exception("DATABASE_URL environment variable not set")
-    # Railway sometimes gives postgres:// but psycopg2 needs postgresql://
-    if db_url.startswith('postgres://'):
-        db_url = db_url.replace('postgres://', 'postgresql://', 1)
-    return psycopg2.connect(db_url, cursor_factory=RealDictCursor)
+    # Normalise scheme so urlparse works
+    db_url = db_url.replace('postgres://', 'postgresql://', 1)
+    p = urlparse(db_url)
+    return pg8000.connect(
+        host=p.hostname,
+        port=p.port or 5432,
+        database=p.path.lstrip('/'),
+        user=p.username,
+        password=p.password,
+        ssl_context=True   # Railway Postgres requires SSL
+    )
+
+
+def _fetchone(cur):
+    """Return a single row as a dict, or None."""
+    row = cur.fetchone()
+    if row is None:
+        return None
+    cols = [d[0] for d in cur.description]
+    return dict(zip(cols, row))
+
+
+def _fetchall(cur):
+    """Return all rows as a list of dicts."""
+    rows = cur.fetchall()
+    if not rows:
+        return []
+    cols = [d[0] for d in cur.description]
+    return [dict(zip(cols, r)) for r in rows]
 
 
 def init_db():
@@ -110,12 +135,12 @@ def get_user_by_token(token):
     cur = conn.cursor()
     try:
         cur.execute("SELECT * FROM users WHERE token = %s", (token,))
-        user = cur.fetchone()
+        user = _fetchone(cur)
         if not user:
             return None, None
         cur.execute("SELECT * FROM products WHERE user_id = %s ORDER BY added_date ASC", (user['id'],))
-        products = cur.fetchall()
-        return dict(user), [dict(p) for p in products]
+        products = _fetchall(cur)
+        return user, products
     finally:
         cur.close()
         conn.close()
@@ -127,8 +152,7 @@ def get_user_by_email(email):
     cur = conn.cursor()
     try:
         cur.execute("SELECT * FROM users WHERE email = %s", (email,))
-        user = cur.fetchone()
-        return dict(user) if user else None
+        return _fetchone(cur)
     finally:
         cur.close()
         conn.close()
@@ -395,7 +419,7 @@ def signup():
                 VALUES (%s, %s, %s, %s, 'active', 7)
                 RETURNING id
             """, (data['name'], data['email'], token, datetime.now()))
-            user_id = cur.fetchone()['id']
+            user_id = _fetchone(cur)['id']
 
             # Add first product if provided
             if data.get('product_url'):
@@ -497,7 +521,7 @@ def add_product_to_dashboard():
                 get_store_name(data['url']),
                 datetime.now()
             ))
-            new_product = dict(cur.fetchone())
+            new_product = _fetchone(cur)
             conn.commit()
         except Exception as e:
             conn.rollback()
@@ -719,11 +743,11 @@ def get_signups():
     cur = conn.cursor()
     try:
         cur.execute("SELECT * FROM users ORDER BY signup_date DESC")
-        users = [dict(u) for u in cur.fetchall()]
+        users = _fetchall(cur)
         result = []
         for u in users:
             cur.execute("SELECT * FROM products WHERE user_id = %s ORDER BY added_date ASC", (u['id'],))
-            products = [dict(p) for p in cur.fetchall()]
+            products = _fetchall(cur)
             result.append(user_to_dict(u, products))
         return jsonify({'signups': result})
     finally:
@@ -738,10 +762,10 @@ def admin():
     cur = conn.cursor()
     try:
         cur.execute("SELECT COUNT(*) as cnt FROM users")
-        total_users = cur.fetchone()['cnt']
+        total_users = _fetchone(cur)['cnt']
 
         cur.execute("SELECT COUNT(*) as cnt FROM products")
-        total_products = cur.fetchone()['cnt']
+        total_products = _fetchone(cur)['cnt']
 
         cur.execute("""
             SELECT u.id, u.name, u.email, u.signup_date, u.status, u.token,
@@ -751,7 +775,7 @@ def admin():
             GROUP BY u.id
             ORDER BY u.signup_date DESC
         """)
-        users = [dict(row) for row in cur.fetchall()]
+        users = _fetchall(cur)
     finally:
         cur.close()
         conn.close()
