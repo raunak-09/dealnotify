@@ -1301,6 +1301,28 @@ def upgrade_success():
     return send_from_directory('.', 'upgrade-success.html')
 
 
+@app.route('/sitemap.xml')
+def sitemap():
+    from flask import Response
+    xml = """<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://www.dealnotify.co/</loc>
+    <lastmod>2026-03-31</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>"""
+    return Response(xml, mimetype='application/xml')
+
+
+@app.route('/robots.txt')
+def robots():
+    from flask import Response
+    txt = "User-agent: *\nAllow: /\n\nSitemap: https://www.dealnotify.co/sitemap.xml\n"
+    return Response(txt, mimetype='text/plain')
+
+
 # ─────────────────────────────────────────────
 # AUTOMATED HOURLY PRICE CHECK JOB
 # ─────────────────────────────────────────────
