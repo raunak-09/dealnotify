@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Dashboard - DealNotify</title>
+    <title>My Dashboard – PriceGuard</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -18,7 +18,7 @@
 
         /* Header */
         header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #5b67f8 0%, #6c4fcf 100%);
             color: white;
             padding: 0;
             position: fixed;
@@ -69,7 +69,7 @@
 
         /* Welcome banner */
         .welcome-banner {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #5b67f8 0%, #6c4fcf 100%);
             color: white;
             border-radius: 16px;
             padding: 30px 35px;
@@ -133,7 +133,7 @@
         .section-header h2 { font-size: 20px; color: #333; }
 
         .btn-add {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #5b67f8 0%, #6c4fcf 100%);
             color: white; border: none;
             padding: 10px 22px; border-radius: 50px;
             font-size: 14px; font-weight: 600; cursor: pointer;
@@ -181,7 +181,7 @@
 
         .store-badge {
             display: flex; align-items: center; gap: 8px;
-            background: #f0eeff; color: #667eea;
+            background: #f0eeff; color: #5b67f8;
             border-radius: 50px; padding: 5px 14px;
             font-size: 13px; font-weight: 600;
         }
@@ -195,7 +195,7 @@
         .status-badge.inactive { background: #f5f5f5; color: #999; }
 
         .product-url {
-            display: block; color: #667eea; text-decoration: none;
+            display: block; color: #5b67f8; text-decoration: none;
             font-size: 13px; font-weight: 500;
             margin-bottom: 16px; padding: 10px 14px;
             background: #f8f9ff; border-radius: 8px;
@@ -234,7 +234,7 @@
             font-weight: 700;
         }
 
-        .price-box .price-value.target { color: #667eea; }
+        .price-box .price-value.target { color: #5b67f8; }
         .price-box .price-value.current-below { color: #27ae60; }
         .price-box .price-value.current-above { color: #e74c3c; }
         .price-box .price-value.current-na { color: #ccc; font-size: 14px; font-weight: 400; }
@@ -312,7 +312,7 @@
             from { transform: translateY(20px); opacity: 0; }
             to { transform: translateY(0); opacity: 1; }
         }
-        .modal h2 { color: #667eea; margin-bottom: 8px; font-size: 22px; }
+        .modal h2 { color: #5b67f8; margin-bottom: 8px; font-size: 22px; }
         .modal p { color: #888; font-size: 14px; margin-bottom: 25px; }
 
         .form-group { margin-bottom: 18px; }
@@ -324,7 +324,7 @@
             font-family: inherit;
         }
         .form-group textarea { resize: vertical; min-height: 100px; }
-        .form-group input:focus, .form-group textarea:focus { border-color: #667eea; }
+        .form-group input:focus, .form-group textarea:focus { border-color: #5b67f8; }
 
         .modal-buttons { display: flex; gap: 12px; margin-top: 25px; }
 
@@ -338,7 +338,7 @@
 
         .btn-submit {
             flex: 2; padding: 13px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #5b67f8 0%, #6c4fcf 100%);
             color: white; border: none; border-radius: 10px;
             font-size: 15px; font-weight: 600; cursor: pointer;
             transition: all 0.3s;
@@ -363,7 +363,7 @@
         .loading { text-align: center; padding: 80px 20px; }
         .spinner {
             width: 50px; height: 50px;
-            border: 4px solid #f0eeff; border-top-color: #667eea;
+            border: 4px solid #f0eeff; border-top-color: #5b67f8;
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
             margin: 0 auto 20px;
@@ -434,7 +434,7 @@
             color: #888; text-decoration: none;
             font-size: 14px; transition: color 0.2s;
         }
-        .footer-col ul li a:hover { color: #667eea; }
+        .footer-col ul li a:hover { color: #5b67f8; }
 
         .footer-bottom {
             border-top: 1px solid #2a2a3e;
@@ -448,7 +448,7 @@
             gap: 10px;
         }
 
-        .footer-bottom a { color: #667eea; text-decoration: none; }
+        .footer-bottom a { color: #5b67f8; text-decoration: none; }
 
         /* Responsive */
         @media (max-width: 768px) {
@@ -468,7 +468,7 @@
     <!-- Header -->
     <header>
         <nav>
-            <a href="/" class="logo">💰 DealNotify</a>
+            <a href="/" class="logo">🛡️ PriceGuard</a>
             <div class="user-info">
                 <div>
                     <div class="user-name" id="headerName">Loading...</div>
@@ -488,12 +488,47 @@
             <p style="color:#888;">Loading your dashboard...</p>
         </div>
 
-        <!-- Error -->
+        <!-- Login fallback (shown when no token in URL) -->
         <div id="errorState" class="error-state" style="display:none;">
-            <div class="error-icon">🔒</div>
-            <h3>Invalid or Expired Link</h3>
-            <p>This dashboard link is not valid. Please check your welcome email for the correct link.<br><br>
-            <a href="/" style="color:#667eea;">← Back to Home</a></p>
+            <div class="error-icon">🛡️</div>
+            <h3 style="color:#1a1a2e;">Log in to PriceGuard</h3>
+            <p style="margin-bottom:24px;">Enter your email and password to access your dashboard.</p>
+
+            <div id="loginFormWrap" style="max-width:380px; margin:0 auto; text-align:left;">
+                <div id="loginAlert" style="display:none; background:#fef2f2; color:#991b1b;
+                     border:1px solid #fecaca; border-radius:8px; padding:11px 14px;
+                     font-size:14px; margin-bottom:14px;"></div>
+
+                <div style="margin-bottom:14px;">
+                    <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:#333;">Email Address</label>
+                    <input type="email" id="loginEmail" placeholder="you@example.com"
+                           style="width:100%; padding:12px 14px; border:2px solid #e5e7eb;
+                                  border-radius:8px; font-size:15px; outline:none;"
+                           onfocus="this.style.borderColor='#5b67f8'"
+                           onblur="this.style.borderColor='#e5e7eb'">
+                </div>
+                <div style="margin-bottom:8px;">
+                    <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:#333;">Password</label>
+                    <input type="password" id="loginPassword" placeholder="Your password"
+                           style="width:100%; padding:12px 14px; border:2px solid #e5e7eb;
+                                  border-radius:8px; font-size:15px; outline:none;"
+                           onfocus="this.style.borderColor='#5b67f8'"
+                           onblur="this.style.borderColor='#e5e7eb'"
+                           onkeydown="if(event.key==='Enter') doLogin()">
+                </div>
+                <div style="text-align:right; margin-bottom:20px;">
+                    <a href="/" style="font-size:13px; color:#5b67f8;">Forgot password?</a>
+                </div>
+                <button id="loginBtn" onclick="doLogin()"
+                        style="width:100%; padding:14px; background:#5b67f8; color:white;
+                               border:none; border-radius:50px; font-size:15px; font-weight:700;
+                               cursor:pointer; box-shadow:0 4px 16px rgba(91,103,248,0.35);">
+                    Log In →
+                </button>
+                <p style="text-align:center; margin-top:18px; font-size:14px; color:#888;">
+                    No account? <a href="/" style="color:#5b67f8; font-weight:600;">Start free →</a>
+                </p>
+            </div>
         </div>
 
         <!-- Dashboard -->
@@ -609,8 +644,8 @@
         <div class="footer-inner">
             <div class="footer-grid">
                 <div class="footer-brand">
-                    <a href="/" class="footer-logo">💰 DealNotify</a>
-                    <p>Never miss a price drop again. We monitor your favorite products 24/7 and send you instant alerts when prices hit your target.</p>
+                    <a href="/" class="footer-logo">🛡️ PriceGuard</a>
+                    <p>Never overpay online again. PriceGuard monitors your favourite products 24/7 and sends you instant email alerts when prices hit your target.</p>
                 </div>
                 <div class="footer-col">
                     <h4>Quick Links</h4>
@@ -632,7 +667,7 @@
                 </div>
             </div>
             <div class="footer-bottom">
-                <span>© 2026 DealNotify. All rights reserved. Made with ❤️ for smart shoppers.</span>
+                <span>© 2026 PriceGuard. All rights reserved. Made with ❤️ for smart shoppers.</span>
                 <span>Questions? <a href="mailto:hello@dealnotify.co">hello@dealnotify.co</a></span>
             </div>
         </div>
@@ -740,7 +775,7 @@
                 hintBanner = `<div class="deal-banner">🎉 Price is at or below your target! Check your email for the alert.</div>`;
             } else if (hasCurrentPrice && targetPriceVal) {
                 const gap = (currentPriceVal - targetPriceVal).toFixed(2);
-                hintBanner = `<div style="margin-top:10px;padding:8px 12px;background:#f0f7ff;border-radius:8px;font-size:13px;color:#667eea;">
+                hintBanner = `<div style="margin-top:10px;padding:8px 12px;background:#f0f7ff;border-radius:8px;font-size:13px;color:#5b67f8;">
                     💡 Only <strong>$${gap}</strong> away from your target price!
                 </div>`;
             }
@@ -926,6 +961,52 @@
         function showError() {
             document.getElementById('loadingState').style.display = 'none';
             document.getElementById('errorState').style.display = 'block';
+            setTimeout(() => {
+                const el = document.getElementById('loginEmail');
+                if (el) el.focus();
+            }, 100);
+        }
+
+        function doLogin() {
+            const email    = (document.getElementById('loginEmail').value || '').trim();
+            const password = document.getElementById('loginPassword').value || '';
+            const btn      = document.getElementById('loginBtn');
+            const alert    = document.getElementById('loginAlert');
+
+            alert.style.display = 'none';
+
+            if (!email || !password) {
+                alert.textContent = 'Please enter your email and password.';
+                alert.style.display = 'block';
+                return;
+            }
+
+            btn.textContent = 'Logging in…';
+            btn.disabled = true;
+
+            fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success && data.dashboard_url) {
+                    btn.textContent = 'Redirecting…';
+                    window.location.href = data.dashboard_url;
+                } else {
+                    alert.textContent = data.error || 'Incorrect email or password.';
+                    alert.style.display = 'block';
+                    btn.textContent = 'Log In →';
+                    btn.disabled = false;
+                }
+            })
+            .catch(() => {
+                alert.textContent = 'Something went wrong. Please try again.';
+                alert.style.display = 'block';
+                btn.textContent = 'Log In →';
+                btn.disabled = false;
+            });
         }
 
         function showToast(message, type = '') {
@@ -955,14 +1036,14 @@
                         ${message || "You've reached the 3-product limit on the free plan."}
                     </p>
                     <div style="background:#f0f7ff; border-radius:12px; padding:20px; margin-bottom:24px; text-align:left;">
-                        <p style="color:#667eea; font-weight:700; margin:0 0 10px;">⭐ Pro — $4.99/month</p>
+                        <p style="color:#5b67f8; font-weight:700; margin:0 0 10px;">⭐ PriceGuard Pro — $4.99/month</p>
                         <p style="color:#555; font-size:14px; margin:4px 0;">✓ Unlimited products tracked</p>
                         <p style="color:#555; font-size:14px; margin:4px 0;">✓ Hourly automatic price checks</p>
                         <p style="color:#555; font-size:14px; margin:4px 0;">✓ Instant email alerts on price drops</p>
                         <p style="color:#555; font-size:14px; margin:4px 0;">✓ Priority support</p>
                     </div>
                     <button id="checkoutBtn" onclick="startCheckout()"
-                            style="width:100%; background:linear-gradient(135deg,#667eea,#764ba2); color:white;
+                            style="width:100%; background:linear-gradient(135deg,#5b67f8,#6c4fcf); color:white;
                                    padding:14px 28px; border-radius:50px; border:none; cursor:pointer;
                                    font-weight:700; font-size:16px; margin-bottom:12px;">
                         Upgrade Now — $4.99/mo
