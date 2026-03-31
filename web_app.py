@@ -23,6 +23,14 @@ load_dotenv()
 app = Flask(__name__, static_folder='.', static_url_path='')
 
 
+# ── Force HTTPS (Railway terminates SSL at the proxy and sets X-Forwarded-Proto)
+@app.before_request
+def force_https():
+    if request.headers.get('X-Forwarded-Proto') == 'http':
+        from flask import redirect
+        return redirect(request.url.replace('http://', 'https://'), code=301)
+
+
 # ─────────────────────────────────────────────
 # DATABASE HELPERS
 # ─────────────────────────────────────────────
