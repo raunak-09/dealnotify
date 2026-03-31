@@ -707,17 +707,43 @@
             const currentPriceVal = hasCurrentPrice ? parseFloat(product.current_price) : null;
             const targetPriceVal = product.target_price ? parseFloat(product.target_price) : null;
             const priceDropped = currentPriceVal !== null && targetPriceVal !== null && currentPriceVal <= targetPriceVal;
-            const savings = priceDropped && currentPriceVal !== null ? (targetPriceVal - currentPriceVal).toFixed(2) : null;
+            const savings = priceDropped ? (targetPriceVal - currentPriceVal).toFixed(2) : null;
 
             const statusClass = product.alert_sent ? 'alert-sent' : 'monitoring';
             const statusLabel = product.alert_sent ? '🔔 Alert Sent' : '🟢 Monitoring';
 
-            const currentPriceClass = !hasCurrentPrice ? 'current-na' : priceDropped ? 'current-below' : 'current-above';
-            const currentPriceDisplay = hasCurrentPrice ? `$${currentPriceVal.toFixed(2)}` : '—';
-            const targetPriceDisplay = targetPriceVal ? `$${targetPriceVal.toFixed(2)}` : '—';
+            const targetPriceDisplay = targetPriceVal ? `$${targetPriceVal.toFixed(2)}` : 'Not set';
+
+            // Current price display: show clear state depending on what we know
+            let currentPriceDisplay, currentPriceClass;
+            if (hasCurrentPrice) {
+                currentPriceDisplay = `$${currentPriceVal.toFixed(2)}`;
+                currentPriceClass = priceDropped ? 'current-below' : 'current-above';
+            } else if (product.last_checked) {
+                // Refresh was run but price couldn't be fetched from the page
+                currentPriceDisplay = '<span style="font-size:13px;color:#e67e22;font-weight:600;">⚠️ Unable to fetch</span>';
+                currentPriceClass = 'current-na';
+            } else {
+                // Never been checked yet
+                currentPriceDisplay = '<span style="font-size:13px;color:#888;">Click 🔄 Refresh</span>';
+                currentPriceClass = 'current-na';
+            }
 
             const shortUrl = truncateUrl(product.url);
-            const lastChecked = product.last_checked ? `Last checked: ${formatDate(product.last_checked)}` : 'Click Refresh to check price';
+            const lastCheckedText = product.last_checked
+                ? `Last checked: ${formatDate(product.last_checked)}`
+                : 'Not checked yet — click Refresh Prices above';
+
+            // Savings hint: show how much more to drop even if not there yet
+            let hintBanner = '';
+            if (priceDropped) {
+                hintBanner = `<div class="deal-banner">🎉 Price is at or below your target! Check your email for the alert.</div>`;
+            } else if (hasCurrentPrice && targetPriceVal) {
+                const gap = (currentPriceVal - targetPriceVal).toFixed(2);
+                hintBanner = `<div style="margin-top:10px;padding:8px 12px;background:#f0f7ff;border-radius:8px;font-size:13px;color:#667eea;">
+                    💡 Only <strong>$${gap}</strong> away from your target price!
+                </div>`;
+            }
 
             return `
             <div class="product-card ${priceDropped ? 'deal' : ''}" id="product-${product.id}">
@@ -742,10 +768,10 @@
                     </div>
                 </div>
 
-                ${priceDropped ? `<div class="deal-banner">🎉 Price is at or below your target! Check your email for the alert.</div>` : ''}
+                ${hintBanner}
 
                 <div class="product-footer">
-                    <span class="added-date">${lastChecked}</span>
+                    <span class="added-date">${lastCheckedText}</span>
                     <button class="btn-remove" onclick="removeProduct(${product.id})">✕ Remove</button>
                 </div>
             </div>`;

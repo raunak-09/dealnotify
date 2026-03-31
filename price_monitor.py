@@ -28,139 +28,171 @@ def save_database(data):
 
 def extract_price_from_text(text):
     """
-    Extract the main product price from markdown text.
-    Prioritises prices near keywords like 'price', 'buy', 'add to cart'.
-    Skips coupon/discount amounts and very low prices.
+    Extract the main product price from page text/markdown.
+
+    Strategy (in order):
+    1. JSON-LD structured data — most reliable, sites embed machine-readable price
+    2. Lines with strong buying-intent keywords, skipping coupon/savings context
+    3. Bold/standalone prices in markdown
+    4. Most-frequent price across all non-coupon lines (fallback)
     """
     import re
+    from collections import Counter
+
     if not text:
         return None
 
-    # Step 1: Look for price near strong buying-intent keywords (most reliable)
-    priority_patterns = [
-        r'(?:current price|sale price|our price|buy new|price)[^\n]{0,30}\$\s*([\d,]+\.\d{2})',
-        r'\$\s*([\d,]+\.\d{2})\s*(?:add to cart|buy now|in stock)',
-        r'(?:^\s*|\*\*)\$\s*([\d,]+\.\d{2})(?:\*\*|\s*$)',  # bold/prominent price in markdown
-    ]
-    for pattern in priority_patterns:
-        matches = re.findall(pattern, text, re.IGNORECASE | re.MULTILINE)
-        for match in matches:
-            try:
-                price = float(match.replace(',', ''))
-                if 5.0 < price < 100000:  # skip prices under $5 (coupons/shipping)
-                    return price
-            except:
-                continue
+    # Words that indicate a savings/coupon amount — NOT the actual product price
+    COUPON_WORDS = re.compile(
+        r'\b(?:off|save|saving|savings|coupon|clip|discount|you save|applied|reduction|rebate)\b',
+        re.IGNORECASE
+    )
 
-    # Step 2: Collect ALL prices in the text and return the most frequent / prominent one
-    all_prices = re.findall(r'\$\s*([\d,]+\.\d{2})', text)
-    candidates = []
-    for p in all_prices:
+    def valid_price(s):
+        """Parse price string; return float only if in a sensible product range."""
         try:
-            price = float(p.replace(',', ''))
-            if 5.0 < price < 100000:
-                candidates.append(price)
-        except:
+            p = float(s.replace(',', ''))
+            return p if 5.0 < p < 100000 else None
+        except Exception:
+            return None
+
+    # ── Step 1: JSON-LD / schema.org structured data ────────────────────────
+    # E-commerce pages embed machine-readable price in <script type="application/ld+json">
+    # Firecrawl's `content` field often preserves this.
+    json_ld_patterns = [
+        r'"price"\s*:\s*"([\d,]+\.?\d*)"',   # "price": "29.99"
+        r'"price"\s*:\s*([\d,]+\.?\d*)',       # "price": 29.99
+        r'"lowPrice"\s*:\s*"?([\d,]+\.?\d*)"?',
+        r'"highPrice"\s*:\s*"?([\d,]+\.?\d*)"?',
+        r'priceAmount["\s:=]+([\d]+\.?\d*)',
+    ]
+    json_prices = []
+    for pat in json_ld_patterns:
+        for m in re.findall(pat, text):
+            p = valid_price(m)
+            if p:
+                json_prices.append(p)
+    if json_prices:
+        best = Counter(json_prices).most_common(1)[0][0]
+        print(f"   → JSON-LD prices found: {sorted(set(json_prices))} → using ${best}")
+        return best
+
+    # ── Step 2 & 3: Line-by-line scan ───────────────────────────────────────
+    lines = text.split('\n')
+    intent_prices = []   # prices on lines with buy-intent keywords
+    bold_prices   = []   # bold/standalone prices in markdown
+    all_prices    = []   # every price not on a coupon line
+
+    for line in lines:
+        # Skip lines that are clearly about savings/coupons
+        if COUPON_WORDS.search(line):
             continue
 
-    if candidates:
-        # Return the most frequently occurring price (most likely the main product price)
-        from collections import Counter
-        counter = Counter(candidates)
-        return counter.most_common(1)[0][0]
+        # Collect every $X.XX on this line
+        raw = re.findall(r'\$\s*([\d,]+\.\d{2})', line)
+        for r_val in raw:
+            p = valid_price(r_val)
+            if p:
+                all_prices.append(p)
+
+                # Buying-intent signals
+                if re.search(
+                    r'\b(?:price|buy new|buy now|add to cart|in stock|list price|our price|sale price|current price)\b',
+                    line, re.IGNORECASE
+                ):
+                    intent_prices.append(p)
+
+                # Bold price  **$XX.XX**  or price alone on its own line
+                if re.search(r'\*\*\$\s*[\d,]+\.\d{2}\*\*', line) or re.match(r'^\s*\$\s*[\d,]+\.\d{2}\s*$', line):
+                    bold_prices.append(p)
+
+    # Return the best candidate in priority order
+    for bucket in (intent_prices, bold_prices, all_prices):
+        if bucket:
+            best = Counter(bucket).most_common(1)[0][0]
+            return best
 
     return None
 
 
 def scrape_price(url):
     """
-    Scrape the current price from a URL using Firecrawl.
-    Tries schema extraction first, falls back to markdown regex parsing.
+    Scrape the current price from a product URL using Firecrawl.
 
-    Args:
-        url (str): Product URL to scrape
-
-    Returns:
-        float: Current price, or None if failed
+    Extraction order:
+    1. Schema/extract key (Firecrawl LLM extraction — needs firecrawl-py>=1.0)
+    2. JSON-LD + smart regex on combined content + markdown text
     """
     api_key = os.getenv('FIRECRAWL_API_KEY')
-
     if not api_key:
-        print("❌ Error: FIRECRAWL_API_KEY not found")
+        print("❌ FIRECRAWL_API_KEY not set")
         return None
 
     try:
-        app = FirecrawlApp(api_key=api_key)
+        fc = FirecrawlApp(api_key=api_key)
 
         price_schema = {
             "type": "object",
             "properties": {
                 "price": {
                     "type": "string",
-                    "description": "The current sale price of the product (e.g., $19.99)"
-                },
-                "product_name": {
-                    "type": "string",
-                    "description": "The product name or title"
+                    "description": "The current purchase price shown on the page (e.g. $29.99). Do NOT include crossed-out original prices or coupon amounts."
                 }
             }
         }
 
-        # Try newer SDK format first, fall back to older format
+        # Newer SDK uses keyword args; older SDK takes a dict — try both
         try:
-            result = app.scrape_url(url, formats=['extract', 'markdown'], extract={'schema': price_schema})
+            result = fc.scrape_url(url, formats=['extract', 'markdown'], extract={'schema': price_schema})
         except TypeError:
-            result = app.scrape_url(url, {
+            result = fc.scrape_url(url, {
                 'formats': ['extract', 'markdown'],
                 'extract': {'schema': price_schema}
             })
 
-        print(f"   → Firecrawl result keys: {list(result.keys()) if result else 'None'}")
+        print(f"   → Firecrawl keys: {list(result.keys()) if result else 'None'}")
 
         if not result:
-            print("   → No result from Firecrawl")
+            print("   → Empty result from Firecrawl")
             return None
 
-        # Method 1: 'extract' key
-        if 'extract' in result and result['extract']:
-            data = result['extract']
-            print(f"   → Extract data: {data}")
-            price_val = data.get('price') or data.get('Price') or data.get('current_price')
-            if price_val:
-                price_str = str(price_val).replace('$', '').replace(',', '').strip()
-                try:
-                    price = float(price_str)
-                    print(f"   ✅ Price from extract: ${price}")
-                    return price
-                except:
-                    pass
+        # ── Method 1: LLM extract key ────────────────────────────────────
+        for key in ('extract', 'data'):
+            data = result.get(key)
+            if isinstance(data, dict):
+                price_val = data.get('price') or data.get('Price') or data.get('current_price')
+                if price_val:
+                    price_str = str(price_val).replace('$', '').replace(',', '').strip()
+                    try:
+                        p = float(price_str)
+                        if 5.0 < p < 100000:
+                            print(f"   ✅ Price from '{key}' extraction: ${p}")
+                            return p
+                    except Exception:
+                        pass
 
-        # Method 2: 'data' key (some SDK versions)
-        if 'data' in result and isinstance(result['data'], dict):
-            data = result['data']
-            price_val = data.get('price') or data.get('Price')
-            if price_val:
-                price_str = str(price_val).replace('$', '').replace(',', '').strip()
-                try:
-                    price = float(price_str)
-                    print(f"   ✅ Price from data: ${price}")
-                    return price
-                except:
-                    pass
+        # ── Method 2: Smart regex on all text content ────────────────────
+        # Combine content + markdown so JSON-LD in <script> tags is also searched
+        combined = ' '.join(filter(None, [
+            result.get('content', ''),
+            result.get('markdown', ''),
+        ]))
 
-        # Method 3: Regex on markdown
-        markdown = result.get('markdown') or result.get('content') or ''
-        if markdown:
-            price = extract_price_from_text(markdown[:3000])
+        if combined:
+            # Log a snippet to help debug future issues
+            snippet = combined[:500].replace('\n', ' ')
+            print(f"   → Content snippet: {snippet[:200]}...")
+
+            price = extract_price_from_text(combined[:8000])
             if price:
-                print(f"   ✅ Price from markdown regex: ${price}")
+                print(f"   ✅ Price from text extraction: ${price}")
                 return price
 
-        print("   ⚠️ Could not extract price from any method")
+        print("   ⚠️ Could not extract price — no matching patterns found")
         return None
 
     except Exception as e:
-        print(f"❌ Error scraping {url}: {str(e)}")
+        print(f"❌ Scraping error for {url}: {str(e)}")
         return None
 
 def add_product(product_name, url, target_price, email):
