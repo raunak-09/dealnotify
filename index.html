@@ -412,7 +412,7 @@
                         <li>Personal dashboard to manage your products</li>
                         <li>Priority email support</li>
                     </ul>
-                    <button class="cta-button" onclick="document.getElementById('signup').scrollIntoView({behavior:'smooth'})">Get Started</button>
+                    <button class="cta-button" onclick="handleProSignup()">Get Started</button>
                 </div>
             </div>
         </div>
@@ -453,39 +453,71 @@
     <script>
         function handleSignup(event) {
             event.preventDefault();
-            
+
             const name = document.getElementById('name').value;
             const email = document.getElementById('email').value;
             const productUrl = document.getElementById('product_url').value;
             const targetPrice = document.getElementById('target_price').value;
+            const submitBtn = document.querySelector('.signup-form button[type="submit"]');
+            const wantsPro = sessionStorage.getItem('dealnotify_plan') === 'pro';
 
-            // Send to backend
+            submitBtn.textContent = 'Setting up your account...';
+            submitBtn.disabled = true;
+
             fetch('/api/signup', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    name: name,
-                    email: email,
-                    product_url: productUrl,
-                    target_price: targetPrice
-                })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, email, product_url: productUrl, target_price: targetPrice })
             })
-            .then(response => response.json())
+            .then(r => r.json())
             .then(data => {
-                // Show success message
-                document.getElementById('successMessage').style.display = 'block';
-                document.querySelector('.signup-form').reset();
-                
-                // Hide success message after 5 seconds
-                setTimeout(() => {
-                    document.getElementById('successMessage').style.display = 'none';
-                }, 5000);
+                if (!data.success) {
+                    alert(data.error || 'Signup failed. Please try again.');
+                    submitBtn.textContent = 'Start Free Trial';
+                    submitBtn.disabled = false;
+                    return;
+                }
+
+                sessionStorage.removeItem('dealnotify_plan');
+
+                if (wantsPro && data.dashboard_url) {
+                    // Extract token from the returned dashboard URL
+                    const token = new URL(data.dashboard_url).searchParams.get('token');
+                    submitBtn.textContent = 'Redirecting to payment...';
+                    fetch(`/api/create-checkout-session?token=${token}`, { method: 'POST' })
+                        .then(r => r.json())
+                        .then(d => {
+                            if (d.checkout_url) {
+                                window.location.href = d.checkout_url;
+                            } else {
+                                // Stripe not configured yet — fall back to dashboard
+                                window.location.href = data.dashboard_url;
+                            }
+                        })
+                        .catch(() => { window.location.href = data.dashboard_url; });
+                } else {
+                    // Free plan — show success and reset form
+                    document.getElementById('successMessage').style.display = 'block';
+                    document.querySelector('.signup-form').reset();
+                    submitBtn.textContent = 'Start Free Trial';
+                    submitBtn.disabled = false;
+                    setTimeout(() => {
+                        document.getElementById('successMessage').style.display = 'none';
+                    }, 5000);
+                }
             })
             .catch(error => {
-                alert('Error: ' + error);
+                alert('Something went wrong. Please try again.');
+                submitBtn.textContent = 'Start Free Trial';
+                submitBtn.disabled = false;
             });
+        }
+
+        function handleProSignup() {
+            sessionStorage.setItem('dealnotify_plan', 'pro');
+            document.getElementById('signup').scrollIntoView({ behavior: 'smooth' });
+            // Update the signup section heading to reflect Pro intent
+            document.querySelector('.signup-section h2').textContent = '⭐ Start Your Pro Trial';
         }
     </script>
 </body>
