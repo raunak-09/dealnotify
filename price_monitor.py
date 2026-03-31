@@ -6,7 +6,8 @@ import os
 import json
 from datetime import datetime
 from dotenv import load_dotenv
-from firecrawl import FirecrawlApp
+# FirecrawlApp / Firecrawl imported dynamically in _init_firecrawl()
+# to support firecrawl-py v0, v1, and v2
 
 # Load environment variables
 load_dotenv()
@@ -115,13 +116,54 @@ def extract_price_from_text(text):
     return None
 
 
+def _init_firecrawl(api_key):
+    """
+    Return a (client, api_version) tuple.
+    firecrawl-py 2.x  → class Firecrawl,    method .scrape()
+    firecrawl-py 1.x  → class FirecrawlApp, method .scrape_url()
+    firecrawl-py 0.x  → class FirecrawlApp, method .scrape_url() with dict arg
+    """
+    try:
+        from firecrawl import Firecrawl
+        return Firecrawl(api_key=api_key), 'v2'
+    except ImportError:
+        pass
+    try:
+        from firecrawl import FirecrawlApp
+        return FirecrawlApp(api_key=api_key), 'v1'
+    except ImportError:
+        pass
+    raise ImportError("firecrawl-py is not installed or has an unexpected API")
+
+
+def _do_scrape(fc, api_version, url):
+    """
+    Call the correct Firecrawl scrape method for the detected API version.
+    Returns a (markdown_text, content_text) tuple — both may be empty strings.
+    """
+    if api_version == 'v2':
+        # firecrawl-py 2.x: fc.scrape(url, formats=[...]) → ScrapeResponse object
+        resp = fc.scrape(url, formats=['markdown'])
+        markdown = getattr(resp, 'markdown', None) or ''
+        content  = getattr(resp, 'html', None) or getattr(resp, 'content', None) or ''
+        return markdown, content
+    else:
+        # firecrawl-py 0.x / 1.x: fc.scrape_url(url, ...) → dict
+        try:
+            result = fc.scrape_url(url, formats=['markdown'])
+        except TypeError:
+            result = fc.scrape_url(url, {'formats': ['markdown']})
+        if not isinstance(result, dict):
+            return '', ''
+        markdown = result.get('markdown') or result.get('content') or ''
+        content  = result.get('html') or ''
+        return markdown, content
+
+
 def scrape_price(url):
     """
     Scrape the current price from a product URL using Firecrawl.
-
-    Extraction order:
-    1. Schema/extract key (Firecrawl LLM extraction — needs firecrawl-py>=1.0)
-    2. JSON-LD + smart regex on combined content + markdown text
+    Handles firecrawl-py v0, v1, and v2 API automatically.
     """
     api_key = os.getenv('FIRECRAWL_API_KEY')
     if not api_key:
@@ -129,64 +171,23 @@ def scrape_price(url):
         return None
 
     try:
-        fc = FirecrawlApp(api_key=api_key)
+        fc, api_version = _init_firecrawl(api_key)
+        print(f"   → Using Firecrawl API {api_version}")
 
-        price_schema = {
-            "type": "object",
-            "properties": {
-                "price": {
-                    "type": "string",
-                    "description": "The current purchase price shown on the page (e.g. $29.99). Do NOT include crossed-out original prices or coupon amounts."
-                }
-            }
-        }
+        markdown, content = _do_scrape(fc, api_version, url)
 
-        # Newer SDK uses keyword args; older SDK takes a dict — try both
-        try:
-            result = fc.scrape_url(url, formats=['extract', 'markdown'], extract={'schema': price_schema})
-        except TypeError:
-            result = fc.scrape_url(url, {
-                'formats': ['extract', 'markdown'],
-                'extract': {'schema': price_schema}
-            })
-
-        print(f"   → Firecrawl keys: {list(result.keys()) if result else 'None'}")
-
-        if not result:
+        combined = f"{content}\n{markdown}".strip()
+        if not combined:
             print("   → Empty result from Firecrawl")
             return None
 
-        # ── Method 1: LLM extract key ────────────────────────────────────
-        for key in ('extract', 'data'):
-            data = result.get(key)
-            if isinstance(data, dict):
-                price_val = data.get('price') or data.get('Price') or data.get('current_price')
-                if price_val:
-                    price_str = str(price_val).replace('$', '').replace(',', '').strip()
-                    try:
-                        p = float(price_str)
-                        if 5.0 < p < 100000:
-                            print(f"   ✅ Price from '{key}' extraction: ${p}")
-                            return p
-                    except Exception:
-                        pass
+        snippet = combined[:300].replace('\n', ' ')
+        print(f"   → Content snippet: {snippet}...")
 
-        # ── Method 2: Smart regex on all text content ────────────────────
-        # Combine content + markdown so JSON-LD in <script> tags is also searched
-        combined = ' '.join(filter(None, [
-            result.get('content', ''),
-            result.get('markdown', ''),
-        ]))
-
-        if combined:
-            # Log a snippet to help debug future issues
-            snippet = combined[:500].replace('\n', ' ')
-            print(f"   → Content snippet: {snippet[:200]}...")
-
-            price = extract_price_from_text(combined[:8000])
-            if price:
-                print(f"   ✅ Price from text extraction: ${price}")
-                return price
+        price = extract_price_from_text(combined[:8000])
+        if price:
+            print(f"   ✅ Price: ${price}")
+            return price
 
         print("   ⚠️ Could not extract price — no matching patterns found")
         return None
