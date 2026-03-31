@@ -1,12 +1,13 @@
 """
-Price Drop Alert Bot - Web App (Landing Page + Backend)
+PriceGuard - Web App (Landing Page + Backend)
 Database: PostgreSQL (via DATABASE_URL env var — provisioned by Railway)
+Auth: password hashing via werkzeug, email verification, forgot/reset password
 """
 
 from flask import Flask, request, jsonify, send_from_directory
 import os
 import secrets
-from datetime import datetime
+from datetime import datetime, timedelta
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 from dotenv import load_dotenv
@@ -15,6 +16,7 @@ import pg8000.dbapi as pg8000
 from urllib.parse import urlparse
 from apscheduler.schedulers.background import BackgroundScheduler
 import stripe
+from werkzeug.security import generate_password_hash, check_password_hash
 
 load_dotenv()
 
@@ -82,6 +84,12 @@ def init_db():
                 trial_days_remaining INTEGER NOT NULL DEFAULT 7
             );
         """)
+        # Auth columns migration — safe to run repeatedly
+        cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT;")
+        cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT FALSE;")
+        cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token TEXT;")
+        cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token TEXT;")
+        cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expiry TIMESTAMP;")
         cur.execute("""
             CREATE TABLE IF NOT EXISTS products (
                 id SERIAL PRIMARY KEY,
@@ -314,6 +322,110 @@ hello@dealnotify.co | www.dealnotify.co
         return False
 
 
+def send_verification_email(name, email, verify_url):
+    """Send email address verification link on signup"""
+    try:
+        api_key    = os.getenv('SENDGRID_API_KEY')
+        from_email = os.getenv('SENDGRID_FROM_EMAIL', 'hello@dealnotify.co')
+        if not api_key:
+            print("⚠️  SENDGRID_API_KEY not set — skipping verification email")
+            return False
+
+        html_content = f"""
+        <html><body style="font-family:Arial,sans-serif;background:#f5f5f5;padding:20px;">
+        <div style="background:white;max-width:600px;margin:0 auto;padding:36px;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.08);">
+        <h1 style="color:#5b67f8;text-align:center;margin-bottom:6px;">🛡️ PriceGuard</h1>
+        <h2 style="text-align:center;color:#1a1a2e;font-size:22px;">Verify your email, {name}!</h2>
+        <p style="color:#555;font-size:15px;text-align:center;margin:12px 0 28px;">
+            Click the button below to confirm your email address and activate your account.
+        </p>
+        <div style="text-align:center;margin:28px 0;">
+            <a href="{verify_url}"
+               style="display:inline-block;background:#5b67f8;color:white;padding:15px 40px;
+                      text-decoration:none;border-radius:50px;font-weight:700;font-size:16px;">
+               ✅ Verify My Email
+            </a>
+        </div>
+        <p style="color:#999;font-size:13px;text-align:center;">
+            Button not working? Copy and paste this link into your browser:<br>
+            <a href="{verify_url}" style="color:#5b67f8;word-break:break-all;">{verify_url}</a>
+        </p>
+        <p style="color:#bbb;font-size:12px;text-align:center;margin-top:24px;">
+            This link expires in 48 hours. If you didn't create a PriceGuard account, you can safely ignore this email.
+        </p>
+        <hr style="border:none;border-top:1px solid #eee;margin:24px 0;">
+        <p style="color:#999;font-size:12px;text-align:center;">© 2026 PriceGuard · <a href="mailto:hello@dealnotify.co" style="color:#5b67f8;">hello@dealnotify.co</a></p>
+        </div></body></html>
+        """
+
+        message = Mail(
+            from_email=from_email,
+            to_emails=email,
+            subject='✅ Verify your PriceGuard email address',
+            html_content=html_content
+        )
+        sg = SendGridAPIClient(api_key)
+        response = sg.send(message)
+        print(f"📧 Verification email sent to {email} (status {response.status_code})")
+        return True
+    except Exception as e:
+        print(f"❌ Verification email error: {e}")
+        return False
+
+
+def send_password_reset_email(name, email, reset_url):
+    """Send password reset link"""
+    try:
+        api_key    = os.getenv('SENDGRID_API_KEY')
+        from_email = os.getenv('SENDGRID_FROM_EMAIL', 'hello@dealnotify.co')
+        if not api_key:
+            print("⚠️  SENDGRID_API_KEY not set — skipping reset email")
+            return False
+
+        html_content = f"""
+        <html><body style="font-family:Arial,sans-serif;background:#f5f5f5;padding:20px;">
+        <div style="background:white;max-width:600px;margin:0 auto;padding:36px;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.08);">
+        <h1 style="color:#5b67f8;text-align:center;margin-bottom:6px;">🛡️ PriceGuard</h1>
+        <h2 style="text-align:center;color:#1a1a2e;font-size:22px;">Reset your password</h2>
+        <p style="color:#555;font-size:15px;text-align:center;margin:12px 0 28px;">
+            Hi {name}, we received a request to reset your password.
+            Click the button below — this link is valid for <strong>2 hours</strong>.
+        </p>
+        <div style="text-align:center;margin:28px 0;">
+            <a href="{reset_url}"
+               style="display:inline-block;background:#5b67f8;color:white;padding:15px 40px;
+                      text-decoration:none;border-radius:50px;font-weight:700;font-size:16px;">
+               🔑 Reset My Password
+            </a>
+        </div>
+        <p style="color:#999;font-size:13px;text-align:center;">
+            Button not working? Copy and paste this link into your browser:<br>
+            <a href="{reset_url}" style="color:#5b67f8;word-break:break-all;">{reset_url}</a>
+        </p>
+        <p style="color:#bbb;font-size:12px;text-align:center;margin-top:24px;">
+            If you didn't request a password reset, you can safely ignore this email.
+            Your password will not be changed.
+        </p>
+        <hr style="border:none;border-top:1px solid #eee;margin:24px 0;">
+        <p style="color:#999;font-size:12px;text-align:center;">© 2026 PriceGuard · <a href="mailto:hello@dealnotify.co" style="color:#5b67f8;">hello@dealnotify.co</a></p>
+        </div></body></html>
+        """
+
+        message = Mail(
+            from_email=from_email,
+            to_emails=email,
+            subject='🔑 Reset your PriceGuard password',
+            html_content=html_content
+        )
+        sg = SendGridAPIClient(api_key)
+        response = sg.send(message)
+        print(f"📧 Password reset email sent to {email} (status {response.status_code})")
+        return True
+    except Exception as e:
+        print(f"❌ Password reset email error: {e}")
+        return False
+
+
 def send_price_drop_alert(name, email, product_url, current_price, target_price, store, dashboard_url):
     """Send price drop alert email via SendGrid"""
     try:
@@ -406,29 +518,37 @@ def dashboard():
 
 @app.route('/api/signup', methods=['POST'])
 def signup():
-    """Handle signup form submission"""
+    """Handle signup form submission — stores hashed password and sends verification email"""
     try:
         data = request.json
 
         if not data.get('email') or not data.get('name'):
             return jsonify({'error': 'Email and name are required'}), 400
 
+        password = data.get('password', '').strip()
+        if password and len(password) < 8:
+            return jsonify({'error': 'Password must be at least 8 characters'}), 400
+
         # Check if email already exists
         existing = get_user_by_email(data['email'])
         if existing:
-            return jsonify({'error': 'Email already registered'}), 400
+            return jsonify({'error': 'An account with that email already exists'}), 400
 
-        token = secrets.token_urlsafe(32)
-        dashboard_url = f"{get_base_url()}/dashboard?token={token}"
+        token             = secrets.token_urlsafe(32)
+        verification_token = secrets.token_urlsafe(32)
+        password_hash      = generate_password_hash(password) if password else None
+        dashboard_url      = f"{get_base_url()}/dashboard?token={token}"
 
         conn = get_db_conn()
         cur = conn.cursor()
         try:
             cur.execute("""
-                INSERT INTO users (name, email, token, signup_date, status, trial_days_remaining)
-                VALUES (%s, %s, %s, %s, 'active', 7)
+                INSERT INTO users (name, email, token, signup_date, status, trial_days_remaining,
+                                   password_hash, email_verified, verification_token)
+                VALUES (%s, %s, %s, %s, 'active', 7, %s, FALSE, %s)
                 RETURNING id
-            """, (data['name'], data['email'], token, datetime.now()))
+            """, (data['name'], data['email'], token, datetime.now(),
+                  password_hash, verification_token))
             user_id = _fetchone(cur)['id']
 
             # Add first product if provided
@@ -452,22 +572,204 @@ def signup():
             cur.close()
             conn.close()
 
-        print(f"\n✅ NEW SIGNUP!")
-        print(f"   Name: {data['name']}")
-        print(f"   Email: {data['email']}")
-        print(f"   Product: {data.get('product_url', 'None')}")
-        print(f"   Dashboard: {dashboard_url}")
+        print(f"\n✅ NEW SIGNUP! {data['name']} / {data['email']}")
 
+        # Send verification email (primary) + welcome email
+        base_url = get_base_url()
+        verify_url = f"{base_url}/api/verify-email?token={verification_token}"
+        send_verification_email(data['name'], data['email'], verify_url)
         send_welcome_email(data['name'], data['email'], dashboard_url)
 
         return jsonify({
             'success': True,
-            'message': 'Signup successful! Check your email for your dashboard link.',
-            'dashboard_url': dashboard_url
+            'message': 'Account created! Please check your email to verify your address.',
+            'dashboard_url': dashboard_url,
+            'token': token
         }), 200
 
     except Exception as e:
         print(f"❌ Signup error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/verify-email', methods=['GET'])
+def verify_email():
+    """Verify a user's email address via the link sent on signup"""
+    vtok = request.args.get('token')
+    if not vtok:
+        return '<h2>❌ Missing verification token.</h2>', 400
+
+    conn = get_db_conn()
+    cur  = conn.cursor()
+    try:
+        cur.execute("SELECT id, name, token FROM users WHERE verification_token = %s", (vtok,))
+        user = _fetchone(cur)
+        if not user:
+            return '<h2>❌ This verification link is invalid or has already been used.</h2>', 404
+
+        cur.execute("""
+            UPDATE users SET email_verified = TRUE, verification_token = NULL
+            WHERE id = %s
+        """, (user['id'],))
+        conn.commit()
+        base_url = get_base_url()
+        # Redirect to the homepage with a ?verified=1 flag so we can show a toast
+        from flask import redirect
+        return redirect(f"{base_url}/?verified=1")
+    except Exception as e:
+        conn.rollback()
+        return f'<h2>❌ Verification error: {e}</h2>', 500
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route('/api/login', methods=['POST'])
+def login():
+    """Login with email + password. Returns dashboard URL on success."""
+    try:
+        data     = request.json
+        email    = (data.get('email') or '').strip().lower()
+        password = data.get('password', '')
+
+        if not email or not password:
+            return jsonify({'error': 'Email and password are required'}), 400
+
+        conn = get_db_conn()
+        cur  = conn.cursor()
+        try:
+            cur.execute("SELECT * FROM users WHERE LOWER(email) = %s", (email,))
+            user = _fetchone(cur)
+        finally:
+            cur.close()
+            conn.close()
+
+        if not user:
+            # Generic message — don't reveal whether email exists
+            return jsonify({'error': 'Incorrect email or password'}), 401
+
+        pw_hash = user.get('password_hash')
+        if not pw_hash:
+            # Legacy account — no password set yet, send a reset link
+            return jsonify({
+                'error': 'This account has no password set. '
+                         'Please use "Forgot password" to create one.'
+            }), 401
+
+        if not check_password_hash(pw_hash, password):
+            return jsonify({'error': 'Incorrect email or password'}), 401
+
+        base_url      = get_base_url()
+        dashboard_url = f"{base_url}/dashboard?token={user['token']}"
+
+        print(f"✅ Login: {email}")
+        return jsonify({
+            'success': True,
+            'dashboard_url': dashboard_url,
+            'token': user['token']
+        }), 200
+
+    except Exception as e:
+        print(f"❌ Login error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/forgot-password', methods=['POST'])
+def forgot_password():
+    """Generate a one-time password reset token and email it to the user"""
+    try:
+        data  = request.json
+        email = (data.get('email') or '').strip().lower()
+
+        if not email:
+            return jsonify({'error': 'Email is required'}), 400
+
+        # Always respond with the same message for security (don't reveal if email exists)
+        generic_ok = jsonify({'success': True,
+                              'message': 'If that email is registered you will receive a reset link shortly.'}), 200
+
+        conn = get_db_conn()
+        cur  = conn.cursor()
+        try:
+            cur.execute("SELECT id, name, email FROM users WHERE LOWER(email) = %s", (email,))
+            user = _fetchone(cur)
+            if not user:
+                return generic_ok
+
+            reset_token  = secrets.token_urlsafe(32)
+            token_expiry = datetime.now() + timedelta(hours=2)
+
+            cur.execute("""
+                UPDATE users SET reset_token = %s, reset_token_expiry = %s WHERE id = %s
+            """, (reset_token, token_expiry, user['id']))
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            raise e
+        finally:
+            cur.close()
+            conn.close()
+
+        base_url  = get_base_url()
+        reset_url = f"{base_url}/?reset_token={reset_token}"
+        send_password_reset_email(user['name'], user['email'], reset_url)
+
+        print(f"📧 Password reset requested: {email}")
+        return generic_ok
+
+    except Exception as e:
+        print(f"❌ Forgot password error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/reset-password', methods=['POST'])
+def reset_password():
+    """Consume a reset token and update the user's password"""
+    try:
+        data     = request.json
+        rtok     = data.get('token', '').strip()
+        password = data.get('password', '')
+
+        if not rtok or not password:
+            return jsonify({'error': 'Token and new password are required'}), 400
+        if len(password) < 8:
+            return jsonify({'error': 'Password must be at least 8 characters'}), 400
+
+        conn = get_db_conn()
+        cur  = conn.cursor()
+        try:
+            cur.execute("""
+                SELECT id, reset_token_expiry FROM users
+                WHERE reset_token = %s
+            """, (rtok,))
+            user = _fetchone(cur)
+
+            if not user:
+                return jsonify({'error': 'Invalid or expired reset link. Please request a new one.'}), 400
+
+            expiry = user.get('reset_token_expiry')
+            if expiry and datetime.now() > expiry:
+                return jsonify({'error': 'This reset link has expired. Please request a new one.'}), 400
+
+            new_hash = generate_password_hash(password)
+            cur.execute("""
+                UPDATE users SET password_hash = %s, reset_token = NULL, reset_token_expiry = NULL,
+                                 email_verified = TRUE
+                WHERE id = %s
+            """, (new_hash, user['id']))
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            raise e
+        finally:
+            cur.close()
+            conn.close()
+
+        print(f"✅ Password reset successful for user id {user['id']}")
+        return jsonify({'success': True, 'message': 'Password updated successfully'}), 200
+
+    except Exception as e:
+        print(f"❌ Reset password error: {e}")
         return jsonify({'error': str(e)}), 500
 
 

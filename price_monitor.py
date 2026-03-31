@@ -27,15 +27,36 @@ def save_database(data):
     with open(DB_FILE, 'w') as f:
         json.dump(data, f, indent=2)
 
+def clean_url(url):
+    """
+    Strip tracking / redirect parameters that can confuse scrapers.
+    e.g. Walmart's ?adsRedirect=true, Amazon's ref= tags, etc.
+    """
+    from urllib.parse import urlparse, urlencode, parse_qs
+    STRIP = {
+        'adsRedirect', 'ref', 'ref_', 'tag', 'linkCode', 'linkId',
+        'pf_rd_p', 'pf_rd_r', 'pd_rd_wg', 'pd_rd_w', 'pd_rd_r',
+        'th', 'ascsubtag', 'smid', 'asc_refurl', 'asc_campaign',
+    }
+    try:
+        parsed = urlparse(url)
+        params = {k: v for k, v in parse_qs(parsed.query).items()
+                  if k.lower() not in STRIP}
+        return parsed._replace(query=urlencode(params, doseq=True)).geturl()
+    except Exception:
+        return url
+
+
 def extract_price_from_text(text):
     """
-    Extract the main product price from page text/markdown.
+    Extract the main product price from page text / markdown / HTML.
 
-    Strategy (in order):
-    1. JSON-LD structured data — most reliable, sites embed machine-readable price
-    2. Lines with strong buying-intent keywords, skipping coupon/savings context
-    3. Bold/standalone prices in markdown
-    4. Most-frequent price across all non-coupon lines (fallback)
+    Strategy (in priority order):
+    1. Price paired with "priceCurrency" in the same JSON block — most targeted,
+       this is the Offer price on Walmart, Amazon, Target etc.
+    2. Broader JSON-LD "price" keys as fallback (only if step 1 found nothing)
+    3. Line-by-line scan: intent keywords, bold/standalone markdown prices
+    4. Most-frequent price across all non-coupon lines (last resort)
     """
     import re
     from collections import Counter
@@ -43,75 +64,75 @@ def extract_price_from_text(text):
     if not text:
         return None
 
-    # Words that indicate a savings/coupon amount — NOT the actual product price
     COUPON_WORDS = re.compile(
         r'\b(?:off|save|saving|savings|coupon|clip|discount|you save|applied|reduction|rebate)\b',
         re.IGNORECASE
     )
 
     def valid_price(s):
-        """Parse price string; return float only if in a sensible product range."""
         try:
-            p = float(s.replace(',', ''))
+            p = float(str(s).replace(',', ''))
             return p if 5.0 < p < 100000 else None
         except Exception:
             return None
 
-    # ── Step 1: JSON-LD / schema.org structured data ────────────────────────
-    # E-commerce pages embed machine-readable price in <script type="application/ld+json">
-    # Firecrawl's `content` field often preserves this.
-    json_ld_patterns = [
-        r'"price"\s*:\s*"([\d,]+\.?\d*)"',   # "price": "29.99"
-        r'"price"\s*:\s*([\d,]+\.?\d*)',       # "price": 29.99
-        r'"lowPrice"\s*:\s*"?([\d,]+\.?\d*)"?',
-        r'"highPrice"\s*:\s*"?([\d,]+\.?\d*)"?',
-        r'priceAmount["\s:=]+([\d]+\.?\d*)',
-    ]
+    # ── Step 1: Price paired with priceCurrency (targeted Offer price) ───────
+    # Walmart / Amazon / Target embed: "price": 5.29, "priceCurrency": "USD"
+    # We look in a ±400-char window around every "priceCurrency" occurrence.
+    offer_prices = []
+    for m in re.finditer(r'"priceCurrency"\s*:\s*"USD"', text, re.IGNORECASE):
+        window = text[max(0, m.start() - 400): m.end() + 400]
+        for pat in (r'"price"\s*:\s*"([\d,]+\.?\d*)"',
+                    r'"price"\s*:\s*([\d,]+\.?\d*)'):
+            pm = re.search(pat, window)
+            if pm:
+                p = valid_price(pm.group(1))
+                if p:
+                    offer_prices.append(p)
+                    break
+    if offer_prices:
+        best = Counter(offer_prices).most_common(1)[0][0]
+        print(f"   → Offer prices (near priceCurrency): {sorted(set(offer_prices))} → using ${best}")
+        return best
+
+    # ── Step 2: Broader JSON-LD price keys (fallback) ────────────────────────
     json_prices = []
-    for pat in json_ld_patterns:
-        for m in re.findall(pat, text):
-            p = valid_price(m)
+    for pat in (r'"price"\s*:\s*"([\d,]+\.\d{2})"',
+                r'"price"\s*:\s*([\d,]+\.\d{2})',
+                r'"lowPrice"\s*:\s*"?([\d,]+\.\d{2})"?'):
+        for val in re.findall(pat, text):
+            p = valid_price(val)
             if p:
                 json_prices.append(p)
     if json_prices:
         best = Counter(json_prices).most_common(1)[0][0]
-        print(f"   → JSON-LD prices found: {sorted(set(json_prices))} → using ${best}")
+        print(f"   → JSON-LD prices: {sorted(set(json_prices))} → using ${best}")
         return best
 
-    # ── Step 2 & 3: Line-by-line scan ───────────────────────────────────────
+    # ── Step 3 & 4: Line-by-line markdown scan ───────────────────────────────
     lines = text.split('\n')
-    intent_prices = []   # prices on lines with buy-intent keywords
-    bold_prices   = []   # bold/standalone prices in markdown
-    all_prices    = []   # every price not on a coupon line
+    intent_prices, bold_prices, all_prices = [], [], []
 
     for line in lines:
-        # Skip lines that are clearly about savings/coupons
         if COUPON_WORDS.search(line):
             continue
-
-        # Collect every $X.XX on this line
-        raw = re.findall(r'\$\s*([\d,]+\.\d{2})', line)
-        for r_val in raw:
+        for r_val in re.findall(r'\$\s*([\d,]+\.\d{2})', line):
             p = valid_price(r_val)
-            if p:
-                all_prices.append(p)
+            if not p:
+                continue
+            all_prices.append(p)
+            if re.search(
+                r'\b(?:price|buy new|buy now|add to cart|in stock|list price|our price|sale price|current price)\b',
+                line, re.IGNORECASE
+            ):
+                intent_prices.append(p)
+            if re.search(r'\*\*\$\s*[\d,]+\.\d{2}\*\*', line) or \
+               re.match(r'^\s*\$\s*[\d,]+\.\d{2}\s*$', line):
+                bold_prices.append(p)
 
-                # Buying-intent signals
-                if re.search(
-                    r'\b(?:price|buy new|buy now|add to cart|in stock|list price|our price|sale price|current price)\b',
-                    line, re.IGNORECASE
-                ):
-                    intent_prices.append(p)
-
-                # Bold price  **$XX.XX**  or price alone on its own line
-                if re.search(r'\*\*\$\s*[\d,]+\.\d{2}\*\*', line) or re.match(r'^\s*\$\s*[\d,]+\.\d{2}\s*$', line):
-                    bold_prices.append(p)
-
-    # Return the best candidate in priority order
     for bucket in (intent_prices, bold_prices, all_prices):
         if bucket:
-            best = Counter(bucket).most_common(1)[0][0]
-            return best
+            return Counter(bucket).most_common(1)[0][0]
 
     return None
 
@@ -143,16 +164,16 @@ def _do_scrape(fc, api_version, url):
     """
     if api_version == 'v2':
         # firecrawl-py 2.x: fc.scrape(url, formats=[...]) → ScrapeResponse object
-        resp = fc.scrape(url, formats=['markdown'])
+        resp = fc.scrape(url, formats=['markdown', 'html'])
         markdown = getattr(resp, 'markdown', None) or ''
         content  = getattr(resp, 'html', None) or getattr(resp, 'content', None) or ''
         return markdown, content
     else:
         # firecrawl-py 0.x / 1.x: fc.scrape_url(url, ...) → dict
         try:
-            result = fc.scrape_url(url, formats=['markdown'])
+            result = fc.scrape_url(url, formats=['markdown', 'html'])
         except TypeError:
-            result = fc.scrape_url(url, {'formats': ['markdown']})
+            result = fc.scrape_url(url, {'formats': ['markdown', 'html']})
         if not isinstance(result, dict):
             return '', ''
         markdown = result.get('markdown') or result.get('content') or ''
@@ -164,17 +185,23 @@ def scrape_price(url):
     """
     Scrape the current price from a product URL using Firecrawl.
     Handles firecrawl-py v0, v1, and v2 API automatically.
+    Strips tracking parameters before scraping to avoid redirect pages.
     """
     api_key = os.getenv('FIRECRAWL_API_KEY')
     if not api_key:
         print("❌ FIRECRAWL_API_KEY not set")
         return None
 
+    # Strip tracking params (e.g. ?adsRedirect=true on Walmart URLs)
+    clean = clean_url(url)
+    if clean != url:
+        print(f"   → Cleaned URL: {clean}")
+
     try:
         fc, api_version = _init_firecrawl(api_key)
         print(f"   → Using Firecrawl API {api_version}")
 
-        markdown, content = _do_scrape(fc, api_version, url)
+        markdown, content = _do_scrape(fc, api_version, clean)
 
         combined = f"{content}\n{markdown}".strip()
         if not combined:
