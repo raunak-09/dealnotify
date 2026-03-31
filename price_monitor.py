@@ -29,8 +29,8 @@ def save_database(data):
 
 def clean_url(url):
     """
-    Strip tracking / redirect parameters that can confuse scrapers.
-    e.g. Walmart's ?adsRedirect=true, Amazon's ref= tags, etc.
+    Strip tracking/redirect parameters AND URL fragments that can confuse scrapers.
+    e.g. Walmart's ?adsRedirect=true, Amazon's ref= tags, Target's #lnk=sametab, etc.
     """
     from urllib.parse import urlparse, urlencode, parse_qs
     STRIP = {
@@ -42,75 +42,181 @@ def clean_url(url):
         parsed = urlparse(url)
         params = {k: v for k, v in parse_qs(parsed.query).items()
                   if k.lower() not in STRIP}
-        return parsed._replace(query=urlencode(params, doseq=True)).geturl()
+        # Strip fragment (#...) — it's never needed for scraping
+        return parsed._replace(query=urlencode(params, doseq=True), fragment='').geturl()
     except Exception:
         return url
 
 
-def extract_price_from_text(text):
+def _extract_jsonld_blocks(html):
+    """Pull text from all <script type="application/ld+json"> tags in the HTML."""
+    import re
+    blocks = re.findall(
+        r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
+        html, re.IGNORECASE | re.DOTALL
+    )
+    return '\n'.join(blocks)
+
+
+def _extract_meta_price(html):
     """
-    Extract the main product price from page text / markdown / HTML.
+    Extract price from <meta> tags used by many retailers.
+    Handles: product:price:amount, og:price:amount, itemprop="price"
+    """
+    import re
+    patterns = [
+        r'<meta[^>]+property=["\'](?:product|og):price:amount["\'][^>]+content=["\']([0-9.,]+)["\']',
+        r'<meta[^>]+content=["\']([0-9.,]+)["\'][^>]+property=["\'](?:product|og):price:amount["\']',
+        r'<meta[^>]+itemprop=["\']price["\'][^>]+content=["\']([0-9.,]+)["\']',
+        r'<meta[^>]+content=["\']([0-9.,]+)["\'][^>]+itemprop=["\']price["\']',
+    ]
+    for pat in patterns:
+        m = re.search(pat, html, re.IGNORECASE)
+        if m:
+            try:
+                p = float(m.group(1).replace(',', ''))
+                if 0.5 < p < 100000:
+                    return p
+            except Exception:
+                pass
+    return None
+
+
+def extract_price_from_text(html, markdown=''):
+    """
+    Extract the main product price from page HTML and/or markdown.
 
     Strategy (in priority order):
-    1. Price paired with "priceCurrency" in the same JSON block — most targeted,
-       this is the Offer price on Walmart, Amazon, Target etc.
-    2. Broader JSON-LD "price" keys as fallback (only if step 1 found nothing)
-    3. Line-by-line scan: intent keywords, bold/standalone markdown prices
-    4. Most-frequent price across all non-coupon lines (last resort)
+    1. <meta> property price tags  — fastest, unambiguous
+    2. JSON-LD <script> blocks     — structured data with priceCurrency
+    3. Amazon-specific JSON fields — priceToPay, priceAmount, buyingPrice
+    4. Target-specific JSON fields — formatted_current_price, currentRetailPrice
+    5. Best Buy / generic patterns — salePrice, regularPrice, etc.
+    6. Full-text priceCurrency scan — search ALL content (not just 8k chars)
+    7. Markdown line-by-line scan  — intent keywords, bold prices, frequency
     """
     import re
     from collections import Counter
 
-    if not text:
-        return None
-
-    COUPON_WORDS = re.compile(
-        r'\b(?:off|save|saving|savings|coupon|clip|discount|you save|applied|reduction|rebate)\b',
-        re.IGNORECASE
-    )
-
     def valid_price(s):
         try:
-            p = float(str(s).replace(',', ''))
-            return p if 5.0 < p < 100000 else None
+            p = float(str(s).replace(',', '').replace('$', '').strip())
+            return p if 0.5 < p < 100000 else None
         except Exception:
             return None
 
-    # ── Step 1: Price paired with priceCurrency (targeted Offer price) ───────
-    # Walmart / Amazon / Target embed: "price": 5.29, "priceCurrency": "USD"
-    # We look in a ±400-char window around every "priceCurrency" occurrence.
-    offer_prices = []
-    for m in re.finditer(r'"priceCurrency"\s*:\s*"USD"', text, re.IGNORECASE):
-        window = text[max(0, m.start() - 400): m.end() + 400]
-        for pat in (r'"price"\s*:\s*"([\d,]+\.?\d*)"',
-                    r'"price"\s*:\s*([\d,]+\.?\d*)'):
-            pm = re.search(pat, window)
-            if pm:
-                p = valid_price(pm.group(1))
+    COUPON_WORDS = re.compile(
+        r'\b(?:off|save|saving|savings|coupon|clip|discount|you save|applied|reduction|rebate|was)\b',
+        re.IGNORECASE
+    )
+
+    # ── Step 1: Meta tag price (most reliable when present) ──────────────────
+    if html:
+        p = _extract_meta_price(html)
+        if p:
+            print(f"   → Meta tag price: ${p}")
+            return p
+
+    # ── Step 2: JSON-LD blocks + priceCurrency proximity ─────────────────────
+    jsonld = _extract_jsonld_blocks(html) if html else ''
+    # Search JSON-LD blocks for price near priceCurrency
+    search_targets = [jsonld, html or '', markdown or '']
+    for corpus in search_targets:
+        if not corpus:
+            continue
+        offer_prices = []
+        for m in re.finditer(r'"priceCurrency"\s*:\s*"USD"', corpus, re.IGNORECASE):
+            window = corpus[max(0, m.start() - 600): m.end() + 600]
+            for pat in (r'"price"\s*:\s*"([\d,]+\.?\d*)"',
+                        r'"price"\s*:\s*([\d,]+\.?\d*)'):
+                pm = re.search(pat, window)
+                if pm:
+                    p = valid_price(pm.group(1))
+                    if p:
+                        offer_prices.append(p)
+                        break
+        if offer_prices:
+            best = Counter(offer_prices).most_common(1)[0][0]
+            print(f"   → priceCurrency prices: {sorted(set(offer_prices))} → ${best}")
+            return best
+
+    # ── Step 3: Amazon-specific JSON patterns ────────────────────────────────
+    # Amazon uses priceToPay, priceAmount, buyingPrice, displayPrice
+    if html:
+        amazon_patterns = [
+            r'"priceToPay"\s*:\s*\{[^}]*"amount"\s*:\s*"?([\d,]+\.?\d*)"?',
+            r'"priceAmount"\s*:\s*"?([\d,]+\.?\d*)"?',
+            r'"buyingPrice"\s*:\s*"?([\d,]+\.?\d*)"?',
+            r'"displayPrice"\s*:\s*"\$?([\d,]+\.?\d*)"',
+            r'"ourPrice"\s*:\s*"\$?([\d,]+\.?\d*)"',
+            r'"price"\s*:\s*\{"amount"\s*:\s*"?([\d,]+\.?\d*)"',
+        ]
+        for pat in amazon_patterns:
+            m = re.search(pat, html)
+            if m:
+                p = valid_price(m.group(1))
                 if p:
-                    offer_prices.append(p)
-                    break
-    if offer_prices:
-        best = Counter(offer_prices).most_common(1)[0][0]
-        print(f"   → Offer prices (near priceCurrency): {sorted(set(offer_prices))} → using ${best}")
-        return best
+                    print(f"   → Amazon-specific price pattern: ${p}")
+                    return p
 
-    # ── Step 2: Broader JSON-LD price keys (fallback) ────────────────────────
-    json_prices = []
-    for pat in (r'"price"\s*:\s*"([\d,]+\.\d{2})"',
-                r'"price"\s*:\s*([\d,]+\.\d{2})',
-                r'"lowPrice"\s*:\s*"?([\d,]+\.\d{2})"?'):
-        for val in re.findall(pat, text):
-            p = valid_price(val)
-            if p:
-                json_prices.append(p)
-    if json_prices:
-        best = Counter(json_prices).most_common(1)[0][0]
-        print(f"   → JSON-LD prices: {sorted(set(json_prices))} → using ${best}")
-        return best
+    # ── Step 4: Target-specific JSON patterns ────────────────────────────────
+    if html:
+        target_patterns = [
+            r'"formatted_current_price"\s*:\s*"\$?([\d,]+\.?\d*)"',
+            r'"current_retail"\s*:\s*([\d,]+\.?\d*)',
+            r'"currentRetailPrice"\s*:\s*([\d,]+\.?\d*)',
+            r'"reg_retail"\s*:\s*([\d,]+\.?\d*)',
+            r'"price"\s*:\s*\{"value"\s*:\s*([\d,]+\.?\d*)',
+        ]
+        for pat in target_patterns:
+            m = re.search(pat, html)
+            if m:
+                p = valid_price(m.group(1))
+                if p:
+                    print(f"   → Target-specific price pattern: ${p}")
+                    return p
 
-    # ── Step 3 & 4: Line-by-line markdown scan ───────────────────────────────
-    lines = text.split('\n')
+    # ── Step 5: Generic retailer JSON patterns ───────────────────────────────
+    if html:
+        generic_patterns = [
+            r'"salePrice"\s*:\s*"?\$?([\d,]+\.?\d*)"?',
+            r'"regularPrice"\s*:\s*"?\$?([\d,]+\.?\d*)"?',
+            r'"currentPrice"\s*:\s*"?\$?([\d,]+\.?\d*)"?',
+            r'"finalPrice"\s*:\s*"?\$?([\d,]+\.?\d*)"?',
+            r'"sellingPrice"\s*:\s*"?\$?([\d,]+\.?\d*)"?',
+            r'"specialPrice"\s*:\s*"?\$?([\d,]+\.?\d*)"?',
+        ]
+        for pat in generic_patterns:
+            m = re.search(pat, html)
+            if m:
+                p = valid_price(m.group(1))
+                if p:
+                    print(f"   → Generic price pattern: ${p}")
+                    return p
+
+    # ── Step 6: Broader JSON "price" keys in JSON-LD ─────────────────────────
+    for corpus in (jsonld, html or ''):
+        if not corpus:
+            continue
+        json_prices = []
+        for pat in (r'"price"\s*:\s*"([\d,]+\.\d{2})"',
+                    r'"price"\s*:\s*([\d,]+\.\d{2})',
+                    r'"lowPrice"\s*:\s*"?([\d,]+\.\d{2})"?'):
+            for val in re.findall(pat, corpus):
+                p = valid_price(val)
+                if p:
+                    json_prices.append(p)
+        if json_prices:
+            # Use the most common price (avoids outliers from related products)
+            best = Counter(json_prices).most_common(1)[0][0]
+            print(f"   → Broad JSON prices: {sorted(set(json_prices[:20]))} → ${best}")
+            return best
+
+    # ── Step 7: Markdown line-by-line scan ───────────────────────────────────
+    if not markdown:
+        return None
+
+    lines = markdown.split('\n')
     intent_prices, bold_prices, all_prices = [], [], []
 
     for line in lines:
@@ -122,7 +228,7 @@ def extract_price_from_text(text):
                 continue
             all_prices.append(p)
             if re.search(
-                r'\b(?:price|buy new|buy now|add to cart|in stock|list price|our price|sale price|current price)\b',
+                r'\b(?:price|buy new|buy now|add to cart|in stock|list price|our price|sale price|current price|now)\b',
                 line, re.IGNORECASE
             ):
                 intent_prices.append(p)
@@ -130,9 +236,16 @@ def extract_price_from_text(text):
                re.match(r'^\s*\$\s*[\d,]+\.\d{2}\s*$', line):
                 bold_prices.append(p)
 
-    for bucket in (intent_prices, bold_prices, all_prices):
+    for bucket in (intent_prices, bold_prices):
         if bucket:
-            return Counter(bucket).most_common(1)[0][0]
+            best = Counter(bucket).most_common(1)[0][0]
+            print(f"   → Markdown intent/bold price: ${best}")
+            return best
+
+    if all_prices:
+        best = Counter(all_prices).most_common(1)[0][0]
+        print(f"   → Markdown most-common price: ${best}")
+        return best
 
     return None
 
@@ -201,17 +314,17 @@ def scrape_price(url):
         fc, api_version = _init_firecrawl(api_key)
         print(f"   → Using Firecrawl API {api_version}")
 
-        markdown, content = _do_scrape(fc, api_version, clean)
+        markdown, html = _do_scrape(fc, api_version, clean)
 
-        combined = f"{content}\n{markdown}".strip()
-        if not combined:
+        if not html and not markdown:
             print("   → Empty result from Firecrawl")
             return None
 
-        snippet = combined[:300].replace('\n', ' ')
+        snippet = (markdown or html or '')[:300].replace('\n', ' ')
         print(f"   → Content snippet: {snippet}...")
+        print(f"   → HTML length: {len(html)} chars, Markdown length: {len(markdown)} chars")
 
-        price = extract_price_from_text(combined[:8000])
+        price = extract_price_from_text(html, markdown)
         if price:
             print(f"   ✅ Price: ${price}")
             return price
