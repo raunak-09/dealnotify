@@ -841,6 +841,9 @@
                     updateStats();
                     closeAddModal();
                     showToast('✅ Product added! Click Refresh Prices to see the current price.', 'success');
+                } else if (data.error === 'free_limit_reached') {
+                    closeAddModal();
+                    showUpgradePrompt(data.message);
                 } else {
                     showToast(data.error || 'Failed to add product', 'error');
                 }
@@ -930,6 +933,49 @@
             toast.textContent = message;
             toast.className = `toast ${type} show`;
             setTimeout(() => toast.classList.remove('show'), 4000);
+        }
+
+        function showUpgradePrompt(message) {
+            // Remove any existing upgrade prompt
+            const existing = document.getElementById('upgradePrompt');
+            if (existing) existing.remove();
+
+            const el = document.createElement('div');
+            el.id = 'upgradePrompt';
+            el.style.cssText = `
+                position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+                background: rgba(0,0,0,0.55); display: flex; align-items: center;
+                justify-content: center; z-index: 1000;
+            `;
+            el.innerHTML = `
+                <div style="background:white; border-radius:16px; padding:40px; max-width:440px;
+                            width:90%; text-align:center; box-shadow:0 20px 60px rgba(0,0,0,0.25);">
+                    <div style="font-size:48px; margin-bottom:12px;">🚀</div>
+                    <h2 style="color:#333; margin-bottom:10px;">Upgrade to Pro</h2>
+                    <p style="color:#666; font-size:15px; margin-bottom:24px; line-height:1.6;">
+                        ${message || 'You\'ve reached the 3-product limit on the free plan.'}
+                    </p>
+                    <div style="background:#f0f7ff; border-radius:12px; padding:20px; margin-bottom:24px; text-align:left;">
+                        <p style="color:#667eea; font-weight:700; margin:0 0 10px;">⭐ Pro — $4.99/month</p>
+                        <p style="color:#555; font-size:14px; margin:4px 0;">✓ Unlimited products</p>
+                        <p style="color:#555; font-size:14px; margin:4px 0;">✓ Hourly automatic price checks</p>
+                        <p style="color:#555; font-size:14px; margin:4px 0;">✓ Instant email alerts</p>
+                        <p style="color:#555; font-size:14px; margin:4px 0;">✓ Priority support</p>
+                    </div>
+                    <a href="mailto:hello@dealnotify.co?subject=Upgrade to Pro&body=Hi, I'd like to upgrade to DealNotify Pro!"
+                       style="display:block; background:linear-gradient(135deg,#667eea,#764ba2); color:white;
+                              padding:14px 28px; border-radius:50px; text-decoration:none; font-weight:700;
+                              font-size:16px; margin-bottom:12px;">
+                        Upgrade Now — $4.99/mo
+                    </a>
+                    <button onclick="document.getElementById('upgradePrompt').remove()"
+                            style="background:none; border:none; color:#999; cursor:pointer; font-size:14px;">
+                        Maybe later
+                    </button>
+                </div>
+            `;
+            document.body.appendChild(el);
+            el.addEventListener('click', (e) => { if (e.target === el) el.remove(); });
         }
 
         function formatDate(dateStr) {

@@ -497,6 +497,8 @@ def get_dashboard():
     }), 200
 
 
+FREE_TIER_PRODUCT_LIMIT = 3   # Free/trial users can track up to this many products
+
 @app.route('/api/add-product', methods=['POST'])
 def add_product_to_dashboard():
     """Add a new product to user's tracking list"""
@@ -509,9 +511,17 @@ def add_product_to_dashboard():
         if not data.get('url'):
             return jsonify({'error': 'Product URL is required'}), 400
 
-        user, _ = get_user_by_token(token)
+        user, existing_products = get_user_by_token(token)
         if not user:
             return jsonify({'error': 'Invalid token'}), 404
+
+        # Enforce product limit for free/trial users
+        if user.get('status') in ('active', 'trial'):
+            if len(existing_products) >= FREE_TIER_PRODUCT_LIMIT:
+                return jsonify({
+                    'error': 'free_limit_reached',
+                    'message': f'Free plan is limited to {FREE_TIER_PRODUCT_LIMIT} products. Upgrade to Pro for unlimited tracking!'
+                }), 403
 
         conn = get_db_conn()
         cur = conn.cursor()
