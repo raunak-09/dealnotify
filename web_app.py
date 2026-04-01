@@ -1348,10 +1348,10 @@ def stripe_webhook():
     print(f"🔔 Stripe event: {event_type}")
 
     if event_type == 'checkout.session.completed':
-        session       = event['data']['object']
-        token         = session.get('client_reference_id')
-        customer_id   = session.get('customer')
-        subscription_id = session.get('subscription')
+        session         = event['data']['object']
+        token           = getattr(session, 'client_reference_id', None)
+        customer_id     = getattr(session, 'customer', None)
+        subscription_id = getattr(session, 'subscription', None)
 
         if token:
             conn = get_db_conn()
@@ -1397,7 +1397,7 @@ def stripe_webhook():
 
     elif event_type == 'invoice.payment_failed':
         # Log it — optionally send a payment failure email in future
-        customer_id = event['data']['object'].get('customer')
+        customer_id = getattr(event['data']['object'], 'customer', None)
         print(f"⚠️  Payment failed for customer {customer_id}")
 
     return jsonify({'received': True}), 200
