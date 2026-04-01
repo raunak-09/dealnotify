@@ -95,6 +95,18 @@
         .trial-badge .label { font-size: 12px; opacity: 0.9; }
         .trial-badge.expired { background: rgba(255,100,100,0.3); border-color: rgba(255,100,100,0.5); }
 
+        .pro-badge {
+            background: rgba(255,255,255,0.25);
+            border: 2px solid rgba(255,255,255,0.55);
+            border-radius: 50px;
+            padding: 10px 24px;
+            text-align: center;
+            min-width: 140px;
+        }
+        .pro-badge .pro-icon  { font-size: 24px; line-height: 1; }
+        .pro-badge .pro-label { font-size: 14px; font-weight: 700; letter-spacing: 0.4px; margin-top: 3px; }
+        .pro-badge .pro-sub   { font-size: 11px; opacity: 0.85; margin-top: 1px; }
+
         /* Stats */
         .stats-row {
             display: grid;
@@ -557,6 +569,37 @@
         }
         .plan-tag.pro { background: #fef3c7; color: #d97706; }
 
+        /* Prominent plan card in My Account modal */
+        .plan-card {
+            border-radius: 12px;
+            padding: 14px 18px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        .plan-card.plan-pro {
+            background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+            border: 1.5px solid #fbbf24;
+        }
+        .plan-card.plan-free {
+            background: #f8f9ff;
+            border: 1.5px solid #c7ceff;
+        }
+        .plan-card-left { display: flex; align-items: center; gap: 12px; }
+        .plan-card-icon { font-size: 28px; line-height: 1; }
+        .plan-card-name { font-size: 15px; font-weight: 800; color: #1a1a2e; }
+        .plan-card-desc { font-size: 12px; color: #888; margin-top: 1px; }
+        .plan-card-upgrade {
+            background: #5b67f8; color: white;
+            border: none; border-radius: 8px;
+            padding: 8px 14px; font-size: 12px; font-weight: 700;
+            cursor: pointer; white-space: nowrap;
+            text-decoration: none; display: inline-block;
+        }
+        .plan-card-upgrade:hover { background: #4351d8; }
+
         /* Responsive */
         @media (max-width: 768px) {
             .welcome-banner { flex-direction: column; gap: 20px; text-align: center; }
@@ -612,8 +655,20 @@
         <div class="account-modal">
             <button class="account-modal-close" onclick="closeAccountModal()">×</button>
             <div style="font-size:36px; margin-bottom:10px;">👤</div>
-            <h2>My Account <span class="plan-tag" id="planTag">Free</span></h2>
+            <h2>My Account</h2>
             <p class="modal-sub">Update your personal details below</p>
+
+            <!-- Plan card — populated by JS -->
+            <div class="plan-card plan-pro" id="planCard" style="display:none">
+                <div class="plan-card-left">
+                    <div class="plan-card-icon" id="planCardIcon">⭐</div>
+                    <div>
+                        <div class="plan-card-name" id="planCardName">Pro Plan</div>
+                        <div class="plan-card-desc" id="planCardDesc">All features unlocked</div>
+                    </div>
+                </div>
+                <div id="planCardAction"></div>
+            </div>
 
             <div class="acct-alert acct-success" id="acct-success">✅ Details updated successfully!</div>
             <div class="acct-alert acct-error"   id="acct-error"></div>
@@ -708,13 +763,20 @@
                     <h1 id="welcomeTitle">Welcome back! 👋</h1>
                     <p id="welcomeSubtitle">Here's your price monitoring overview</p>
                 </div>
-                <div class="trial-badge" id="trialBadge">
+                <!-- Shown for free trial users -->
+                <div class="trial-badge" id="trialBadge" style="display:none">
                     <div class="days" id="trialDays">7</div>
                     <div class="label">Trial Days Left</div>
                 </div>
+                <!-- Shown for Pro users -->
+                <div class="pro-badge" id="proBadge" style="display:none">
+                    <div class="pro-icon">⭐</div>
+                    <div class="pro-label">Pro Member</div>
+                    <div class="pro-sub">All features unlocked</div>
+                </div>
             </div>
 
-            <!-- Trial warning -->
+            <!-- Trial warning (free users only) -->
             <div class="info-banner" id="trialWarning" style="display:none;">
                 ⏰ <span>Your free trial is ending soon! <a href="/#pricing" style="color:#856404; font-weight:bold;">Upgrade to Pro</a> to keep monitoring without interruption.</span>
             </div>
@@ -881,11 +943,21 @@
             document.getElementById('welcomeTitle').textContent = `Welcome back, ${userData.name.split(' ')[0]}! 👋`;
             document.getElementById('welcomeSubtitle').textContent = `Member since ${formatDate(userData.signup_date)} · ${userData.email}`;
 
-            const days = userData.trial_days_remaining;
-            document.getElementById('trialDays').textContent = days;
-            if (days <= 2) {
-                document.getElementById('trialBadge').classList.add('expired');
-                document.getElementById('trialWarning').style.display = 'flex';
+            if (userData.status === 'pro') {
+                // Pro user — show Pro badge, hide trial badge and warning entirely
+                document.getElementById('proBadge').style.display = 'block';
+                document.getElementById('trialBadge').style.display = 'none';
+                document.getElementById('trialWarning').style.display = 'none';
+            } else {
+                // Free trial user — show trial days badge
+                const days = userData.trial_days_remaining;
+                document.getElementById('trialDays').textContent = days;
+                document.getElementById('trialBadge').style.display = 'block';
+                document.getElementById('proBadge').style.display = 'none';
+                if (days <= 2) {
+                    document.getElementById('trialBadge').classList.add('expired');
+                    document.getElementById('trialWarning').style.display = 'flex';
+                }
             }
 
             updateStats();
@@ -1160,13 +1232,25 @@
                 document.getElementById('acct-email').value     = userData.email || '';
                 document.getElementById('acct-phone').value     = userData.phone || '';
                 document.getElementById('acct-newsletter').checked = userData.newsletter !== false;
-                const tag = document.getElementById('planTag');
+
+                // Populate the plan card
+                const card = document.getElementById('planCard');
+                card.style.display = 'flex';
                 if (userData.status === 'pro') {
-                    tag.textContent = '⭐ Pro';
-                    tag.className = 'plan-tag pro';
+                    card.className = 'plan-card plan-pro';
+                    document.getElementById('planCardIcon').textContent = '⭐';
+                    document.getElementById('planCardName').textContent = 'Pro Plan — Active';
+                    document.getElementById('planCardDesc').textContent = 'All features unlocked · Unlimited products';
+                    document.getElementById('planCardAction').innerHTML = '';
                 } else {
-                    tag.textContent = 'Free Trial';
-                    tag.className = 'plan-tag';
+                    card.className = 'plan-card plan-free';
+                    const days = userData.trial_days_remaining || 0;
+                    document.getElementById('planCardIcon').textContent = '🛡️';
+                    document.getElementById('planCardName').textContent = 'Free Trial';
+                    document.getElementById('planCardDesc').textContent =
+                        days > 0 ? `${days} day${days !== 1 ? 's' : ''} remaining` : 'Trial expired';
+                    document.getElementById('planCardAction').innerHTML =
+                        '<a class="plan-card-upgrade" href="/#pricing">Upgrade to Pro</a>';
                 }
             }
             document.getElementById('acct-success').style.display = 'none';

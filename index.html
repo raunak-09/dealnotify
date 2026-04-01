@@ -759,8 +759,10 @@
             display: none;
         }
 
-        .alert-success { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
-        .alert-error   { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+        .alert-success  { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
+        .alert-error    { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+        .alert-warning  { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+        .alert-warning a { color: #b45309; font-weight: 600; cursor: pointer; text-decoration: underline; }
 
         .password-wrapper { position: relative; }
         .toggle-pw {
@@ -1288,7 +1290,11 @@
             <h2>Welcome back</h2>
             <p class="modal-sub">Log in to your PriceGuard account</p>
 
-            <div class="alert-box alert-error" id="login-error"></div>
+            <div class="alert-box alert-error"   id="login-error"></div>
+            <div class="alert-box alert-warning" id="login-unverified" style="display:none">
+                📧 <strong>Email not verified.</strong> Please check your inbox for the verification link.
+                <br><a onclick="resendVerification()">Resend verification email →</a>
+            </div>
 
             <form id="loginForm" onsubmit="submitLogin(event)" novalidate>
                 <div class="form-group">
@@ -1545,15 +1551,46 @@ function submitLogin(e) {
     .then(data => {
         setLoading('lg-btn', false, 'Log In');
         if (!data.success) {
-            showAlert('login-error', data.error || 'Login failed. Please check your credentials.');
+            if (data.unverified) {
+                // Store the email so resend knows who to send to
+                document.getElementById('login-unverified').dataset.email = email;
+                document.getElementById('login-unverified').style.display = 'block';
+                document.getElementById('login-error').style.display = 'none';
+            } else {
+                document.getElementById('login-unverified').style.display = 'none';
+                showAlert('login-error', data.error || 'Login failed. Please check your credentials.');
+            }
             return;
         }
+        document.getElementById('login-unverified').style.display = 'none';
         showToast('✅ Logged in! Redirecting to your dashboard…');
         setTimeout(() => { window.location.href = data.dashboard_url; }, 800);
     })
     .catch(() => {
         setLoading('lg-btn', false, 'Log In');
         showAlert('login-error', 'Something went wrong. Please try again.');
+    });
+}
+
+function resendVerification() {
+    const email = document.getElementById('login-unverified').dataset.email;
+    if (!email) return;
+
+    const link = document.querySelector('#login-unverified a');
+    link.textContent = 'Sending…';
+
+    fetch('/api/resend-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+    })
+    .then(r => r.json())
+    .then(() => {
+        document.getElementById('login-unverified').innerHTML =
+            '📧 <strong>Verification email sent!</strong> Check your inbox (and spam folder) and click the link to activate your account.';
+    })
+    .catch(() => {
+        link.textContent = 'Resend failed — try again';
     });
 }
 

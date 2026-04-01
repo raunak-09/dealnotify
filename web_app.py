@@ -636,6 +636,48 @@ def verify_email():
         conn.close()
 
 
+@app.route('/api/resend-verification', methods=['POST'])
+def resend_verification():
+    """Resend the email verification link to an unverified user"""
+    try:
+        data  = request.json
+        email = (data.get('email') or '').strip().lower()
+
+        if not email:
+            return jsonify({'error': 'Email is required'}), 400
+
+        conn = get_db_conn()
+        cur  = conn.cursor()
+        try:
+            cur.execute("SELECT id, name, email, email_verified FROM users WHERE LOWER(email) = %s", (email,))
+            user = _fetchone(cur)
+
+            if not user:
+                # Don't reveal whether the email exists
+                return jsonify({'success': True}), 200
+
+            if user.get('email_verified'):
+                return jsonify({'success': True, 'message': 'Email is already verified'}), 200
+
+            # Generate a fresh verification token
+            new_token = secrets.token_urlsafe(32)
+            cur.execute("UPDATE users SET verification_token = %s WHERE id = %s", (new_token, user['id']))
+            conn.commit()
+        finally:
+            cur.close()
+            conn.close()
+
+        base_url   = get_base_url()
+        verify_url = f"{base_url}/api/verify-email?token={new_token}"
+        send_verification_email(user['name'], user['email'], verify_url)
+
+        return jsonify({'success': True}), 200
+
+    except Exception as e:
+        print(f"❌ Resend verification error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/login', methods=['POST'])
 def login():
     """Login with email + password. Returns dashboard URL on success."""
@@ -670,6 +712,14 @@ def login():
 
         if not check_password_hash(pw_hash, password):
             return jsonify({'error': 'Incorrect email or password'}), 401
+
+        # Block login until email is verified
+        if not user.get('email_verified'):
+            return jsonify({
+                'error': 'Please verify your email before logging in. '
+                         'Check your inbox for the verification link.',
+                'unverified': True
+            }), 403
 
         base_url      = get_base_url()
         dashboard_url = f"{base_url}/dashboard?token={user['token']}"
