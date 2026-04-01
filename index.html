@@ -944,8 +944,9 @@
             <li class="hide-mobile"><a href="#how-it-works">How it works</a></li>
             <li class="hide-mobile"><a href="#features">Features</a></li>
             <li class="hide-mobile"><a href="#pricing">Pricing</a></li>
-            <li><a href="#" class="nav-cta" onclick="openModal('signup'); return false;">Start Free</a></li>
-            <li><a href="#" onclick="openModal('login'); return false;" style="color: var(--text-light); font-size:15px; font-weight:500; padding: 8px 14px;">Log in</a></li>
+            <li id="nav-start-free"><a href="#" class="nav-cta" onclick="openModal('signup'); return false;">Start Free</a></li>
+            <li id="nav-login"><a href="#" onclick="openModal('login'); return false;" style="color: var(--text-light); font-size:15px; font-weight:500; padding: 8px 14px;">Log in</a></li>
+            <li id="nav-dashboard" style="display:none"><a href="#" id="nav-dashboard-link" class="nav-cta" style="background:var(--primary);">My Dashboard →</a></li>
         </ul>
     </nav>
 </header>
@@ -1733,6 +1734,32 @@ window.addEventListener('DOMContentLoaded', () => {
     if (params.get('reset_token')) openModal('reset');
     if (params.get('verified') === '1') {
         showToast('✅ Email verified! You can now log in.');
+    }
+
+    // ── Check if user already has an active session ──
+    const SESSION_KEY  = 'pg_token';
+    const EXPIRY_KEY   = 'pg_token_expiry';
+    const storedToken  = localStorage.getItem(SESSION_KEY);
+    const storedExpiry = parseInt(localStorage.getItem(EXPIRY_KEY) || '0', 10);
+    const isLoggedIn   = storedToken && Date.now() < storedExpiry;
+
+    if (isLoggedIn) {
+        const dashUrl = `/dashboard?token=${storedToken}`;
+
+        // Swap nav buttons
+        document.getElementById('nav-start-free').style.display  = 'none';
+        document.getElementById('nav-login').style.display        = 'none';
+        document.getElementById('nav-dashboard').style.display    = 'list-item';
+        document.getElementById('nav-dashboard-link').href        = dashUrl;
+
+        // Swap the hero primary CTA
+        const heroCta = document.querySelector('.hero .btn-primary');
+        if (heroCta) {
+            heroCta.textContent   = 'Go to My Dashboard →';
+            heroCta.onclick       = null;
+            heroCta.href          = dashUrl;
+            heroCta.tagName === 'BUTTON' && heroCta.setAttribute('onclick', `window.location.href='${dashUrl}'`);
+        }
     }
 });
 </script>

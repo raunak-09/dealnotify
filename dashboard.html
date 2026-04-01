@@ -904,13 +904,46 @@
     </footer>
 
     <script>
+        const SESSION_KEY    = 'pg_token';
+        const EXPIRY_KEY     = 'pg_token_expiry';
+        const SESSION_DAYS   = 30; // session lasts 30 days from last login
+
         const params = new URLSearchParams(window.location.search);
-        const token = params.get('token');
+        let token = params.get('token');
         let userData = null;
         let productsData = [];
 
+        /* ── Session helpers ── */
+        function saveSession(tok) {
+            const expiry = Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000;
+            localStorage.setItem(SESSION_KEY, tok);
+            localStorage.setItem(EXPIRY_KEY, String(expiry));
+        }
+
+        function loadSession() {
+            const tok    = localStorage.getItem(SESSION_KEY);
+            const expiry = parseInt(localStorage.getItem(EXPIRY_KEY) || '0', 10);
+            if (!tok || Date.now() > expiry) {
+                clearSession();
+                return null;
+            }
+            return tok;
+        }
+
+        function clearSession() {
+            localStorage.removeItem(SESSION_KEY);
+            localStorage.removeItem(EXPIRY_KEY);
+        }
+
         window.onload = function() {
-            if (!token) { showError(); return; }
+            if (!token) {
+                // No token in URL — try localStorage
+                token = loadSession();
+                if (!token) { showError(); return; }
+                // Restore token into URL so links/refreshes work
+                const newUrl = `${window.location.pathname}?token=${token}`;
+                window.history.replaceState(null, '', newUrl);
+            }
             loadDashboard();
         };
 
@@ -918,7 +951,9 @@
             fetch(`/api/dashboard?token=${token}`)
                 .then(res => res.json())
                 .then(data => {
-                    if (!data.success) { showError(); return; }
+                    if (!data.success) { clearSession(); showError(); return; }
+                    // Persist / refresh the session on every successful load
+                    saveSession(token);
                     userData = data.user;
                     productsData = data.products || [];
                     renderDashboard();
@@ -1316,7 +1351,7 @@
 
         /* ── Sign Out ── */
         function signOut() {
-            localStorage.removeItem('pg_token');
+            clearSession();
             window.location.href = '/';
         }
 
