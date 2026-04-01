@@ -757,6 +757,18 @@
         <!-- Dashboard -->
         <div id="dashboardContent" style="display:none;">
 
+            <!-- Session expiry warning -->
+            <div id="sessionWarning" style="display:none; background:#fff3cd; border:1px solid #ffc107;
+                 border-radius:12px; padding:14px 20px; margin-bottom:18px; font-size:14px;
+                 color:#856404; align-items:center; gap:12px; justify-content:space-between;">
+                <span>⏱️ <strong>Your session is about to expire</strong> due to inactivity. Move your mouse or click anywhere to stay signed in.</span>
+                <button onclick="refreshExpiry(); document.getElementById('sessionWarning').style.display='none';"
+                    style="background:#5b67f8; color:white; border:none; border-radius:8px;
+                           padding:7px 14px; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap;">
+                    Stay signed in
+                </button>
+            </div>
+
             <!-- Welcome banner -->
             <div class="welcome-banner">
                 <div class="welcome-text">
@@ -904,9 +916,14 @@
     </footer>
 
     <script>
-        const SESSION_KEY    = 'pg_token';
-        const EXPIRY_KEY     = 'pg_token_expiry';
-        const SESSION_DAYS   = 30; // session lasts 30 days from last login
+        const SESSION_KEY       = 'pg_token';
+        const EXPIRY_KEY        = 'pg_token_expiry';
+        const INACTIVITY_MS     = 10 * 60 * 1000;   // 10 minutes of inactivity
+        const WARN_BEFORE_MS    = 2  * 60 * 1000;   // warn 2 minutes before expiry
+        const THROTTLE_MS       = 30 * 1000;         // refresh expiry at most every 30s
+        let   lastRefresh       = 0;
+        let   warningShown      = false;
+        let   sessionCheckTimer = null;
 
         const params = new URLSearchParams(window.location.search);
         let token = params.get('token');
@@ -915,18 +932,28 @@
 
         /* ── Session helpers ── */
         function saveSession(tok) {
-            const expiry = Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000;
             localStorage.setItem(SESSION_KEY, tok);
-            localStorage.setItem(EXPIRY_KEY, String(expiry));
+            localStorage.setItem(EXPIRY_KEY, String(Date.now() + INACTIVITY_MS));
+        }
+
+        function refreshExpiry() {
+            // Throttle: only write to localStorage at most every 30 seconds
+            const now = Date.now();
+            if (now - lastRefresh < THROTTLE_MS) return;
+            lastRefresh = now;
+            localStorage.setItem(EXPIRY_KEY, String(now + INACTIVITY_MS));
+            // Hide warning banner if user became active again
+            if (warningShown) {
+                const w = document.getElementById('sessionWarning');
+                if (w) w.style.display = 'none';
+                warningShown = false;
+            }
         }
 
         function loadSession() {
             const tok    = localStorage.getItem(SESSION_KEY);
             const expiry = parseInt(localStorage.getItem(EXPIRY_KEY) || '0', 10);
-            if (!tok || Date.now() > expiry) {
-                clearSession();
-                return null;
-            }
+            if (!tok || Date.now() > expiry) { clearSession(); return null; }
             return tok;
         }
 
@@ -935,12 +962,38 @@
             localStorage.removeItem(EXPIRY_KEY);
         }
 
+        function startSessionWatcher() {
+            // Check every 15 seconds whether the session has expired
+            sessionCheckTimer = setInterval(() => {
+                const expiry = parseInt(localStorage.getItem(EXPIRY_KEY) || '0', 10);
+                const remaining = expiry - Date.now();
+
+                if (remaining <= 0) {
+                    clearInterval(sessionCheckTimer);
+                    clearSession();
+                    // Redirect with a message
+                    window.location.href = '/?session_expired=1';
+                    return;
+                }
+
+                // Show warning when 2 minutes are left
+                if (remaining <= WARN_BEFORE_MS && !warningShown) {
+                    warningShown = true;
+                    const w = document.getElementById('sessionWarning');
+                    if (w) w.style.display = 'flex';
+                }
+            }, 15000);
+        }
+
+        // Reset inactivity timer on any user interaction
+        ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'].forEach(evt =>
+            document.addEventListener(evt, refreshExpiry, { passive: true })
+        );
+
         window.onload = function() {
             if (!token) {
-                // No token in URL — try localStorage
                 token = loadSession();
                 if (!token) { showError(); return; }
-                // Restore token into URL so links/refreshes work
                 const newUrl = `${window.location.pathname}?token=${token}`;
                 window.history.replaceState(null, '', newUrl);
             }
@@ -952,11 +1005,12 @@
                 .then(res => res.json())
                 .then(data => {
                     if (!data.success) { clearSession(); showError(); return; }
-                    // Persist / refresh the session on every successful load
-                    saveSession(token);
+                    saveSession(token);   // sets expiry = now + 10 min
+                    lastRefresh = Date.now();
                     userData = data.user;
                     productsData = data.products || [];
                     renderDashboard();
+                    startSessionWatcher();
                 })
                 .catch(() => showError());
         }

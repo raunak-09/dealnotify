@@ -1736,6 +1736,13 @@ window.addEventListener('DOMContentLoaded', () => {
         showToast('✅ Email verified! You can now log in.');
     }
 
+    // ── Session expired redirect handling ──
+    if (new URLSearchParams(window.location.search).get('session_expired') === '1') {
+        showToast('⏱️ You were signed out after 10 minutes of inactivity.');
+        // Clean up URL
+        window.history.replaceState(null, '', '/');
+    }
+
     // ── Check if user already has an active session ──
     const SESSION_KEY  = 'pg_token';
     const EXPIRY_KEY   = 'pg_token_expiry';
