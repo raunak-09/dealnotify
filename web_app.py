@@ -118,6 +118,10 @@ def init_db():
         # Stripe migration — add columns if they don't exist yet
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT;")
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT;")
+        # Explicit Pro flag — single source of truth for paid status
+        cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_pro BOOLEAN NOT NULL DEFAULT FALSE;")
+        # Back-fill: anyone whose status is already 'pro' gets is_pro = TRUE
+        cur.execute("UPDATE users SET is_pro = TRUE WHERE status = 'pro' AND is_pro = FALSE;")
         conn.commit()
         print("✅ Database tables ready")
     except Exception as e:
@@ -852,6 +856,8 @@ def get_dashboard():
     days_elapsed = (datetime.now() - signup_date).days
     trial_days_remaining = max(0, 7 - days_elapsed)
 
+    is_pro = bool(user.get('is_pro'))
+
     return jsonify({
         'success': True,
         'user': {
@@ -861,7 +867,8 @@ def get_dashboard():
             'newsletter': user.get('newsletter', True),
             'signup_date': signup_date.strftime('%Y-%m-%d'),
             'trial_days_remaining': trial_days_remaining,
-            'status': user['status']
+            'status': user['status'],
+            'is_pro': is_pro          # explicit boolean — use this to gate Pro features
         },
         'products': [product_to_dict(p) for p in products]
     }), 200
@@ -1289,7 +1296,7 @@ def create_checkout_session():
     if not user:
         return jsonify({'error': 'Invalid token'}), 404
 
-    if user.get('status') == 'pro':
+    if user.get('is_pro') or user.get('status') == 'pro':
         return jsonify({'error': 'Already on Pro plan'}), 400
 
     stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
@@ -1353,6 +1360,7 @@ def stripe_webhook():
                 cur.execute("""
                     UPDATE users
                     SET status = 'pro',
+                        is_pro = TRUE,
                         stripe_customer_id = %s,
                         stripe_subscription_id = %s
                     WHERE token = %s
@@ -1374,6 +1382,7 @@ def stripe_webhook():
             cur.execute("""
                 UPDATE users
                 SET status = 'active',
+                    is_pro = FALSE,
                     stripe_subscription_id = NULL
                 WHERE stripe_subscription_id = %s
             """, (subscription_id,))

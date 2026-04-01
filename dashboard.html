@@ -936,14 +936,14 @@
             document.getElementById('dropdownName').textContent  = userData.name;
             document.getElementById('dropdownEmail').textContent = userData.email;
             // Hide "Upgrade to Pro" in dropdown for Pro users
-            if (userData.status === 'pro') {
+            if (userData.is_pro) {
                 const upBtn = document.getElementById('upgradeDropdownBtn');
                 if (upBtn) upBtn.style.display = 'none';
             }
             document.getElementById('welcomeTitle').textContent = `Welcome back, ${userData.name.split(' ')[0]}! 👋`;
             document.getElementById('welcomeSubtitle').textContent = `Member since ${formatDate(userData.signup_date)} · ${userData.email}`;
 
-            if (userData.status === 'pro') {
+            if (userData.is_pro) {
                 // Pro user — show Pro badge, hide trial badge and warning entirely
                 document.getElementById('proBadge').style.display = 'block';
                 document.getElementById('trialBadge').style.display = 'none';
@@ -1236,7 +1236,7 @@
                 // Populate the plan card
                 const card = document.getElementById('planCard');
                 card.style.display = 'flex';
-                if (userData.status === 'pro') {
+                if (userData.is_pro) {
                     card.className = 'plan-card plan-pro';
                     document.getElementById('planCardIcon').textContent = '⭐';
                     document.getElementById('planCardName').textContent = 'Pro Plan — Active';
