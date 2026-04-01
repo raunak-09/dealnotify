@@ -988,20 +988,20 @@
 <section class="social-proof">
     <div class="stats-row">
         <div class="stat-item">
-            <h3>$127</h3>
-            <p>Average annual savings<br>per user</p>
+            <h3>6+</h3>
+            <p>Major retailers<br>supported</p>
         </div>
         <div class="stat-item">
-            <h3>98%</h3>
-            <p>Price detection<br>accuracy</p>
+            <h3>24/7</h3>
+            <p>Continuous price<br>monitoring</p>
         </div>
         <div class="stat-item">
-            <h3>&lt;1hr</h3>
-            <p>Average time to<br>detect a price drop</p>
+            <h3>$0</h3>
+            <p>Cost to get<br>started</p>
         </div>
         <div class="stat-item">
-            <h3>5★</h3>
-            <p>Average user<br>rating</p>
+            <h3>1-click</h3>
+            <p>Cancel anytime,<br>no questions asked</p>
         </div>
     </div>
 </section>
@@ -1074,46 +1074,7 @@
 </section>
 
 
-<!-- ──────────── TESTIMONIALS ──────────── -->
-<section class="testimonials">
-    <p class="section-label">What users say</p>
-    <h2 class="section-title">Real people. Real savings.</h2>
-    <div class="reviews-grid">
-        <div class="review-card">
-            <div class="stars">★★★★★</div>
-            <p class="review-text">"I'd been waiting for a TV to drop below $400 for months. PriceGuard emailed me the morning it did. Saved $89 without thinking about it."</p>
-            <div class="reviewer">
-                <div class="reviewer-avatar">MK</div>
-                <div class="reviewer-info">
-                    <div class="name">Marcus K.</div>
-                    <div class="detail">Saved $89 on a Samsung TV</div>
-                </div>
-            </div>
-        </div>
-        <div class="review-card">
-            <div class="stars">★★★★★</div>
-            <p class="review-text">"Setup took 2 minutes. I track 8 products now. Got 3 alerts this month alone. Absolutely worth the $4.99. Pays for itself on the first deal."</p>
-            <div class="reviewer">
-                <div class="reviewer-avatar">SL</div>
-                <div class="reviewer-info">
-                    <div class="name">Sarah L.</div>
-                    <div class="detail">Pro member since January</div>
-                </div>
-            </div>
-        </div>
-        <div class="review-card">
-            <div class="stars">★★★★★</div>
-            <p class="review-text">"I was skeptical but it really works. Caught a Walmart price drop on a baby monitor I'd been watching. Alert came in under an hour of the change."</p>
-            <div class="reviewer">
-                <div class="reviewer-avatar">JR</div>
-                <div class="reviewer-info">
-                    <div class="name">Jamie R.</div>
-                    <div class="detail">Saved $34 on Walmart</div>
-                </div>
-            </div>
-        </div>
-    </div>
-</section>
+<!-- Testimonials removed — will be added once real user reviews are collected -->
 
 
 <!-- ──────────── PRICING ──────────── -->
@@ -1309,6 +1270,13 @@
                     <label for="sg-target">Target Price <span style="font-weight:400; color:#aaa">(optional)</span></label>
                     <input type="number" id="sg-target" placeholder="29.99" step="0.01" min="0">
                 </div>
+                <label style="display:flex; align-items:flex-start; gap:10px; cursor:pointer; margin-bottom:6px;">
+                    <input type="checkbox" id="sg-newsletter" checked
+                           style="width:16px; height:16px; margin-top:2px; accent-color:var(--primary); flex-shrink:0;">
+                    <span style="font-size:13px; color:var(--text-light); line-height:1.5;">
+                        Send me the PriceGuard newsletter — weekly deal tips, money-saving guides, and product updates. Unsubscribe anytime.
+                    </span>
+                </label>
                 <button type="submit" class="btn-submit" id="sg-btn">Create Free Account</button>
             </form>
             <p class="modal-switch">Already have an account? <a onclick="switchPanel('login')">Log in</a></p>
@@ -1492,12 +1460,13 @@ function isValidEmail(e) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e); }
 function submitSignup(e) {
     e.preventDefault();
 
-    const name     = document.getElementById('sg-name').value.trim();
-    const email    = document.getElementById('sg-email').value.trim();
-    const password = document.getElementById('sg-password').value;
-    const url      = document.getElementById('sg-product').value.trim();
-    const target   = document.getElementById('sg-target').value;
-    const wantsPro = sessionStorage.getItem('dealnotify_plan') === 'pro';
+    const name       = document.getElementById('sg-name').value.trim();
+    const email      = document.getElementById('sg-email').value.trim();
+    const password   = document.getElementById('sg-password').value;
+    const url        = document.getElementById('sg-product').value.trim();
+    const target     = document.getElementById('sg-target').value;
+    const newsletter = document.getElementById('sg-newsletter').checked;
+    const wantsPro   = sessionStorage.getItem('dealnotify_plan') === 'pro';
 
     // Client-side validation
     let valid = true;
@@ -1514,7 +1483,7 @@ function submitSignup(e) {
     fetch('/api/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password, product_url: url || null, target_price: target || null })
+        body: JSON.stringify({ name, email, password, product_url: url || null, target_price: target || null, newsletter })
     })
     .then(r => r.json())
     .then(data => {

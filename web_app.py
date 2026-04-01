@@ -98,6 +98,9 @@ def init_db():
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token TEXT;")
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token TEXT;")
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expiry TIMESTAMP;")
+        # Profile / marketing columns
+        cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT;")
+        cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS newsletter BOOLEAN NOT NULL DEFAULT TRUE;")
         cur.execute("""
             CREATE TABLE IF NOT EXISTS products (
                 id SERIAL PRIMARY KEY,
@@ -542,9 +545,10 @@ def signup():
         if existing:
             return jsonify({'error': 'An account with that email already exists'}), 400
 
-        token             = secrets.token_urlsafe(32)
+        token              = secrets.token_urlsafe(32)
         verification_token = secrets.token_urlsafe(32)
         password_hash      = generate_password_hash(password) if password else None
+        newsletter         = bool(data.get('newsletter', True))
         dashboard_url      = f"{get_base_url()}/dashboard?token={token}"
 
         conn = get_db_conn()
@@ -552,11 +556,11 @@ def signup():
         try:
             cur.execute("""
                 INSERT INTO users (name, email, token, signup_date, status, trial_days_remaining,
-                                   password_hash, email_verified, verification_token)
-                VALUES (%s, %s, %s, %s, 'active', 7, %s, FALSE, %s)
+                                   password_hash, email_verified, verification_token, newsletter)
+                VALUES (%s, %s, %s, %s, 'active', 7, %s, FALSE, %s, %s)
                 RETURNING id
             """, (data['name'], data['email'], token, datetime.now(),
-                  password_hash, verification_token))
+                  password_hash, verification_token, newsletter))
             user_id = _fetchone(cur)['id']
 
             # Add first product if provided
@@ -803,12 +807,56 @@ def get_dashboard():
         'user': {
             'name': user['name'],
             'email': user['email'],
+            'phone': user.get('phone') or '',
+            'newsletter': user.get('newsletter', True),
             'signup_date': signup_date.strftime('%Y-%m-%d'),
             'trial_days_remaining': trial_days_remaining,
             'status': user['status']
         },
         'products': [product_to_dict(p) for p in products]
     }), 200
+
+
+@app.route('/api/update-account', methods=['POST'])
+def update_account():
+    """Update user's profile details: name, phone, newsletter preference"""
+    try:
+        token = request.args.get('token')
+        if not token:
+            return jsonify({'error': 'Token required'}), 400
+
+        data = request.json
+        name       = (data.get('name') or '').strip()
+        phone      = (data.get('phone') or '').strip()
+        newsletter = bool(data.get('newsletter', True))
+
+        if not name:
+            return jsonify({'error': 'Name cannot be empty'}), 400
+
+        user, _ = get_user_by_token(token)
+        if not user:
+            return jsonify({'error': 'Invalid token'}), 404
+
+        conn = get_db_conn()
+        cur  = conn.cursor()
+        try:
+            cur.execute("""
+                UPDATE users SET name = %s, phone = %s, newsletter = %s WHERE token = %s
+            """, (name, phone or None, newsletter, token))
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            raise e
+        finally:
+            cur.close()
+            conn.close()
+
+        print(f"✅ Account updated: {user['email']} — name={name}, newsletter={newsletter}")
+        return jsonify({'success': True}), 200
+
+    except Exception as e:
+        print(f"❌ Update account error: {e}")
+        return jsonify({'error': str(e)}), 500
 
 
 FREE_TIER_PRODUCT_LIMIT = 3   # Free/trial users can track up to this many products

@@ -450,6 +450,113 @@
 
         .footer-bottom a { color: #5b67f8; text-decoration: none; }
 
+        /* Account dropdown */
+        .account-btn {
+            display: flex; align-items: center; gap: 10px;
+            cursor: pointer; position: relative;
+            background: rgba(255,255,255,0.15);
+            border: 1px solid rgba(255,255,255,0.3);
+            border-radius: 50px;
+            padding: 7px 14px 7px 10px;
+            transition: background 0.2s;
+        }
+        .account-btn:hover { background: rgba(255,255,255,0.25); }
+
+        .account-dropdown {
+            display: none;
+            position: absolute;
+            top: calc(100% + 10px);
+            right: 0;
+            background: white;
+            border-radius: 14px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+            min-width: 220px;
+            overflow: hidden;
+            z-index: 300;
+            border: 1px solid #e5e7eb;
+        }
+        .account-dropdown.open { display: block; }
+
+        .dropdown-header {
+            padding: 16px 18px;
+            background: #f7f8ff;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .dropdown-header .d-name { font-weight: 700; font-size: 14px; color: #1a1a2e; }
+        .dropdown-header .d-email { font-size: 12px; color: #888; margin-top: 2px; }
+
+        .dropdown-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 13px 18px;
+            font-size: 14px; color: #333;
+            cursor: pointer;
+            transition: background 0.15s;
+            border: none; background: none; width: 100%; text-align: left;
+        }
+        .dropdown-item:hover { background: #f7f8ff; }
+        .dropdown-item.danger { color: #ef4444; }
+        .dropdown-item.danger:hover { background: #fef2f2; }
+        .dropdown-divider { border: none; border-top: 1px solid #e5e7eb; margin: 4px 0; }
+
+        /* Account modal */
+        .account-modal-overlay {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.5); backdrop-filter: blur(4px);
+            z-index: 400; align-items: center; justify-content: center; padding: 20px;
+        }
+        .account-modal-overlay.active { display: flex; }
+
+        .account-modal {
+            background: white; border-radius: 20px; padding: 36px;
+            width: 100%; max-width: 460px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.18);
+            position: relative;
+        }
+        .account-modal h2 { font-size: 20px; font-weight: 800; margin-bottom: 4px; color: #1a1a2e; }
+        .account-modal .modal-sub { font-size: 14px; color: #888; margin-bottom: 24px; }
+        .account-modal-close {
+            position: absolute; top: 16px; right: 18px;
+            background: none; border: none; font-size: 22px;
+            cursor: pointer; color: #aaa;
+        }
+        .account-modal-close:hover { color: #333; }
+
+        .acct-form-group { margin-bottom: 16px; }
+        .acct-form-group label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: #333; }
+        .acct-form-group input {
+            width: 100%; padding: 11px 14px;
+            border: 2px solid #e5e7eb; border-radius: 8px;
+            font-size: 15px; color: #1a1a2e; outline: none;
+            transition: border-color 0.2s;
+        }
+        .acct-form-group input:focus { border-color: #5b67f8; }
+        .acct-form-group input:disabled { background: #f7f8ff; color: #999; cursor: not-allowed; }
+
+        .acct-save-btn {
+            width: 100%; padding: 13px;
+            background: #5b67f8; color: white;
+            border: none; border-radius: 50px;
+            font-size: 15px; font-weight: 700; cursor: pointer;
+            transition: background 0.2s, transform 0.2s;
+            box-shadow: 0 4px 14px rgba(91,103,248,0.3);
+            margin-top: 8px;
+        }
+        .acct-save-btn:hover { background: #4351d8; transform: translateY(-1px); }
+        .acct-save-btn:disabled { opacity: 0.65; cursor: not-allowed; transform: none; }
+
+        .acct-alert { padding: 11px 14px; border-radius: 8px; font-size: 14px; margin-bottom: 14px; display: none; }
+        .acct-success { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
+        .acct-error   { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+
+        .plan-tag {
+            display: inline-flex; align-items: center; gap: 5px;
+            background: #eef0ff; color: #5b67f8;
+            font-size: 12px; font-weight: 700;
+            padding: 3px 10px; border-radius: 50px;
+            margin-left: 8px; vertical-align: middle;
+        }
+        .plan-tag.pro { background: #fef3c7; color: #d97706; }
+
         /* Responsive */
         @media (max-width: 768px) {
             .welcome-banner { flex-direction: column; gap: 20px; text-align: center; }
@@ -469,15 +576,76 @@
     <header>
         <nav>
             <a href="/" class="logo">🛡️ PriceGuard</a>
-            <div class="user-info">
+
+            <!-- Account dropdown trigger -->
+            <div class="account-btn" id="accountBtn" onclick="toggleDropdown()">
+                <div class="user-avatar" id="headerAvatar" style="width:32px;height:32px;font-size:15px;">👤</div>
                 <div>
-                    <div class="user-name" id="headerName">Loading...</div>
-                    <div class="user-email" id="headerEmail"></div>
+                    <div class="user-name" id="headerName" style="font-size:14px;">Loading...</div>
+                    <div class="user-email" id="headerEmail" style="font-size:11px;opacity:0.75;"></div>
                 </div>
-                <div class="user-avatar">👤</div>
+                <span style="font-size:11px; opacity:0.7;">▾</span>
+
+                <!-- Dropdown menu -->
+                <div class="account-dropdown" id="accountDropdown">
+                    <div class="dropdown-header">
+                        <div class="d-name" id="dropdownName">—</div>
+                        <div class="d-email" id="dropdownEmail">—</div>
+                    </div>
+                    <button class="dropdown-item" onclick="openAccountModal(); event.stopPropagation();">
+                        👤 My Account
+                    </button>
+                    <button class="dropdown-item" onclick="openUpgradeFromDropdown(); event.stopPropagation();" id="upgradeDropdownBtn">
+                        ⭐ Upgrade to Pro
+                    </button>
+                    <div class="dropdown-divider"></div>
+                    <button class="dropdown-item danger" onclick="signOut(); event.stopPropagation();">
+                        🚪 Sign Out
+                    </button>
+                </div>
             </div>
         </nav>
     </header>
+
+    <!-- My Account Modal -->
+    <div class="account-modal-overlay" id="accountModal" onclick="closeAccountModalOnOverlay(event)">
+        <div class="account-modal">
+            <button class="account-modal-close" onclick="closeAccountModal()">×</button>
+            <div style="font-size:36px; margin-bottom:10px;">👤</div>
+            <h2>My Account <span class="plan-tag" id="planTag">Free</span></h2>
+            <p class="modal-sub">Update your personal details below</p>
+
+            <div class="acct-alert acct-success" id="acct-success">✅ Details updated successfully!</div>
+            <div class="acct-alert acct-error"   id="acct-error"></div>
+
+            <div class="acct-form-group">
+                <label>Full Name</label>
+                <input type="text" id="acct-name" placeholder="Your name">
+            </div>
+            <div class="acct-form-group">
+                <label>Email Address <span style="font-weight:400;color:#aaa">(cannot be changed)</span></label>
+                <input type="email" id="acct-email" disabled>
+            </div>
+            <div class="acct-form-group">
+                <label>Phone Number <span style="font-weight:400;color:#aaa">(optional)</span></label>
+                <input type="tel" id="acct-phone" placeholder="+1 (555) 000-0000">
+            </div>
+            <div class="acct-form-group">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:500;">
+                    <input type="checkbox" id="acct-newsletter" style="width:15px;height:15px;accent-color:#5b67f8;">
+                    Subscribe to PriceGuard newsletter (weekly deal tips &amp; updates)
+                </label>
+            </div>
+
+            <button class="acct-save-btn" id="acct-save-btn" onclick="saveAccountDetails()">Save Changes</button>
+
+            <div style="margin-top:20px; padding-top:16px; border-top:1px solid #e5e7eb; text-align:center;">
+                <button onclick="signOut()" style="background:none;border:none;color:#ef4444;font-size:14px;cursor:pointer;font-weight:600;">
+                    🚪 Sign out of this account
+                </button>
+            </div>
+        </div>
+    </div>
 
     <!-- Main -->
     <div class="main">
@@ -700,8 +868,16 @@
             document.getElementById('loadingState').style.display = 'none';
             document.getElementById('dashboardContent').style.display = 'block';
 
-            document.getElementById('headerName').textContent = userData.name;
-            document.getElementById('headerEmail').textContent = userData.email;
+            document.getElementById('headerName').textContent    = userData.name;
+            document.getElementById('headerEmail').textContent   = userData.email;
+            document.getElementById('headerAvatar').textContent  = userData.name.charAt(0).toUpperCase();
+            document.getElementById('dropdownName').textContent  = userData.name;
+            document.getElementById('dropdownEmail').textContent = userData.email;
+            // Hide "Upgrade to Pro" in dropdown for Pro users
+            if (userData.status === 'pro') {
+                const upBtn = document.getElementById('upgradeDropdownBtn');
+                if (upBtn) upBtn.style.display = 'none';
+            }
             document.getElementById('welcomeTitle').textContent = `Welcome back, ${userData.name.split(' ')[0]}! 👋`;
             document.getElementById('welcomeSubtitle').textContent = `Member since ${formatDate(userData.signup_date)} · ${userData.email}`;
 
@@ -956,6 +1132,108 @@
             document.getElementById('statProducts').textContent = productsData.length;
             document.getElementById('statActive').textContent = activeCount;
             document.getElementById('statAlerts').textContent = alertCount;
+        }
+
+        /* ── Account Dropdown ── */
+        function toggleDropdown() {
+            document.getElementById('accountDropdown').classList.toggle('open');
+        }
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function(e) {
+            const btn = document.getElementById('accountBtn');
+            if (btn && !btn.contains(e.target)) {
+                document.getElementById('accountDropdown').classList.remove('open');
+            }
+        });
+
+        function openUpgradeFromDropdown() {
+            document.getElementById('accountDropdown').classList.remove('open');
+            showUpgradePrompt('Upgrade to Pro for unlimited product tracking!');
+        }
+
+        /* ── My Account Modal ── */
+        function openAccountModal() {
+            document.getElementById('accountDropdown').classList.remove('open');
+            if (userData) {
+                document.getElementById('acct-name').value      = userData.name || '';
+                document.getElementById('acct-email').value     = userData.email || '';
+                document.getElementById('acct-phone').value     = userData.phone || '';
+                document.getElementById('acct-newsletter').checked = userData.newsletter !== false;
+                const tag = document.getElementById('planTag');
+                if (userData.status === 'pro') {
+                    tag.textContent = '⭐ Pro';
+                    tag.className = 'plan-tag pro';
+                } else {
+                    tag.textContent = 'Free Trial';
+                    tag.className = 'plan-tag';
+                }
+            }
+            document.getElementById('acct-success').style.display = 'none';
+            document.getElementById('acct-error').style.display   = 'none';
+            document.getElementById('accountModal').classList.add('active');
+        }
+
+        function closeAccountModal() {
+            document.getElementById('accountModal').classList.remove('active');
+        }
+
+        function closeAccountModalOnOverlay(e) {
+            if (e.target === document.getElementById('accountModal')) closeAccountModal();
+        }
+
+        function saveAccountDetails() {
+            const name       = document.getElementById('acct-name').value.trim();
+            const phone      = document.getElementById('acct-phone').value.trim();
+            const newsletter = document.getElementById('acct-newsletter').checked;
+            const btn        = document.getElementById('acct-save-btn');
+
+            document.getElementById('acct-success').style.display = 'none';
+            document.getElementById('acct-error').style.display   = 'none';
+
+            if (!name) {
+                document.getElementById('acct-error').textContent = 'Name cannot be empty.';
+                document.getElementById('acct-error').style.display = 'block';
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = 'Saving…';
+
+            fetch(`/api/update-account?token=${token}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, phone, newsletter })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    userData.name        = name;
+                    userData.phone       = phone;
+                    userData.newsletter  = newsletter;
+                    document.getElementById('headerName').textContent    = name;
+                    document.getElementById('dropdownName').textContent  = name;
+                    document.getElementById('headerAvatar').textContent  = name.charAt(0).toUpperCase();
+                    document.getElementById('acct-success').style.display = 'block';
+                } else {
+                    document.getElementById('acct-error').textContent = data.error || 'Failed to save. Please try again.';
+                    document.getElementById('acct-error').style.display = 'block';
+                }
+            })
+            .catch(() => {
+                document.getElementById('acct-error').textContent = 'Something went wrong. Please try again.';
+                document.getElementById('acct-error').style.display = 'block';
+            })
+            .finally(() => {
+                btn.disabled = false;
+                btn.textContent = 'Save Changes';
+            });
+        }
+
+        /* ── Sign Out ── */
+        function signOut() {
+            localStorage.removeItem('pg_token');
+            window.location.href = '/';
         }
 
         function showError() {
