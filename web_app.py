@@ -1300,7 +1300,17 @@ def create_checkout_session():
         return jsonify({'error': 'Already on Pro plan'}), 400
 
     stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
-    price_id = os.getenv('STRIPE_PRICE_ID')
+
+    # Choose price based on billing interval requested by frontend
+    billing  = request.args.get('billing', 'monthly')   # 'monthly' or 'annual'
+    if billing == 'annual':
+        price_id = os.getenv('STRIPE_ANNUAL_PRICE_ID')
+        if not price_id:
+            # Annual not configured yet — fall back to monthly
+            billing  = 'monthly'
+            price_id = os.getenv('STRIPE_PRICE_ID')
+    else:
+        price_id = os.getenv('STRIPE_PRICE_ID')
 
     if not stripe.api_key or not price_id:
         return jsonify({'error': 'Payment not configured yet'}), 500
@@ -1316,6 +1326,7 @@ def create_checkout_session():
             success_url=f"{base_url}/upgrade-success?token={token}",
             cancel_url=f"{base_url}/dashboard?token={token}",
         )
+        print(f"✅ Checkout session created ({billing}) for {user['email']}")
         return jsonify({'checkout_url': session.url}), 200
 
     except Exception as e:

@@ -1479,15 +1479,37 @@
                 justify-content: center; z-index: 1000;
             `;
             el.innerHTML = `
-                <div style="background:white; border-radius:16px; padding:40px; max-width:440px;
+                <div style="background:white; border-radius:16px; padding:36px; max-width:460px;
                             width:90%; text-align:center; box-shadow:0 20px 60px rgba(0,0,0,0.25);">
                     <div style="font-size:48px; margin-bottom:12px;">🚀</div>
-                    <h2 style="color:#333; margin-bottom:10px;">Upgrade to Pro</h2>
-                    <p style="color:#666; font-size:15px; margin-bottom:24px; line-height:1.6;">
+                    <h2 style="color:#333; margin-bottom:8px;">Upgrade to Pro</h2>
+                    <p style="color:#666; font-size:15px; margin-bottom:20px; line-height:1.6;">
                         ${message || "You've reached the 3-product limit on the free plan."}
                     </p>
-                    <div style="background:#f0f7ff; border-radius:12px; padding:20px; margin-bottom:24px; text-align:left;">
-                        <p style="color:#5b67f8; font-weight:700; margin:0 0 10px;">⭐ PriceGuard Pro — $4.99/month</p>
+
+                    <!-- Billing toggle -->
+                    <div style="display:inline-flex; background:#f3f4f6; border-radius:50px;
+                                padding:4px; margin-bottom:20px; gap:4px;">
+                        <button id="tog-monthly" onclick="switchUpgradeBilling('monthly')"
+                            style="padding:7px 18px; border-radius:50px; border:none; cursor:pointer;
+                                   font-size:13px; font-weight:600;
+                                   background:#5b67f8; color:white;">
+                            Monthly
+                        </button>
+                        <button id="tog-annual" onclick="switchUpgradeBilling('annual')"
+                            style="padding:7px 18px; border-radius:50px; border:none; cursor:pointer;
+                                   font-size:13px; font-weight:600;
+                                   background:transparent; color:#666;">
+                            Annual <span style="background:#22c55e; color:white; font-size:10px;
+                                               padding:2px 6px; border-radius:50px; margin-left:4px;">Save 33%</span>
+                        </button>
+                    </div>
+
+                    <div style="background:#f0f7ff; border-radius:12px; padding:20px; margin-bottom:20px; text-align:left;">
+                        <p id="upgrade-price-line" style="color:#5b67f8; font-weight:700; margin:0 0 6px; font-size:16px;">
+                            ⭐ PriceGuard Pro — $4.99/month
+                        </p>
+                        <p id="upgrade-billing-note" style="color:#888; font-size:12px; margin:0 0 12px;"></p>
                         <p style="color:#555; font-size:14px; margin:4px 0;">✓ Unlimited products tracked</p>
                         <p style="color:#555; font-size:14px; margin:4px 0;">✓ Hourly automatic price checks</p>
                         <p style="color:#555; font-size:14px; margin:4px 0;">✓ Instant email alerts on price drops</p>
@@ -1509,6 +1531,31 @@
             el.addEventListener('click', (e) => { if (e.target === el) el.remove(); });
         }
 
+        let upgradeBilling = 'monthly';
+
+        function switchUpgradeBilling(plan) {
+            upgradeBilling = plan;
+            const togM = document.getElementById('tog-monthly');
+            const togA = document.getElementById('tog-annual');
+            const priceLine = document.getElementById('upgrade-price-line');
+            const billingNote = document.getElementById('upgrade-billing-note');
+            const btn = document.getElementById('checkoutBtn');
+
+            if (plan === 'annual') {
+                togA.style.background = '#5b67f8'; togA.style.color = 'white';
+                togM.style.background = 'transparent'; togM.style.color = '#666';
+                priceLine.textContent  = '⭐ PriceGuard Pro — $3.33/month';
+                billingNote.textContent = 'Billed as $39.99/year — save $19.89 vs monthly';
+                btn.textContent = 'Upgrade Now — $39.99/year';
+            } else {
+                togM.style.background = '#5b67f8'; togM.style.color = 'white';
+                togA.style.background = 'transparent'; togA.style.color = '#666';
+                priceLine.textContent  = '⭐ PriceGuard Pro — $4.99/month';
+                billingNote.textContent = '';
+                btn.textContent = 'Upgrade Now — $4.99/mo';
+            }
+        }
+
         async function startCheckout() {
             const btn = document.getElementById('checkoutBtn');
             if (!btn) return;
@@ -1516,18 +1563,18 @@
             btn.disabled = true;
 
             try {
-                const res  = await fetch(`/api/create-checkout-session?token=${token}`, { method: 'POST' });
+                const res  = await fetch(`/api/create-checkout-session?token=${token}&billing=${upgradeBilling}`, { method: 'POST' });
                 const data = await res.json();
                 if (data.checkout_url) {
                     window.location.href = data.checkout_url;
                 } else {
-                    showToast(data.error || 'Could not start checkout. Try again.', 'error');
-                    btn.textContent = 'Upgrade Now — $4.99/mo';
+                    showToast(data.error || 'Could not start checkout. Try again.');
+                    btn.textContent = upgradeBilling === 'annual' ? 'Upgrade Now — $39.99/year' : 'Upgrade Now — $4.99/mo';
                     btn.disabled = false;
                 }
             } catch (e) {
-                showToast('Something went wrong. Please try again.', 'error');
-                btn.textContent = 'Upgrade Now — $4.99/mo';
+                showToast('Something went wrong. Please try again.');
+                btn.textContent = upgradeBilling === 'annual' ? 'Upgrade Now — $39.99/year' : 'Upgrade Now — $4.99/mo';
                 btn.disabled = false;
             }
         }

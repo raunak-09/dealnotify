@@ -1505,7 +1505,8 @@ function submitSignup(e) {
         if (wantsPro && data.token) {
             setLoading('sg-btn', true, 'Create Free Account');
             document.getElementById('sg-btn').textContent = 'Redirecting to payment…';
-            fetch(`/api/create-checkout-session?token=${data.token}`, { method: 'POST' })
+            const billing = sessionStorage.getItem('dealnotify_billing') || 'monthly';
+            fetch(`/api/create-checkout-session?token=${data.token}&billing=${billing}`, { method: 'POST' })
                 .then(r => r.json())
                 .then(d => {
                     if (d.checkout_url) window.location.href = d.checkout_url;
