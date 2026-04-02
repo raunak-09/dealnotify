@@ -295,6 +295,41 @@
         }
         .btn-remove:hover { background: #fff0f0; border-color: #e74c3c; }
 
+        .btn-history {
+            background: none;
+            border: 1px solid #c7ceff; color: #5b67f8;
+            padding: 6px 14px; border-radius: 50px;
+            font-size: 12px; cursor: pointer; transition: all 0.2s;
+        }
+        .btn-history:hover { background: #eef0ff; border-color: #5b67f8; }
+
+        /* Price History Modal */
+        .history-overlay {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.55); backdrop-filter: blur(4px);
+            z-index: 500; align-items: center; justify-content: center; padding: 20px;
+        }
+        .history-overlay.active { display: flex; }
+        .history-modal {
+            background: white; border-radius: 20px; padding: 32px;
+            width: 100%; max-width: 620px;
+            box-shadow: 0 24px 64px rgba(0,0,0,0.18);
+            position: relative;
+        }
+        .history-modal h3 { font-size: 18px; font-weight: 800; color: #1a1a2e; margin-bottom: 4px; }
+        .history-modal .history-sub { font-size: 13px; color: #888; margin-bottom: 20px; }
+        .history-close {
+            position: absolute; top: 16px; right: 18px;
+            background: none; border: none; font-size: 22px; cursor: pointer; color: #aaa;
+        }
+        .history-close:hover { color: #333; }
+        .history-chart-wrap { width: 100%; overflow-x: auto; }
+        .history-empty { text-align: center; padding: 40px 20px; color: #aaa; font-size: 14px; }
+        .history-legend {
+            display: flex; gap: 18px; margin-top: 14px; font-size: 12px; color: #888;
+        }
+        .history-legend span { display: flex; align-items: center; gap: 6px; }
+
         /* Empty state */
         .empty-state {
             text-align: center; padding: 60px 20px;
@@ -698,6 +733,23 @@
                 <button onclick="signOut()" style="background:none;border:none;color:#ef4444;font-size:14px;cursor:pointer;font-weight:600;">
                     🚪 Sign out of this account
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Price History Modal -->
+    <div class="history-overlay" id="historyModal" onclick="closeHistoryOnOverlay(event)">
+        <div class="history-modal">
+            <button class="history-close" onclick="closeHistory()">×</button>
+            <h3 id="historyTitle">Price History</h3>
+            <p class="history-sub" id="historySub">Last 90 days of tracked prices</p>
+            <div class="history-chart-wrap" id="historyChartWrap">
+                <div class="history-empty">Loading…</div>
+            </div>
+            <div class="history-legend">
+                <span><svg width="20" height="4"><line x1="0" y1="2" x2="20" y2="2" stroke="#5b67f8" stroke-width="2"/></svg> Price</span>
+                <span><svg width="20" height="4"><line x1="0" y1="2" x2="20" y2="2" stroke="#ef4444" stroke-width="2" stroke-dasharray="4,3"/></svg> Your target</span>
+                <span><svg width="10" height="10"><circle cx="5" cy="5" r="4" fill="#ef4444"/></svg> Alert triggered</span>
             </div>
         </div>
     </div>
@@ -1144,7 +1196,10 @@
 
                 <div class="product-footer">
                     <span class="added-date">${lastCheckedText}</span>
-                    <button class="btn-remove" onclick="removeProduct(${product.id})">✕ Remove</button>
+                    <div style="display:flex; gap:8px; align-items:center;">
+                        <button class="btn-history" onclick="showPriceHistory(${product.id}, '${(product.store || 'Product').replace(/'/g,"\\'")}')">📈 History</button>
+                        <button class="btn-remove" onclick="removeProduct(${product.id})">✕ Remove</button>
+                    </div>
                 </div>
             </div>`;
         }
@@ -1225,6 +1280,178 @@
                 btn.textContent = '🚀 Start Tracking';
                 btn.disabled = false;
             });
+        }
+
+        /* ── Price History ── */
+        function showPriceHistory(productId, storeName) {
+            document.getElementById('historyTitle').textContent = `Price History — ${storeName}`;
+            document.getElementById('historySub').textContent   = 'Last 90 days of tracked prices';
+            document.getElementById('historyChartWrap').innerHTML = '<div class="history-empty">Loading…</div>';
+            document.getElementById('historyModal').classList.add('active');
+
+            fetch(`/api/price-history/${productId}?token=${token}`)
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.success || !data.history.length) {
+                        document.getElementById('historyChartWrap').innerHTML =
+                            '<div class="history-empty">📭 No price history yet.<br>Prices are recorded every hour. Check back soon!</div>';
+                        return;
+                    }
+                    // Find matching product for target price
+                    const prod = productsData.find(p => p.id === productId);
+                    const targetPrice = prod && prod.target_price ? parseFloat(prod.target_price) : null;
+                    renderHistoryChart(data.history, targetPrice);
+                })
+                .catch(() => {
+                    document.getElementById('historyChartWrap').innerHTML =
+                        '<div class="history-empty">Could not load history. Please try again.</div>';
+                });
+        }
+
+        function closeHistory() {
+            document.getElementById('historyModal').classList.remove('active');
+        }
+
+        function closeHistoryOnOverlay(e) {
+            if (e.target === document.getElementById('historyModal')) closeHistory();
+        }
+
+        function renderHistoryChart(history, targetPrice) {
+            const W = 560, H = 220, PAD = { top: 16, right: 16, bottom: 40, left: 52 };
+            const chartW = W - PAD.left - PAD.right;
+            const chartH = H - PAD.top  - PAD.bottom;
+
+            const prices = history.map(h => h.price);
+            const times  = history.map(h => new Date(h.checked_at).getTime());
+
+            let minP = Math.min(...prices);
+            let maxP = Math.max(...prices);
+            if (targetPrice !== null) {
+                minP = Math.min(minP, targetPrice);
+                maxP = Math.max(maxP, targetPrice);
+            }
+            // Add 5% padding to price range so line isn't clipped
+            const pad = (maxP - minP) * 0.12 || 1;
+            minP -= pad; maxP += pad;
+
+            const minT = Math.min(...times);
+            const maxT = Math.max(...times);
+            const rangeT = maxT - minT || 1;
+            const rangeP = maxP - minP;
+
+            const px = t => PAD.left + ((t - minT) / rangeT) * chartW;
+            const py = p => PAD.top  + (1 - (p - minP) / rangeP) * chartH;
+
+            // Build polyline points
+            const pts = history.map(h => `${px(new Date(h.checked_at).getTime())},${py(h.price)}`).join(' ');
+
+            // Y axis labels
+            const yTicks = 4;
+            let yLabels = '';
+            for (let i = 0; i <= yTicks; i++) {
+                const v = minP + (rangeP * i / yTicks);
+                const y = py(v);
+                yLabels += `<line x1="${PAD.left - 6}" y1="${y}" x2="${PAD.left}" y2="${y}" stroke="#ddd"/>
+                            <text x="${PAD.left - 8}" y="${y + 4}" text-anchor="end" font-size="10" fill="#aaa">$${v.toFixed(0)}</text>`;
+            }
+
+            // X axis labels (up to 5 dates)
+            const xCount = Math.min(history.length, 5);
+            let xLabels = '';
+            for (let i = 0; i < xCount; i++) {
+                const idx = Math.round(i * (history.length - 1) / Math.max(xCount - 1, 1));
+                const d   = new Date(history[idx].checked_at);
+                const lbl = `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
+                const x   = px(d.getTime());
+                xLabels += `<text x="${x}" y="${H - 8}" text-anchor="middle" font-size="9" fill="#bbb">${lbl}</text>`;
+            }
+
+            // Alert dots (prices at or below target)
+            let alertDots = '';
+            if (targetPrice !== null) {
+                history.forEach(h => {
+                    if (h.price <= targetPrice) {
+                        const x = px(new Date(h.checked_at).getTime());
+                        const y = py(h.price);
+                        alertDots += `<circle cx="${x}" cy="${y}" r="5" fill="#ef4444" stroke="white" stroke-width="1.5">
+                            <title>$${h.price.toFixed(2)} — alert triggered</title></circle>`;
+                    }
+                });
+            }
+
+            // Regular dots on every data point (smaller)
+            let dots = history.map(h => {
+                const isAlert = targetPrice !== null && h.price <= targetPrice;
+                if (isAlert) return '';
+                const x = px(new Date(h.checked_at).getTime());
+                const y = py(h.price);
+                return `<circle cx="${x}" cy="${y}" r="3" fill="#5b67f8" stroke="white" stroke-width="1">
+                    <title>$${h.price.toFixed(2)} — ${new Date(h.checked_at).toLocaleString()}</title></circle>`;
+            }).join('');
+
+            // Target price line
+            let targetLine = '';
+            if (targetPrice !== null) {
+                const ty = py(targetPrice);
+                targetLine = `<line x1="${PAD.left}" y1="${ty}" x2="${W - PAD.right}" y2="${ty}"
+                    stroke="#ef4444" stroke-width="1.5" stroke-dasharray="5,4" opacity="0.7"/>
+                    <text x="${W - PAD.right + 2}" y="${ty + 4}" font-size="9" fill="#ef4444">$${targetPrice.toFixed(2)}</text>`;
+            }
+
+            // Area fill under line
+            const firstX = px(times[0]), lastX = px(times[times.length - 1]);
+            const areaPath = `M${firstX},${py(prices[0])} ` +
+                history.map(h => `L${px(new Date(h.checked_at).getTime())},${py(h.price)}`).join(' ') +
+                ` L${lastX},${H - PAD.bottom} L${firstX},${H - PAD.bottom} Z`;
+
+            const svg = `
+            <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="#5b67f8" stop-opacity="0.15"/>
+                        <stop offset="100%" stop-color="#5b67f8" stop-opacity="0"/>
+                    </linearGradient>
+                </defs>
+                <!-- Grid -->
+                <rect x="${PAD.left}" y="${PAD.top}" width="${chartW}" height="${chartH}" fill="#fafafa" rx="6"/>
+                <!-- Area -->
+                <path d="${areaPath}" fill="url(#areaGrad)"/>
+                <!-- Y axis -->
+                ${yLabels}
+                <!-- Target line -->
+                ${targetLine}
+                <!-- Line -->
+                <polyline points="${pts}" fill="none" stroke="#5b67f8" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+                <!-- Dots -->
+                ${dots}
+                ${alertDots}
+                <!-- X axis -->
+                <line x1="${PAD.left}" y1="${H - PAD.bottom}" x2="${W - PAD.right}" y2="${H - PAD.bottom}" stroke="#e5e7eb"/>
+                ${xLabels}
+            </svg>`;
+
+            // Summary stats
+            const latest  = prices[prices.length - 1];
+            const lowest   = Math.min(...prices);
+            const highest  = Math.max(...prices);
+            const statsHtml = `
+            <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:16px; text-align:center;">
+                <div style="background:#f8f9ff; border-radius:10px; padding:10px;">
+                    <div style="font-size:11px; color:#888; margin-bottom:3px;">Current</div>
+                    <div style="font-size:16px; font-weight:800; color:#5b67f8;">$${latest.toFixed(2)}</div>
+                </div>
+                <div style="background:#f0fdf4; border-radius:10px; padding:10px;">
+                    <div style="font-size:11px; color:#888; margin-bottom:3px;">Lowest (90d)</div>
+                    <div style="font-size:16px; font-weight:800; color:#16a34a;">$${lowest.toFixed(2)}</div>
+                </div>
+                <div style="background:#fff5f5; border-radius:10px; padding:10px;">
+                    <div style="font-size:11px; color:#888; margin-bottom:3px;">Highest (90d)</div>
+                    <div style="font-size:16px; font-weight:800; color:#dc2626;">$${highest.toFixed(2)}</div>
+                </div>
+            </div>`;
+
+            document.getElementById('historyChartWrap').innerHTML = statsHtml + svg;
+            document.getElementById('historySub').textContent = `${history.length} price check${history.length !== 1 ? 's' : ''} recorded`;
         }
 
         function removeProduct(productId) {

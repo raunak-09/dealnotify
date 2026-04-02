@@ -168,6 +168,19 @@ def init_db():
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_pro BOOLEAN NOT NULL DEFAULT FALSE;")
         # Back-fill: anyone whose status is already 'pro' gets is_pro = TRUE
         cur.execute("UPDATE users SET is_pro = TRUE WHERE status = 'pro' AND is_pro = FALSE;")
+        # Price history — every recorded price check per product
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS price_history (
+                id         SERIAL PRIMARY KEY,
+                product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+                price      NUMERIC(10,2) NOT NULL,
+                checked_at TIMESTAMP NOT NULL DEFAULT NOW()
+            );
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_price_history_product
+            ON price_history(product_id, checked_at DESC);
+        """)
         conn.commit()
         print("✅ Database tables ready")
     except Exception as e:
@@ -206,6 +219,24 @@ def product_to_dict(p):
         'current_price': float(p['current_price']) if p['current_price'] is not None else None,
         'alert_sent': p['alert_sent']
     }
+
+
+def log_price_history(product_id, price):
+    """Insert one price record into price_history. Fire-and-forget — never raises."""
+    try:
+        conn = get_db_conn()
+        cur  = conn.cursor()
+        try:
+            cur.execute(
+                "INSERT INTO price_history (product_id, price, checked_at) VALUES (%s, %s, %s)",
+                (product_id, price, datetime.now())
+            )
+            conn.commit()
+        finally:
+            cur.close()
+            conn.close()
+    except Exception as e:
+        print(f"⚠️  price_history log error (non-fatal): {e}")
 
 
 def get_user_by_token(token):
@@ -885,6 +916,52 @@ def reset_password():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/price-history/<int:product_id>', methods=['GET'])
+def get_price_history(product_id):
+    """Return price history for a product. Token required — user must own the product."""
+    token = request.args.get('token')
+    if not token:
+        return jsonify({'error': 'Token required'}), 400
+
+    conn = get_db_conn()
+    cur  = conn.cursor()
+    try:
+        # Verify the product belongs to this user
+        cur.execute("""
+            SELECT p.id FROM products p
+            JOIN users u ON u.id = p.user_id
+            WHERE p.id = %s AND u.token = %s
+        """, (product_id, token))
+        if not _fetchone(cur):
+            return jsonify({'error': 'Product not found'}), 404
+
+        # Return up to 90 days of history, newest first then reversed for charting
+        cur.execute("""
+            SELECT price, checked_at
+            FROM price_history
+            WHERE product_id = %s
+              AND checked_at >= NOW() - INTERVAL '90 days'
+            ORDER BY checked_at ASC
+        """, (product_id,))
+        rows = _fetchall(cur)
+
+        history = [
+            {
+                'price': float(r['price']),
+                'checked_at': r['checked_at'].isoformat() if hasattr(r['checked_at'], 'isoformat') else r['checked_at']
+            }
+            for r in rows
+        ]
+        return jsonify({'success': True, 'history': history}), 200
+
+    except Exception as e:
+        print(f"❌ price-history error: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
 @app.route('/api/dashboard', methods=['GET'])
 def get_dashboard():
     """Get dashboard data for a user by token"""
@@ -1127,6 +1204,9 @@ def check_prices_for_user():
                 if alert_sent:
                     product['status'] = 'alert_sent'
                     product['alert_sent'] = True
+
+                # Record in price history (outside the shared transaction — non-blocking)
+                log_price_history(product['id'], current_price)
 
             updated_products.append(product_to_dict(product))
 
@@ -1610,6 +1690,9 @@ def check_all_prices_job():
                 finally:
                     cur.close()
                     conn.close()
+
+                # Record in price history (non-blocking)
+                log_price_history(product['id'], current_price)
 
     except Exception as e:
         print(f"❌ Hourly job fatal error: {e}")
