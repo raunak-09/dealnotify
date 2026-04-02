@@ -29,10 +29,36 @@ def force_https():
     # X-Forwarded-Proto can be comma-separated when multiple proxies are in the chain
     # e.g. "http, https" — take the first value only
     proto = request.headers.get('X-Forwarded-Proto', '').split(',')[0].strip()
-    if proto == 'http':
+
+    # Also catch the case where proto isn't set but the Host header reveals
+    # we're on the live domain (not localhost/127.0.0.1)
+    host = request.headers.get('Host', '')
+    is_production = 'dealnotify.co' in host or 'railway.app' in host
+
+    if proto == 'http' or (is_production and proto == ''):
         from flask import redirect
         url = request.url.replace('http://', 'https://', 1)
         return redirect(url, code=301)
+
+    # Redirect bare domain to www
+    if host == 'dealnotify.co':
+        from flask import redirect
+        return redirect(f'https://www.dealnotify.co{request.full_path.rstrip("?")}', code=301)
+
+
+# ── Temporary debug endpoint — shows exactly what headers Railway is forwarding
+@app.route('/api/debug-headers')
+def debug_headers():
+    import json
+    data = {
+        'X-Forwarded-Proto': request.headers.get('X-Forwarded-Proto', '(not set)'),
+        'X-Forwarded-For':   request.headers.get('X-Forwarded-For', '(not set)'),
+        'Host':              request.headers.get('Host', '(not set)'),
+        'request.url':       request.url,
+        'request.scheme':    request.scheme,
+        'all_headers':       dict(request.headers),
+    }
+    return jsonify(data), 200
 
 
 # ── Security headers on every response
