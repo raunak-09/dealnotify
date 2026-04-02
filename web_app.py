@@ -26,9 +26,29 @@ app = Flask(__name__, static_folder='.', static_url_path='')
 # ── Force HTTPS (Railway terminates SSL at the proxy and sets X-Forwarded-Proto)
 @app.before_request
 def force_https():
-    if request.headers.get('X-Forwarded-Proto') == 'http':
+    # X-Forwarded-Proto can be comma-separated when multiple proxies are in the chain
+    # e.g. "http, https" — take the first value only
+    proto = request.headers.get('X-Forwarded-Proto', '').split(',')[0].strip()
+    if proto == 'http':
         from flask import redirect
-        return redirect(request.url.replace('http://', 'https://'), code=301)
+        url = request.url.replace('http://', 'https://', 1)
+        return redirect(url, code=301)
+
+
+# ── Security headers on every response
+@app.after_request
+def add_security_headers(response):
+    # HSTS: tell browsers to always use HTTPS for this domain for 1 year
+    # includeSubDomains covers both dealnotify.co and www.dealnotify.co
+    response.headers['Strict-Transport-Security'] = \
+        'max-age=31536000; includeSubDomains'
+    # Prevent MIME-type sniffing
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    # Block clickjacking — only allow framing from same origin
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    # Only send the origin as referrer (not full URL) when crossing to another site
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    return response
 
 
 # ─────────────────────────────────────────────
