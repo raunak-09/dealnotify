@@ -95,18 +95,6 @@
         .trial-badge .label { font-size: 12px; opacity: 0.9; }
         .trial-badge.expired { background: rgba(255,100,100,0.3); border-color: rgba(255,100,100,0.5); }
 
-        .pro-badge {
-            background: rgba(255,255,255,0.25);
-            border: 2px solid rgba(255,255,255,0.55);
-            border-radius: 50px;
-            padding: 10px 24px;
-            text-align: center;
-            min-width: 140px;
-        }
-        .pro-badge .pro-icon  { font-size: 24px; line-height: 1; }
-        .pro-badge .pro-label { font-size: 14px; font-weight: 700; letter-spacing: 0.4px; margin-top: 3px; }
-        .pro-badge .pro-sub   { font-size: 11px; opacity: 0.85; margin-top: 1px; }
-
         /* Stats */
         .stats-row {
             display: grid;
@@ -295,41 +283,6 @@
         }
         .btn-remove:hover { background: #fff0f0; border-color: #e74c3c; }
 
-        .btn-history {
-            background: none;
-            border: 1px solid #c7ceff; color: #5b67f8;
-            padding: 6px 14px; border-radius: 50px;
-            font-size: 12px; cursor: pointer; transition: all 0.2s;
-        }
-        .btn-history:hover { background: #eef0ff; border-color: #5b67f8; }
-
-        /* Price History Modal */
-        .history-overlay {
-            display: none; position: fixed; inset: 0;
-            background: rgba(0,0,0,0.55); backdrop-filter: blur(4px);
-            z-index: 500; align-items: center; justify-content: center; padding: 20px;
-        }
-        .history-overlay.active { display: flex; }
-        .history-modal {
-            background: white; border-radius: 20px; padding: 32px;
-            width: 100%; max-width: 620px;
-            box-shadow: 0 24px 64px rgba(0,0,0,0.18);
-            position: relative;
-        }
-        .history-modal h3 { font-size: 18px; font-weight: 800; color: #1a1a2e; margin-bottom: 4px; }
-        .history-modal .history-sub { font-size: 13px; color: #888; margin-bottom: 20px; }
-        .history-close {
-            position: absolute; top: 16px; right: 18px;
-            background: none; border: none; font-size: 22px; cursor: pointer; color: #aaa;
-        }
-        .history-close:hover { color: #333; }
-        .history-chart-wrap { width: 100%; overflow-x: auto; }
-        .history-empty { text-align: center; padding: 40px 20px; color: #aaa; font-size: 14px; }
-        .history-legend {
-            display: flex; gap: 18px; margin-top: 14px; font-size: 12px; color: #888;
-        }
-        .history-legend span { display: flex; align-items: center; gap: 6px; }
-
         /* Empty state */
         .empty-state {
             text-align: center; padding: 60px 20px;
@@ -395,16 +348,33 @@
 
         /* Toast */
         .toast {
-            position: fixed; bottom: 30px; right: 30px;
-            background: #333; color: white;
-            padding: 14px 22px; border-radius: 10px;
-            font-size: 14px; z-index: 300;
-            opacity: 0; transform: translateY(20px);
-            transition: all 0.3s; max-width: 350px;
+            position: fixed;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-20px);
+            background: #222;
+            color: #fff;
+            padding: 14px 32px;
+            border-radius: 50px;
+            font-size: 15px;
+            font-weight: 500;
+            z-index: 99999;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.35s ease, transform 0.35s ease;
+            max-width: 500px;
+            min-width: 200px;
+            text-align: center;
+            box-shadow: 0 6px 28px rgba(0,0,0,0.28);
+            white-space: nowrap;
         }
-        .toast.show { opacity: 1; transform: translateY(0); }
-        .toast.success { background: #27ae60; }
-        .toast.error { background: #e74c3c; }
+        .toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+            pointer-events: auto;
+        }
+        .toast.success { background: #1e8449; }
+        .toast.error   { background: #c0392b; }
 
         /* Loading */
         .loading { text-align: center; padding: 80px 20px; }
@@ -604,37 +574,6 @@
         }
         .plan-tag.pro { background: #fef3c7; color: #d97706; }
 
-        /* Prominent plan card in My Account modal */
-        .plan-card {
-            border-radius: 12px;
-            padding: 14px 18px;
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-        }
-        .plan-card.plan-pro {
-            background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
-            border: 1.5px solid #fbbf24;
-        }
-        .plan-card.plan-free {
-            background: #f8f9ff;
-            border: 1.5px solid #c7ceff;
-        }
-        .plan-card-left { display: flex; align-items: center; gap: 12px; }
-        .plan-card-icon { font-size: 28px; line-height: 1; }
-        .plan-card-name { font-size: 15px; font-weight: 800; color: #1a1a2e; }
-        .plan-card-desc { font-size: 12px; color: #888; margin-top: 1px; }
-        .plan-card-upgrade {
-            background: #5b67f8; color: white;
-            border: none; border-radius: 8px;
-            padding: 8px 14px; font-size: 12px; font-weight: 700;
-            cursor: pointer; white-space: nowrap;
-            text-decoration: none; display: inline-block;
-        }
-        .plan-card-upgrade:hover { background: #4351d8; }
-
         /* Responsive */
         @media (max-width: 768px) {
             .welcome-banner { flex-direction: column; gap: 20px; text-align: center; }
@@ -690,20 +629,8 @@
         <div class="account-modal">
             <button class="account-modal-close" onclick="closeAccountModal()">×</button>
             <div style="font-size:36px; margin-bottom:10px;">👤</div>
-            <h2>My Account</h2>
+            <h2>My Account <span class="plan-tag" id="planTag">Free</span></h2>
             <p class="modal-sub">Update your personal details below</p>
-
-            <!-- Plan card — populated by JS -->
-            <div class="plan-card plan-pro" id="planCard" style="display:none">
-                <div class="plan-card-left">
-                    <div class="plan-card-icon" id="planCardIcon">⭐</div>
-                    <div>
-                        <div class="plan-card-name" id="planCardName">Pro Plan</div>
-                        <div class="plan-card-desc" id="planCardDesc">All features unlocked</div>
-                    </div>
-                </div>
-                <div id="planCardAction"></div>
-            </div>
 
             <div class="acct-alert acct-success" id="acct-success">✅ Details updated successfully!</div>
             <div class="acct-alert acct-error"   id="acct-error"></div>
@@ -733,23 +660,6 @@
                 <button onclick="signOut()" style="background:none;border:none;color:#ef4444;font-size:14px;cursor:pointer;font-weight:600;">
                     🚪 Sign out of this account
                 </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Price History Modal -->
-    <div class="history-overlay" id="historyModal" onclick="closeHistoryOnOverlay(event)">
-        <div class="history-modal">
-            <button class="history-close" onclick="closeHistory()">×</button>
-            <h3 id="historyTitle">Price History</h3>
-            <p class="history-sub" id="historySub">Last 90 days of tracked prices</p>
-            <div class="history-chart-wrap" id="historyChartWrap">
-                <div class="history-empty">Loading…</div>
-            </div>
-            <div class="history-legend">
-                <span><svg width="20" height="4"><line x1="0" y1="2" x2="20" y2="2" stroke="#5b67f8" stroke-width="2"/></svg> Price</span>
-                <span><svg width="20" height="4"><line x1="0" y1="2" x2="20" y2="2" stroke="#ef4444" stroke-width="2" stroke-dasharray="4,3"/></svg> Your target</span>
-                <span><svg width="10" height="10"><circle cx="5" cy="5" r="4" fill="#ef4444"/></svg> Alert triggered</span>
             </div>
         </div>
     </div>
@@ -809,38 +719,19 @@
         <!-- Dashboard -->
         <div id="dashboardContent" style="display:none;">
 
-            <!-- Session expiry warning -->
-            <div id="sessionWarning" style="display:none; background:#fff3cd; border:1px solid #ffc107;
-                 border-radius:12px; padding:14px 20px; margin-bottom:18px; font-size:14px;
-                 color:#856404; align-items:center; gap:12px; justify-content:space-between;">
-                <span>⏱️ <strong>Your session is about to expire</strong> due to inactivity. Move your mouse or click anywhere to stay signed in.</span>
-                <button onclick="refreshExpiry(); document.getElementById('sessionWarning').style.display='none';"
-                    style="background:#5b67f8; color:white; border:none; border-radius:8px;
-                           padding:7px 14px; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap;">
-                    Stay signed in
-                </button>
-            </div>
-
             <!-- Welcome banner -->
             <div class="welcome-banner">
                 <div class="welcome-text">
                     <h1 id="welcomeTitle">Welcome back! 👋</h1>
                     <p id="welcomeSubtitle">Here's your price monitoring overview</p>
                 </div>
-                <!-- Shown for free trial users -->
-                <div class="trial-badge" id="trialBadge" style="display:none">
+                <div class="trial-badge" id="trialBadge">
                     <div class="days" id="trialDays">7</div>
                     <div class="label">Trial Days Left</div>
                 </div>
-                <!-- Shown for Pro users -->
-                <div class="pro-badge" id="proBadge" style="display:none">
-                    <div class="pro-icon">⭐</div>
-                    <div class="pro-label">Pro Member</div>
-                    <div class="pro-sub">All features unlocked</div>
-                </div>
             </div>
 
-            <!-- Trial warning (free users only) -->
+            <!-- Trial warning -->
             <div class="info-banner" id="trialWarning" style="display:none;">
                 ⏰ <span>Your free trial is ending soon! <a href="/#pricing" style="color:#856404; font-weight:bold;">Upgrade to Pro</a> to keep monitoring without interruption.</span>
             </div>
@@ -968,87 +859,13 @@
     </footer>
 
     <script>
-        const SESSION_KEY       = 'pg_token';
-        const EXPIRY_KEY        = 'pg_token_expiry';
-        const INACTIVITY_MS     = 10 * 60 * 1000;   // 10 minutes of inactivity
-        const WARN_BEFORE_MS    = 2  * 60 * 1000;   // warn 2 minutes before expiry
-        const THROTTLE_MS       = 30 * 1000;         // refresh expiry at most every 30s
-        let   lastRefresh       = 0;
-        let   warningShown      = false;
-        let   sessionCheckTimer = null;
-
         const params = new URLSearchParams(window.location.search);
-        let token = params.get('token');
+        const token = params.get('token');
         let userData = null;
         let productsData = [];
 
-        /* ── Session helpers ── */
-        function saveSession(tok) {
-            localStorage.setItem(SESSION_KEY, tok);
-            localStorage.setItem(EXPIRY_KEY, String(Date.now() + INACTIVITY_MS));
-        }
-
-        function refreshExpiry() {
-            // Throttle: only write to localStorage at most every 30 seconds
-            const now = Date.now();
-            if (now - lastRefresh < THROTTLE_MS) return;
-            lastRefresh = now;
-            localStorage.setItem(EXPIRY_KEY, String(now + INACTIVITY_MS));
-            // Hide warning banner if user became active again
-            if (warningShown) {
-                const w = document.getElementById('sessionWarning');
-                if (w) w.style.display = 'none';
-                warningShown = false;
-            }
-        }
-
-        function loadSession() {
-            const tok    = localStorage.getItem(SESSION_KEY);
-            const expiry = parseInt(localStorage.getItem(EXPIRY_KEY) || '0', 10);
-            if (!tok || Date.now() > expiry) { clearSession(); return null; }
-            return tok;
-        }
-
-        function clearSession() {
-            localStorage.removeItem(SESSION_KEY);
-            localStorage.removeItem(EXPIRY_KEY);
-        }
-
-        function startSessionWatcher() {
-            // Check every 15 seconds whether the session has expired
-            sessionCheckTimer = setInterval(() => {
-                const expiry = parseInt(localStorage.getItem(EXPIRY_KEY) || '0', 10);
-                const remaining = expiry - Date.now();
-
-                if (remaining <= 0) {
-                    clearInterval(sessionCheckTimer);
-                    clearSession();
-                    // Redirect with a message
-                    window.location.href = '/?session_expired=1';
-                    return;
-                }
-
-                // Show warning when 2 minutes are left
-                if (remaining <= WARN_BEFORE_MS && !warningShown) {
-                    warningShown = true;
-                    const w = document.getElementById('sessionWarning');
-                    if (w) w.style.display = 'flex';
-                }
-            }, 15000);
-        }
-
-        // Reset inactivity timer on any user interaction
-        ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'].forEach(evt =>
-            document.addEventListener(evt, refreshExpiry, { passive: true })
-        );
-
         window.onload = function() {
-            if (!token) {
-                token = loadSession();
-                if (!token) { showError(); return; }
-                const newUrl = `${window.location.pathname}?token=${token}`;
-                window.history.replaceState(null, '', newUrl);
-            }
+            if (!token) { showError(); return; }
             loadDashboard();
         };
 
@@ -1056,13 +873,10 @@
             fetch(`/api/dashboard?token=${token}`)
                 .then(res => res.json())
                 .then(data => {
-                    if (!data.success) { clearSession(); showError(); return; }
-                    saveSession(token);   // sets expiry = now + 10 min
-                    lastRefresh = Date.now();
+                    if (!data.success) { showError(); return; }
                     userData = data.user;
                     productsData = data.products || [];
                     renderDashboard();
-                    startSessionWatcher();
                 })
                 .catch(() => showError());
         }
@@ -1077,28 +891,18 @@
             document.getElementById('dropdownName').textContent  = userData.name;
             document.getElementById('dropdownEmail').textContent = userData.email;
             // Hide "Upgrade to Pro" in dropdown for Pro users
-            if (userData.is_pro) {
+            if (userData.status === 'pro') {
                 const upBtn = document.getElementById('upgradeDropdownBtn');
                 if (upBtn) upBtn.style.display = 'none';
             }
             document.getElementById('welcomeTitle').textContent = `Welcome back, ${userData.name.split(' ')[0]}! 👋`;
             document.getElementById('welcomeSubtitle').textContent = `Member since ${formatDate(userData.signup_date)} · ${userData.email}`;
 
-            if (userData.is_pro) {
-                // Pro user — show Pro badge, hide trial badge and warning entirely
-                document.getElementById('proBadge').style.display = 'block';
-                document.getElementById('trialBadge').style.display = 'none';
-                document.getElementById('trialWarning').style.display = 'none';
-            } else {
-                // Free trial user — show trial days badge
-                const days = userData.trial_days_remaining;
-                document.getElementById('trialDays').textContent = days;
-                document.getElementById('trialBadge').style.display = 'block';
-                document.getElementById('proBadge').style.display = 'none';
-                if (days <= 2) {
-                    document.getElementById('trialBadge').classList.add('expired');
-                    document.getElementById('trialWarning').style.display = 'flex';
-                }
+            const days = userData.trial_days_remaining;
+            document.getElementById('trialDays').textContent = days;
+            if (days <= 2) {
+                document.getElementById('trialBadge').classList.add('expired');
+                document.getElementById('trialWarning').style.display = 'flex';
             }
 
             updateStats();
@@ -1196,10 +1000,7 @@
 
                 <div class="product-footer">
                     <span class="added-date">${lastCheckedText}</span>
-                    <div style="display:flex; gap:8px; align-items:center;">
-                        <button class="btn-history" onclick="showPriceHistory(${product.id}, '${(product.store || 'Product').replace(/'/g,"\\'")}')">📈 History</button>
-                        <button class="btn-remove" onclick="removeProduct(${product.id})">✕ Remove</button>
-                    </div>
+                    <button class="btn-remove" onclick="removeProduct(${product.id})">✕ Remove</button>
                 </div>
             </div>`;
         }
@@ -1280,178 +1081,6 @@
                 btn.textContent = '🚀 Start Tracking';
                 btn.disabled = false;
             });
-        }
-
-        /* ── Price History ── */
-        function showPriceHistory(productId, storeName) {
-            document.getElementById('historyTitle').textContent = `Price History — ${storeName}`;
-            document.getElementById('historySub').textContent   = 'Last 90 days of tracked prices';
-            document.getElementById('historyChartWrap').innerHTML = '<div class="history-empty">Loading…</div>';
-            document.getElementById('historyModal').classList.add('active');
-
-            fetch(`/api/price-history/${productId}?token=${token}`)
-                .then(r => r.json())
-                .then(data => {
-                    if (!data.success || !data.history.length) {
-                        document.getElementById('historyChartWrap').innerHTML =
-                            '<div class="history-empty">📭 No price history yet.<br>Prices are recorded every hour. Check back soon!</div>';
-                        return;
-                    }
-                    // Find matching product for target price
-                    const prod = productsData.find(p => p.id === productId);
-                    const targetPrice = prod && prod.target_price ? parseFloat(prod.target_price) : null;
-                    renderHistoryChart(data.history, targetPrice);
-                })
-                .catch(() => {
-                    document.getElementById('historyChartWrap').innerHTML =
-                        '<div class="history-empty">Could not load history. Please try again.</div>';
-                });
-        }
-
-        function closeHistory() {
-            document.getElementById('historyModal').classList.remove('active');
-        }
-
-        function closeHistoryOnOverlay(e) {
-            if (e.target === document.getElementById('historyModal')) closeHistory();
-        }
-
-        function renderHistoryChart(history, targetPrice) {
-            const W = 560, H = 220, PAD = { top: 16, right: 16, bottom: 40, left: 52 };
-            const chartW = W - PAD.left - PAD.right;
-            const chartH = H - PAD.top  - PAD.bottom;
-
-            const prices = history.map(h => h.price);
-            const times  = history.map(h => new Date(h.checked_at).getTime());
-
-            let minP = Math.min(...prices);
-            let maxP = Math.max(...prices);
-            if (targetPrice !== null) {
-                minP = Math.min(minP, targetPrice);
-                maxP = Math.max(maxP, targetPrice);
-            }
-            // Add 5% padding to price range so line isn't clipped
-            const pad = (maxP - minP) * 0.12 || 1;
-            minP -= pad; maxP += pad;
-
-            const minT = Math.min(...times);
-            const maxT = Math.max(...times);
-            const rangeT = maxT - minT || 1;
-            const rangeP = maxP - minP;
-
-            const px = t => PAD.left + ((t - minT) / rangeT) * chartW;
-            const py = p => PAD.top  + (1 - (p - minP) / rangeP) * chartH;
-
-            // Build polyline points
-            const pts = history.map(h => `${px(new Date(h.checked_at).getTime())},${py(h.price)}`).join(' ');
-
-            // Y axis labels
-            const yTicks = 4;
-            let yLabels = '';
-            for (let i = 0; i <= yTicks; i++) {
-                const v = minP + (rangeP * i / yTicks);
-                const y = py(v);
-                yLabels += `<line x1="${PAD.left - 6}" y1="${y}" x2="${PAD.left}" y2="${y}" stroke="#ddd"/>
-                            <text x="${PAD.left - 8}" y="${y + 4}" text-anchor="end" font-size="10" fill="#aaa">$${v.toFixed(0)}</text>`;
-            }
-
-            // X axis labels (up to 5 dates)
-            const xCount = Math.min(history.length, 5);
-            let xLabels = '';
-            for (let i = 0; i < xCount; i++) {
-                const idx = Math.round(i * (history.length - 1) / Math.max(xCount - 1, 1));
-                const d   = new Date(history[idx].checked_at);
-                const lbl = `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
-                const x   = px(d.getTime());
-                xLabels += `<text x="${x}" y="${H - 8}" text-anchor="middle" font-size="9" fill="#bbb">${lbl}</text>`;
-            }
-
-            // Alert dots (prices at or below target)
-            let alertDots = '';
-            if (targetPrice !== null) {
-                history.forEach(h => {
-                    if (h.price <= targetPrice) {
-                        const x = px(new Date(h.checked_at).getTime());
-                        const y = py(h.price);
-                        alertDots += `<circle cx="${x}" cy="${y}" r="5" fill="#ef4444" stroke="white" stroke-width="1.5">
-                            <title>$${h.price.toFixed(2)} — alert triggered</title></circle>`;
-                    }
-                });
-            }
-
-            // Regular dots on every data point (smaller)
-            let dots = history.map(h => {
-                const isAlert = targetPrice !== null && h.price <= targetPrice;
-                if (isAlert) return '';
-                const x = px(new Date(h.checked_at).getTime());
-                const y = py(h.price);
-                return `<circle cx="${x}" cy="${y}" r="3" fill="#5b67f8" stroke="white" stroke-width="1">
-                    <title>$${h.price.toFixed(2)} — ${new Date(h.checked_at).toLocaleString()}</title></circle>`;
-            }).join('');
-
-            // Target price line
-            let targetLine = '';
-            if (targetPrice !== null) {
-                const ty = py(targetPrice);
-                targetLine = `<line x1="${PAD.left}" y1="${ty}" x2="${W - PAD.right}" y2="${ty}"
-                    stroke="#ef4444" stroke-width="1.5" stroke-dasharray="5,4" opacity="0.7"/>
-                    <text x="${W - PAD.right + 2}" y="${ty + 4}" font-size="9" fill="#ef4444">$${targetPrice.toFixed(2)}</text>`;
-            }
-
-            // Area fill under line
-            const firstX = px(times[0]), lastX = px(times[times.length - 1]);
-            const areaPath = `M${firstX},${py(prices[0])} ` +
-                history.map(h => `L${px(new Date(h.checked_at).getTime())},${py(h.price)}`).join(' ') +
-                ` L${lastX},${H - PAD.bottom} L${firstX},${H - PAD.bottom} Z`;
-
-            const svg = `
-            <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;" xmlns="http://www.w3.org/2000/svg">
-                <defs>
-                    <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stop-color="#5b67f8" stop-opacity="0.15"/>
-                        <stop offset="100%" stop-color="#5b67f8" stop-opacity="0"/>
-                    </linearGradient>
-                </defs>
-                <!-- Grid -->
-                <rect x="${PAD.left}" y="${PAD.top}" width="${chartW}" height="${chartH}" fill="#fafafa" rx="6"/>
-                <!-- Area -->
-                <path d="${areaPath}" fill="url(#areaGrad)"/>
-                <!-- Y axis -->
-                ${yLabels}
-                <!-- Target line -->
-                ${targetLine}
-                <!-- Line -->
-                <polyline points="${pts}" fill="none" stroke="#5b67f8" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
-                <!-- Dots -->
-                ${dots}
-                ${alertDots}
-                <!-- X axis -->
-                <line x1="${PAD.left}" y1="${H - PAD.bottom}" x2="${W - PAD.right}" y2="${H - PAD.bottom}" stroke="#e5e7eb"/>
-                ${xLabels}
-            </svg>`;
-
-            // Summary stats
-            const latest  = prices[prices.length - 1];
-            const lowest   = Math.min(...prices);
-            const highest  = Math.max(...prices);
-            const statsHtml = `
-            <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:16px; text-align:center;">
-                <div style="background:#f8f9ff; border-radius:10px; padding:10px;">
-                    <div style="font-size:11px; color:#888; margin-bottom:3px;">Current</div>
-                    <div style="font-size:16px; font-weight:800; color:#5b67f8;">$${latest.toFixed(2)}</div>
-                </div>
-                <div style="background:#f0fdf4; border-radius:10px; padding:10px;">
-                    <div style="font-size:11px; color:#888; margin-bottom:3px;">Lowest (90d)</div>
-                    <div style="font-size:16px; font-weight:800; color:#16a34a;">$${lowest.toFixed(2)}</div>
-                </div>
-                <div style="background:#fff5f5; border-radius:10px; padding:10px;">
-                    <div style="font-size:11px; color:#888; margin-bottom:3px;">Highest (90d)</div>
-                    <div style="font-size:16px; font-weight:800; color:#dc2626;">$${highest.toFixed(2)}</div>
-                </div>
-            </div>`;
-
-            document.getElementById('historyChartWrap').innerHTML = statsHtml + svg;
-            document.getElementById('historySub').textContent = `${history.length} price check${history.length !== 1 ? 's' : ''} recorded`;
         }
 
         function removeProduct(productId) {
@@ -1548,25 +1177,13 @@
                 document.getElementById('acct-email').value     = userData.email || '';
                 document.getElementById('acct-phone').value     = userData.phone || '';
                 document.getElementById('acct-newsletter').checked = userData.newsletter !== false;
-
-                // Populate the plan card
-                const card = document.getElementById('planCard');
-                card.style.display = 'flex';
-                if (userData.is_pro) {
-                    card.className = 'plan-card plan-pro';
-                    document.getElementById('planCardIcon').textContent = '⭐';
-                    document.getElementById('planCardName').textContent = 'Pro Plan — Active';
-                    document.getElementById('planCardDesc').textContent = 'All features unlocked · Unlimited products';
-                    document.getElementById('planCardAction').innerHTML = '';
+                const tag = document.getElementById('planTag');
+                if (userData.status === 'pro') {
+                    tag.textContent = '⭐ Pro';
+                    tag.className = 'plan-tag pro';
                 } else {
-                    card.className = 'plan-card plan-free';
-                    const days = userData.trial_days_remaining || 0;
-                    document.getElementById('planCardIcon').textContent = '🛡️';
-                    document.getElementById('planCardName').textContent = 'Free Trial';
-                    document.getElementById('planCardDesc').textContent =
-                        days > 0 ? `${days} day${days !== 1 ? 's' : ''} remaining` : 'Trial expired';
-                    document.getElementById('planCardAction').innerHTML =
-                        '<a class="plan-card-upgrade" href="/#pricing">Upgrade to Pro</a>';
+                    tag.textContent = 'Free Trial';
+                    tag.className = 'plan-tag';
                 }
             }
             document.getElementById('acct-success').style.display = 'none';
@@ -1632,7 +1249,7 @@
 
         /* ── Sign Out ── */
         function signOut() {
-            clearSession();
+            localStorage.removeItem('pg_token');
             window.location.href = '/';
         }
 
@@ -1706,37 +1323,15 @@
                 justify-content: center; z-index: 1000;
             `;
             el.innerHTML = `
-                <div style="background:white; border-radius:16px; padding:36px; max-width:460px;
+                <div style="background:white; border-radius:16px; padding:40px; max-width:440px;
                             width:90%; text-align:center; box-shadow:0 20px 60px rgba(0,0,0,0.25);">
                     <div style="font-size:48px; margin-bottom:12px;">🚀</div>
-                    <h2 style="color:#333; margin-bottom:8px;">Upgrade to Pro</h2>
-                    <p style="color:#666; font-size:15px; margin-bottom:20px; line-height:1.6;">
+                    <h2 style="color:#333; margin-bottom:10px;">Upgrade to Pro</h2>
+                    <p style="color:#666; font-size:15px; margin-bottom:24px; line-height:1.6;">
                         ${message || "You've reached the 3-product limit on the free plan."}
                     </p>
-
-                    <!-- Billing toggle -->
-                    <div style="display:inline-flex; background:#f3f4f6; border-radius:50px;
-                                padding:4px; margin-bottom:20px; gap:4px;">
-                        <button id="tog-monthly" onclick="switchUpgradeBilling('monthly')"
-                            style="padding:7px 18px; border-radius:50px; border:none; cursor:pointer;
-                                   font-size:13px; font-weight:600;
-                                   background:#5b67f8; color:white;">
-                            Monthly
-                        </button>
-                        <button id="tog-annual" onclick="switchUpgradeBilling('annual')"
-                            style="padding:7px 18px; border-radius:50px; border:none; cursor:pointer;
-                                   font-size:13px; font-weight:600;
-                                   background:transparent; color:#666;">
-                            Annual <span style="background:#22c55e; color:white; font-size:10px;
-                                               padding:2px 6px; border-radius:50px; margin-left:4px;">Save 33%</span>
-                        </button>
-                    </div>
-
-                    <div style="background:#f0f7ff; border-radius:12px; padding:20px; margin-bottom:20px; text-align:left;">
-                        <p id="upgrade-price-line" style="color:#5b67f8; font-weight:700; margin:0 0 6px; font-size:16px;">
-                            ⭐ PriceGuard Pro — $4.99/month
-                        </p>
-                        <p id="upgrade-billing-note" style="color:#888; font-size:12px; margin:0 0 12px;"></p>
+                    <div style="background:#f0f7ff; border-radius:12px; padding:20px; margin-bottom:24px; text-align:left;">
+                        <p style="color:#5b67f8; font-weight:700; margin:0 0 10px;">⭐ PriceGuard Pro — $4.99/month</p>
                         <p style="color:#555; font-size:14px; margin:4px 0;">✓ Unlimited products tracked</p>
                         <p style="color:#555; font-size:14px; margin:4px 0;">✓ Hourly automatic price checks</p>
                         <p style="color:#555; font-size:14px; margin:4px 0;">✓ Instant email alerts on price drops</p>
@@ -1758,31 +1353,6 @@
             el.addEventListener('click', (e) => { if (e.target === el) el.remove(); });
         }
 
-        let upgradeBilling = 'monthly';
-
-        function switchUpgradeBilling(plan) {
-            upgradeBilling = plan;
-            const togM = document.getElementById('tog-monthly');
-            const togA = document.getElementById('tog-annual');
-            const priceLine = document.getElementById('upgrade-price-line');
-            const billingNote = document.getElementById('upgrade-billing-note');
-            const btn = document.getElementById('checkoutBtn');
-
-            if (plan === 'annual') {
-                togA.style.background = '#5b67f8'; togA.style.color = 'white';
-                togM.style.background = 'transparent'; togM.style.color = '#666';
-                priceLine.textContent  = '⭐ PriceGuard Pro — $3.33/month';
-                billingNote.textContent = 'Billed as $39.99/year — save $19.89 vs monthly';
-                btn.textContent = 'Upgrade Now — $39.99/year';
-            } else {
-                togM.style.background = '#5b67f8'; togM.style.color = 'white';
-                togA.style.background = 'transparent'; togA.style.color = '#666';
-                priceLine.textContent  = '⭐ PriceGuard Pro — $4.99/month';
-                billingNote.textContent = '';
-                btn.textContent = 'Upgrade Now — $4.99/mo';
-            }
-        }
-
         async function startCheckout() {
             const btn = document.getElementById('checkoutBtn');
             if (!btn) return;
@@ -1790,18 +1360,18 @@
             btn.disabled = true;
 
             try {
-                const res  = await fetch(`/api/create-checkout-session?token=${token}&billing=${upgradeBilling}`, { method: 'POST' });
+                const res  = await fetch(`/api/create-checkout-session?token=${token}`, { method: 'POST' });
                 const data = await res.json();
                 if (data.checkout_url) {
                     window.location.href = data.checkout_url;
                 } else {
-                    showToast(data.error || 'Could not start checkout. Try again.');
-                    btn.textContent = upgradeBilling === 'annual' ? 'Upgrade Now — $39.99/year' : 'Upgrade Now — $4.99/mo';
+                    showToast(data.error || 'Could not start checkout. Try again.', 'error');
+                    btn.textContent = 'Upgrade Now — $4.99/mo';
                     btn.disabled = false;
                 }
             } catch (e) {
-                showToast('Something went wrong. Please try again.');
-                btn.textContent = upgradeBilling === 'annual' ? 'Upgrade Now — $39.99/year' : 'Upgrade Now — $4.99/mo';
+                showToast('Something went wrong. Please try again.', 'error');
+                btn.textContent = 'Upgrade Now — $4.99/mo';
                 btn.disabled = false;
             }
         }
