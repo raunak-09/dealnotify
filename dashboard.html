@@ -314,6 +314,70 @@
         }
         .btn-cancel-price:hover { border-color: #e74c3c; color: #e74c3c; }
 
+        /* History button on product cards */
+        .btn-history {
+            background: #f0eeff; border: 1px solid #d8d5f0; cursor: pointer;
+            font-size: 11px; padding: 2px 8px;
+            border-radius: 50px; color: #5b67f8; font-weight: 600;
+            transition: all 0.2s; margin-left: 6px;
+        }
+        .btn-history:hover { background: #5b67f8; color: white; border-color: #5b67f8; }
+
+        /* Price History Modal */
+        .history-overlay {
+            display: none; position: fixed; top: 0; left: 0;
+            width: 100%; height: 100%; background: rgba(0,0,0,0.55);
+            backdrop-filter: blur(4px);
+            z-index: 500; align-items: center; justify-content: center;
+            padding: 20px;
+        }
+        .history-overlay.active { display: flex; }
+        .history-modal {
+            background: white; border-radius: 16px; max-width: 680px; width: 100%;
+            max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+            padding: 28px;
+        }
+        .history-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 20px;
+        }
+        .history-header h3 { margin: 0; font-size: 18px; color: #333; }
+        .history-close {
+            background: none; border: none; font-size: 24px; cursor: pointer;
+            color: #999; padding: 0 6px; line-height: 1;
+        }
+        .history-close:hover { color: #e74c3c; }
+
+        .history-stats {
+            display: flex; gap: 12px; margin-bottom: 20px;
+        }
+        .history-stat {
+            flex: 1; text-align: center; padding: 12px;
+            background: #f8f9fa; border-radius: 10px;
+        }
+        .history-stat .stat-label { font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.5px; }
+        .history-stat .stat-value { font-size: 20px; font-weight: 700; margin-top: 4px; }
+        .history-stat .stat-value.current { color: #333; }
+        .history-stat .stat-value.lowest  { color: #27ae60; }
+        .history-stat .stat-value.highest { color: #e74c3c; }
+
+        .history-chart-container {
+            background: #fafbff; border: 1px solid #eef0ff;
+            border-radius: 12px; padding: 20px 16px 10px;
+            margin-bottom: 16px; overflow-x: auto;
+        }
+        .history-chart-container svg { display: block; }
+        .history-empty {
+            text-align: center; padding: 40px 20px;
+            color: #999; font-size: 14px;
+        }
+        .history-empty .empty-icon { font-size: 40px; margin-bottom: 10px; }
+
+        @media (max-width: 600px) {
+            .history-stats { flex-direction: column; gap: 8px; }
+            .history-modal { padding: 18px; }
+        }
+
         /* Empty state */
         .empty-state {
             text-align: center; padding: 60px 20px;
@@ -852,6 +916,23 @@
         </div>
     </div>
 
+    <!-- Price History Modal -->
+    <div class="history-overlay" id="historyOverlay" onclick="if(event.target===this) closeHistory()">
+        <div class="history-modal">
+            <div class="history-header">
+                <h3 id="historyTitle">📈 Price History</h3>
+                <button class="history-close" onclick="closeHistory()">×</button>
+            </div>
+            <div class="history-stats" id="historyStats"></div>
+            <div class="history-chart-container" id="historyChartContainer">
+                <div class="history-empty" id="historyLoading">
+                    <div class="empty-icon">⏳</div>
+                    <p>Loading price history…</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast -->
     <div class="toast" id="toast"></div>
 
@@ -1039,7 +1120,10 @@
 
                 <div class="product-footer">
                     <span class="added-date">${lastCheckedText}</span>
-                    <button class="btn-remove" onclick="removeProduct(${product.id})">✕ Remove</button>
+                    <div>
+                        <button class="btn-history" onclick="showPriceHistory(${product.id}, '${(product.store || 'Product').replace(/'/g, "\\'")}')">📈 History</button>
+                        <button class="btn-remove" onclick="removeProduct(${product.id})">✕ Remove</button>
+                    </div>
                 </div>
             </div>`;
         }
@@ -1191,6 +1275,140 @@
                 showToast('Something went wrong. Try again.', 'error');
                 if (saveBtn) { saveBtn.textContent = 'Save'; saveBtn.disabled = false; }
             });
+        }
+
+        // ─── Price History ───────────────────────────
+        function showPriceHistory(productId, storeName) {
+            document.getElementById('historyTitle').textContent = `📈 Price History — ${storeName}`;
+            document.getElementById('historyStats').innerHTML = '';
+            document.getElementById('historyChartContainer').innerHTML = '<div class="history-empty" id="historyLoading"><div class="empty-icon">⏳</div><p>Loading price history…</p></div>';
+            document.getElementById('historyOverlay').classList.add('active');
+
+            const product = productsData.find(p => p.id === productId);
+
+            fetch(`/api/price-history/${productId}?token=${token}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (!data.success || !data.history || data.history.length === 0) {
+                        document.getElementById('historyChartContainer').innerHTML =
+                            '<div class="history-empty"><div class="empty-icon">📭</div><p>No price history yet.<br>History builds up as we check prices over time.</p></div>';
+                        return;
+                    }
+                    renderHistoryChart(data.history, product);
+                })
+                .catch(() => {
+                    document.getElementById('historyChartContainer').innerHTML =
+                        '<div class="history-empty"><div class="empty-icon">⚠️</div><p>Failed to load history. Try again.</p></div>';
+                });
+        }
+
+        function closeHistory() {
+            document.getElementById('historyOverlay').classList.remove('active');
+        }
+
+        function renderHistoryChart(history, product) {
+            const prices = history.map(h => h.price);
+            const dates  = history.map(h => new Date(h.checked_at));
+            const minPrice = Math.min(...prices);
+            const maxPrice = Math.max(...prices);
+            const currentPrice = prices[prices.length - 1];
+            const targetPrice = product ? parseFloat(product.target_price) : null;
+
+            // ── Stats ──
+            const statsEl = document.getElementById('historyStats');
+            statsEl.innerHTML = `
+                <div class="history-stat">
+                    <div class="stat-label">Current</div>
+                    <div class="stat-value current">$${currentPrice.toFixed(2)}</div>
+                </div>
+                <div class="history-stat">
+                    <div class="stat-label">Lowest</div>
+                    <div class="stat-value lowest">$${minPrice.toFixed(2)}</div>
+                </div>
+                <div class="history-stat">
+                    <div class="stat-label">Highest</div>
+                    <div class="stat-value highest">$${maxPrice.toFixed(2)}</div>
+                </div>
+                ${targetPrice ? `<div class="history-stat">
+                    <div class="stat-label">Target</div>
+                    <div class="stat-value" style="color:#5b67f8">$${targetPrice.toFixed(2)}</div>
+                </div>` : ''}
+            `;
+
+            // ── SVG Chart ──
+            const W = 620, H = 260;
+            const padL = 55, padR = 20, padT = 20, padB = 40;
+            const chartW = W - padL - padR;
+            const chartH = H - padT - padB;
+
+            // Price range with 5% padding
+            const range = maxPrice - minPrice || 1;
+            const yMin = minPrice - range * 0.05;
+            const yMax = maxPrice + range * 0.05;
+
+            function x(i) { return padL + (i / Math.max(history.length - 1, 1)) * chartW; }
+            function y(p) { return padT + chartH - ((p - yMin) / (yMax - yMin)) * chartH; }
+
+            // Build polyline points
+            const points = history.map((h, i) => `${x(i).toFixed(1)},${y(h.price).toFixed(1)}`).join(' ');
+            // Area fill (closed polygon)
+            const areaPoints = `${x(0).toFixed(1)},${(padT + chartH).toFixed(1)} ${points} ${x(history.length - 1).toFixed(1)},${(padT + chartH).toFixed(1)}`;
+
+            // Y-axis ticks (5 ticks)
+            let yTicks = '';
+            for (let i = 0; i <= 4; i++) {
+                const val = yMin + (yMax - yMin) * (i / 4);
+                const ty = y(val);
+                yTicks += `<line x1="${padL}" y1="${ty}" x2="${W - padR}" y2="${ty}" stroke="#eee" stroke-width="1"/>`;
+                yTicks += `<text x="${padL - 8}" y="${ty + 4}" text-anchor="end" fill="#999" font-size="11">$${val.toFixed(0)}</text>`;
+            }
+
+            // X-axis labels (up to 6 date labels)
+            let xLabels = '';
+            const labelCount = Math.min(history.length, 6);
+            for (let i = 0; i < labelCount; i++) {
+                const idx = Math.round(i * (history.length - 1) / Math.max(labelCount - 1, 1));
+                const d = dates[idx];
+                const label = `${d.getMonth() + 1}/${d.getDate()}`;
+                xLabels += `<text x="${x(idx)}" y="${H - 6}" text-anchor="middle" fill="#999" font-size="11">${label}</text>`;
+            }
+
+            // Target price dashed line
+            let targetLine = '';
+            if (targetPrice && targetPrice >= yMin && targetPrice <= yMax) {
+                const ty = y(targetPrice);
+                targetLine = `<line x1="${padL}" y1="${ty}" x2="${W - padR}" y2="${ty}" stroke="#5b67f8" stroke-width="1.5" stroke-dasharray="6,4"/>
+                    <text x="${W - padR + 4}" y="${ty + 4}" fill="#5b67f8" font-size="10" font-weight="600">Target</text>`;
+            }
+
+            // Alert dots (price at or below target)
+            let alertDots = '';
+            if (targetPrice) {
+                history.forEach((h, i) => {
+                    if (h.price <= targetPrice) {
+                        alertDots += `<circle cx="${x(i)}" cy="${y(h.price)}" r="4" fill="#e74c3c" stroke="white" stroke-width="1.5"/>`;
+                    }
+                });
+            }
+
+            const svg = `
+                <svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px;" xmlns="http://www.w3.org/2000/svg">
+                    ${yTicks}
+                    ${xLabels}
+                    <polygon points="${areaPoints}" fill="url(#areaGrad)" opacity="0.3"/>
+                    <polyline points="${points}" fill="none" stroke="#5b67f8" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+                    ${targetLine}
+                    ${alertDots}
+                    <circle cx="${x(history.length - 1)}" cy="${y(currentPrice)}" r="5" fill="#5b67f8" stroke="white" stroke-width="2"/>
+                    <defs>
+                        <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stop-color="#5b67f8" stop-opacity="0.4"/>
+                            <stop offset="100%" stop-color="#5b67f8" stop-opacity="0.02"/>
+                        </linearGradient>
+                    </defs>
+                </svg>`;
+
+            document.getElementById('historyChartContainer').innerHTML = svg;
         }
 
         function openContactModal() {
