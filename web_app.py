@@ -181,6 +181,23 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_price_history_product
             ON price_history(product_id, checked_at DESC);
         """)
+        # Alerts log — every price-drop alert email we send
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS alerts_log (
+                id         SERIAL PRIMARY KEY,
+                user_id    INTEGER NOT NULL,
+                product_id INTEGER NOT NULL,
+                product_url TEXT,
+                store      TEXT,
+                price_at_alert NUMERIC(10,2),
+                target_price   NUMERIC(10,2),
+                sent_at    TIMESTAMP NOT NULL DEFAULT NOW()
+            );
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_alerts_log_sent
+            ON alerts_log(sent_at DESC);
+        """)
         conn.commit()
         print("✅ Database tables ready")
     except Exception as e:
@@ -1233,6 +1250,14 @@ def check_prices_for_user():
                     )
                     alerts_sent += 1
                     print(f"🔔 Alert sent for {user['email']} - price ${current_price} <= target ${target}")
+                    # Log to alerts_log
+                    try:
+                        cur.execute("""
+                            INSERT INTO alerts_log (user_id, product_id, product_url, store, price_at_alert, target_price)
+                            VALUES (%s, %s, %s, %s, %s, %s)
+                        """, (user['id'], product['id'], url, product.get('store'), current_price, target))
+                    except Exception as log_err:
+                        print(f"⚠️ alerts_log insert error (non-fatal): {log_err}")
 
                 cur.execute("""
                     UPDATE products
@@ -1367,6 +1392,67 @@ def get_signups():
         conn.close()
 
 
+@app.route('/api/alerts-log', methods=['GET'])
+def get_alerts_log():
+    """Return alert stats and recent alerts (admin endpoint)"""
+    conn = get_db_conn()
+    cur  = conn.cursor()
+    try:
+        # Total alerts ever
+        cur.execute("SELECT COUNT(*) AS cnt FROM alerts_log")
+        total = _fetchone(cur)['cnt']
+
+        # Alerts in last 7 days
+        cur.execute("SELECT COUNT(*) AS cnt FROM alerts_log WHERE sent_at >= NOW() - INTERVAL '7 days'")
+        last_7d = _fetchone(cur)['cnt']
+
+        # Alerts in last 24 hours
+        cur.execute("SELECT COUNT(*) AS cnt FROM alerts_log WHERE sent_at >= NOW() - INTERVAL '1 day'")
+        last_24h = _fetchone(cur)['cnt']
+
+        # Unique users alerted
+        cur.execute("SELECT COUNT(DISTINCT user_id) AS cnt FROM alerts_log")
+        unique_users = _fetchone(cur)['cnt']
+
+        # Recent 50 alerts with user email
+        cur.execute("""
+            SELECT a.id, a.product_url, a.store, a.price_at_alert, a.target_price,
+                   a.sent_at, u.name, u.email
+            FROM alerts_log a
+            LEFT JOIN users u ON u.id = a.user_id
+            ORDER BY a.sent_at DESC
+            LIMIT 50
+        """)
+        recent = _fetchall(cur)
+        alerts = [{
+            'id': r['id'],
+            'user_name': r.get('name', ''),
+            'user_email': r.get('email', ''),
+            'product_url': r['product_url'],
+            'store': r.get('store', ''),
+            'price_at_alert': float(r['price_at_alert']) if r['price_at_alert'] else None,
+            'target_price': float(r['target_price']) if r['target_price'] else None,
+            'sent_at': r['sent_at'].isoformat() if hasattr(r['sent_at'], 'isoformat') else r['sent_at']
+        } for r in recent]
+
+        return jsonify({
+            'success': True,
+            'stats': {
+                'total': total,
+                'last_7_days': last_7d,
+                'last_24_hours': last_24h,
+                'unique_users_alerted': unique_users
+            },
+            'recent_alerts': alerts
+        }), 200
+    except Exception as e:
+        print(f"❌ alerts-log error: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
 @app.route('/admin')
 def admin():
     """Admin dashboard"""
@@ -1378,6 +1464,23 @@ def admin():
 
         cur.execute("SELECT COUNT(*) as cnt FROM products")
         total_products = _fetchone(cur)['cnt']
+
+        # Alert stats
+        cur.execute("SELECT COUNT(*) as cnt FROM alerts_log")
+        total_alerts = _fetchone(cur)['cnt']
+
+        cur.execute("SELECT COUNT(*) as cnt FROM alerts_log WHERE sent_at >= NOW() - INTERVAL '7 days'")
+        alerts_7d = _fetchone(cur)['cnt']
+
+        # Recent 20 alerts
+        cur.execute("""
+            SELECT a.product_url, a.store, a.price_at_alert, a.target_price,
+                   a.sent_at, u.name AS user_name, u.email AS user_email
+            FROM alerts_log a
+            LEFT JOIN users u ON u.id = a.user_id
+            ORDER BY a.sent_at DESC LIMIT 20
+        """)
+        recent_alerts = _fetchall(cur)
 
         cur.execute("""
             SELECT u.id, u.name, u.email, u.signup_date, u.status, u.token,
@@ -1411,17 +1514,17 @@ def admin():
     <style>
     body {{ font-family: Arial; margin: 20px; background: #f5f5f5; }}
     .container {{ max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; }}
-    h1 {{ color: #667eea; }}
+    h1 {{ color: #5b67f8; }}
     h2 {{ color: #333; margin-top: 30px; }}
     table {{ border-collapse: collapse; width: 100%; margin-top: 20px; }}
     th, td {{ border: 1px solid #ddd; padding: 12px; text-align: left; font-size: 13px; }}
-    th {{ background-color: #667eea; color: white; }}
+    th {{ background-color: #5b67f8; color: white; }}
     tr:nth-child(even) {{ background-color: #f9f9f9; }}
     .stats {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }}
-    .stat-card {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 10px; }}
+    .stat-card {{ background: linear-gradient(135deg, #5b67f8 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 10px; }}
     .stat-number {{ font-size: 32px; font-weight: bold; }}
     .stat-label {{ font-size: 14px; margin-top: 10px; }}
-    a {{ color: #667eea; }}
+    a {{ color: #5b67f8; }}
     </style>
     </head>
     <body>
@@ -1440,7 +1543,24 @@ def admin():
     <div class="stat-number">${total_users * 4.99:.2f}</div>
     <div class="stat-label">Potential Monthly Revenue</div>
     </div>
+    <div class="stat-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+    <div class="stat-number">{total_alerts}</div>
+    <div class="stat-label">Total Alerts Sent</div>
     </div>
+    <div class="stat-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+    <div class="stat-number">{alerts_7d}</div>
+    <div class="stat-label">Alerts (Last 7 Days)</div>
+    </div>
+    </div>
+
+    <h2>🔔 Recent Alerts</h2>
+    <table>
+    <tr>
+    <th>User</th><th>Email</th><th>Store</th><th>Price at Alert</th><th>Target</th><th>Sent At</th><th>Product URL</th>
+    </tr>
+    {"".join([f'<tr><td>{a.get("user_name","N/A")}</td><td>{a.get("user_email","")}</td><td>{a.get("store","")}</td><td>${a.get("price_at_alert","")}</td><td>${a.get("target_price","")}</td><td>{str(a.get("sent_at",""))[:19]}</td><td><a href="{a.get("product_url","")}" target="_blank">View</a></td></tr>' for a in recent_alerts]) if recent_alerts else '<tr><td colspan="7" style="text-align:center;color:#999;">No alerts sent yet</td></tr>'}
+    </table>
+
     <h2>Signup List</h2>
     <table>
     <tr>
@@ -1736,6 +1856,19 @@ def check_all_prices_job():
                     )
                     total_alerts += 1
                     print(f"   🔔 Alert sent — ${current_price} <= target ${target}")
+                    # Log to alerts_log
+                    try:
+                        aconn = get_db_conn()
+                        acur  = aconn.cursor()
+                        acur.execute("""
+                            INSERT INTO alerts_log (user_id, product_id, product_url, store, price_at_alert, target_price)
+                            VALUES (%s, %s, %s, %s, %s, %s)
+                        """, (user_id, product['id'], url, product.get('store'), current_price, target))
+                        aconn.commit()
+                        acur.close()
+                        aconn.close()
+                    except Exception as log_err:
+                        print(f"⚠️ alerts_log insert error (non-fatal): {log_err}")
 
                 # Persist updated price to DB
                 conn = get_db_conn()
