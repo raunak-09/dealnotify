@@ -751,10 +751,16 @@
 
             <button class="acct-save-btn" id="acct-save-btn" onclick="saveAccountDetails()">Save Changes</button>
 
-            <div style="margin-top:20px; padding-top:16px; border-top:1px solid #e5e7eb; text-align:center;">
+            <div style="margin-top:20px; padding-top:16px; border-top:1px solid #e5e7eb; text-align:center; display:flex; flex-direction:column; gap:10px;">
                 <button onclick="signOut()" style="background:none;border:none;color:#ef4444;font-size:14px;cursor:pointer;font-weight:600;">
                     🚪 Sign out of this account
                 </button>
+                <div id="cancelSubSection" style="display:none;">
+                    <a href="/contact.html?subject=Cancellation+Request" target="_blank"
+                       style="font-size:13px; color:#999; text-decoration:underline; cursor:pointer;">
+                       Cancel Pro subscription
+                    </a>
+                </div>
             </div>
         </div>
     </div>
@@ -958,14 +964,14 @@
                     <ul>
                         <li><a href="mailto:hello@dealnotify.co">hello@dealnotify.co</a></li>
                         <li><a href="#" onclick="openContactModal(); return false;">Contact Us</a></li>
-                        <li><a href="/">Privacy Policy</a></li>
-                        <li><a href="/">Terms of Service</a></li>
+                        <li><a href="/terms.html" target="_blank">Terms of Service</a></li>
+                        <li><a href="/contact.html?subject=Cancellation+Request" target="_blank" style="color:#e74c3c;">Cancel Subscription</a></li>
                     </ul>
                 </div>
             </div>
             <div class="footer-bottom">
-                <span>© 2026 PriceGuard. All rights reserved. Made with ❤️ for smart shoppers.</span>
-                <span>Questions? <a href="mailto:hello@dealnotify.co">hello@dealnotify.co</a></span>
+                <span>© 2026 PriceGuard. All rights reserved. Made with ❤️ in Austin, TX.</span>
+                <span><a href="/terms.html">Terms of Service</a> · <a href="/contact.html">Contact</a> · <a href="mailto:hello@dealnotify.co">hello@dealnotify.co</a></span>
             </div>
         </div>
     </footer>
@@ -1502,12 +1508,16 @@
                 document.getElementById('acct-phone').value     = userData.phone || '';
                 document.getElementById('acct-newsletter').checked = userData.newsletter !== false;
                 const tag = document.getElementById('planTag');
-                if (userData.status === 'pro') {
+                const isPro = userData.is_pro || userData.status === 'pro';
+                if (isPro) {
                     tag.textContent = '⭐ Pro';
                     tag.className = 'plan-tag pro';
+                    // Show cancel link only for Pro subscribers
+                    document.getElementById('cancelSubSection').style.display = 'block';
                 } else {
-                    tag.textContent = 'Free Trial';
+                    tag.textContent = 'Free';
                     tag.className = 'plan-tag';
+                    document.getElementById('cancelSubSection').style.display = 'none';
                 }
             }
             document.getElementById('acct-success').style.display = 'none';

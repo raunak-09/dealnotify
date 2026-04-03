@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contact Us – PriceGuard</title>
+    <meta name="description" content="Get in touch with PriceGuard. We're here to help with questions, cancellations, and support.">
+    <link rel="canonical" href="https://www.dealnotify.co/contact">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --primary: #5b67f8;
+            --primary-dark: #4351d8;
+            --text: #1a1a2e;
+            --text-light: #5c5c7a;
+            --bg-light: #f7f8ff;
+            --white: #ffffff;
+            --border: #e5e7eb;
+            --green: #22c55e;
+        }
+        html { scroll-behavior: smooth; }
+        body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; line-height: 1.65; color: var(--text); background: var(--bg-light); -webkit-font-smoothing: antialiased; }
+        a { color: var(--primary); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+
+        /* NAV */
+        header { background: rgba(255,255,255,0.97); backdrop-filter: blur(10px); position: fixed; width: 100%; top: 0; z-index: 200; border-bottom: 1px solid var(--border); }
+        nav { max-width: 1160px; margin: 0 auto; padding: 0 24px; height: 64px; display: flex; align-items: center; justify-content: space-between; }
+        .logo { font-size: 20px; font-weight: 800; color: var(--primary); letter-spacing: -0.5px; text-decoration: none; }
+        .nav-links { display: flex; gap: 24px; align-items: center; }
+        .nav-links a { font-size: 14px; color: var(--text-light); font-weight: 500; text-decoration: none; }
+        .nav-links a:hover { color: var(--primary); }
+        .nav-cta { background: var(--primary); color: var(--white) !important; padding: 8px 18px; border-radius: 50px; font-weight: 600 !important; transition: background 0.2s; }
+        .nav-cta:hover { background: var(--primary-dark); }
+
+        /* PAGE */
+        .page-wrap { max-width: 1000px; margin: 0 auto; padding: 100px 24px 80px; }
+        .page-header { text-align: center; margin-bottom: 50px; }
+        .page-header h1 { font-size: 36px; font-weight: 800; letter-spacing: -1px; margin-bottom: 10px; }
+        .page-header p { font-size: 16px; color: var(--text-light); max-width: 480px; margin: 0 auto; }
+
+        .contact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: start; }
+
+        /* CONTACT CARDS */
+        .contact-cards { display: flex; flex-direction: column; gap: 16px; }
+        .contact-card { background: var(--white); border: 1px solid var(--border); border-radius: 16px; padding: 24px; display: flex; gap: 16px; align-items: flex-start; transition: box-shadow 0.2s; }
+        .contact-card:hover { box-shadow: 0 4px 20px rgba(91,103,248,0.10); }
+        .contact-card-icon { font-size: 28px; flex-shrink: 0; }
+        .contact-card h3 { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+        .contact-card p { font-size: 14px; color: var(--text-light); line-height: 1.5; margin-bottom: 8px; }
+        .contact-card a { font-size: 14px; font-weight: 600; color: var(--primary); }
+
+        .cancel-card { background: #fff8f0; border-color: #fde8cc; }
+        .cancel-card h3 { color: #b45309; }
+        .cancel-card a { color: #b45309; }
+
+        /* FORM */
+        .contact-form-wrap { background: var(--white); border: 1px solid var(--border); border-radius: 20px; padding: 36px; box-shadow: 0 4px 24px rgba(0,0,0,0.05); }
+        .contact-form-wrap h2 { font-size: 22px; font-weight: 800; margin-bottom: 6px; }
+        .contact-form-wrap p { font-size: 14px; color: var(--text-light); margin-bottom: 24px; }
+
+        .form-group { margin-bottom: 18px; }
+        .form-group label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: var(--text); }
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%; padding: 12px 14px; border: 2px solid var(--border);
+            border-radius: 10px; font-size: 15px; color: var(--text);
+            font-family: inherit; transition: border-color 0.2s; background: var(--white);
+        }
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+            outline: none; border-color: var(--primary);
+        }
+        .form-group textarea { resize: vertical; min-height: 120px; }
+
+        .btn-submit {
+            width: 100%; background: linear-gradient(135deg, #5b67f8, #6c4fcf);
+            color: white; padding: 14px; border: none; border-radius: 50px;
+            font-size: 16px; font-weight: 700; cursor: pointer; transition: opacity 0.2s, transform 0.1s;
+        }
+        .btn-submit:hover { opacity: 0.92; transform: translateY(-1px); }
+        .btn-submit:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+        .alert-box { border-radius: 10px; padding: 12px 16px; font-size: 14px; margin-bottom: 16px; display: none; }
+        .alert-success { background: #f0fdf4; border: 1px solid #bbf7d0; color: #16a34a; display: block; }
+        .alert-error { background: #fef2f2; border: 1px solid #fecaca; color: #dc2626; display: block; }
+
+        /* FOOTER */
+        footer { background: #1a1a2e; color: #aaa; padding: 32px 24px; text-align: center; font-size: 14px; }
+        footer a { color: #5b67f8; }
+        footer .footer-links-row { display: flex; justify-content: center; gap: 24px; margin-top: 12px; flex-wrap: wrap; }
+
+        @media (max-width: 700px) {
+            .contact-grid { grid-template-columns: 1fr; }
+            .page-header h1 { font-size: 26px; }
+            .nav-links .hide-mobile { display: none; }
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <nav>
+        <a href="/" class="logo">🛡️ PriceGuard</a>
+        <div class="nav-links">
+            <a href="/#pricing" class="hide-mobile">Pricing</a>
+            <a href="/terms.html" class="hide-mobile">Terms</a>
+            <a href="/" class="nav-cta">Get Started Free</a>
+        </div>
+    </nav>
+</header>
+
+<div class="page-wrap">
+    <div class="page-header">
+        <h1>We're here to help 👋</h1>
+        <p>Questions, cancellations, or just want to say hi — reach out any time.</p>
+    </div>
+
+    <div class="contact-grid">
+
+        <!-- Left: contact cards -->
+        <div class="contact-cards">
+
+            <div class="contact-card">
+                <div class="contact-card-icon">📧</div>
+                <div>
+                    <h3>Email Support</h3>
+                    <p>For general questions, account help, or feature requests. We aim to respond within 1 business day.</p>
+                    <a href="mailto:hello@dealnotify.co">hello@dealnotify.co</a>
+                </div>
+            </div>
+
+            <div class="contact-card">
+                <div class="contact-card-icon">🐛</div>
+                <div>
+                    <h3>Report a Bug</h3>
+                    <p>Something not working? Let us know which product URL or feature is causing issues and we'll fix it fast.</p>
+                    <a href="mailto:hello@dealnotify.co?subject=Bug Report">Send bug report →</a>
+                </div>
+            </div>
+
+            <div class="contact-card cancel-card">
+                <div class="contact-card-icon">🔴</div>
+                <div>
+                    <h3>Cancel Subscription</h3>
+                    <p>To cancel your Pro subscription, email us with subject <strong>"Cancellation Request"</strong> and your registered email. We'll process it within 2 business days.</p>
+                    <a href="mailto:hello@dealnotify.co?subject=Cancellation Request">Request cancellation →</a>
+                </div>
+            </div>
+
+            <div class="contact-card">
+                <div class="contact-card-icon">📍</div>
+                <div>
+                    <h3>Location</h3>
+                    <p>PriceGuard is based in Austin, Texas, USA. Governed by the laws of the State of Texas.</p>
+                    <a href="/terms.html">View Terms of Service →</a>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Right: contact form -->
+        <div class="contact-form-wrap">
+            <h2>Send us a message</h2>
+            <p>Fill in the form and we'll get back to you as soon as possible.</p>
+
+            <div class="alert-box alert-success" id="form-success" style="display:none;">
+                ✅ Message sent! We'll get back to you within 1 business day.
+            </div>
+            <div class="alert-box alert-error" id="form-error" style="display:none;"></div>
+
+            <form id="contactForm" onsubmit="submitContact(event)" novalidate>
+                <div class="form-group">
+                    <label for="c-name">Your Name</label>
+                    <input type="text" id="c-name" placeholder="Jane Smith" required>
+                </div>
+                <div class="form-group">
+                    <label for="c-email">Email Address</label>
+                    <input type="email" id="c-email" placeholder="you@example.com" required>
+                </div>
+                <div class="form-group">
+                    <label for="c-subject">Subject</label>
+                    <select id="c-subject">
+                        <option value="General Question">General Question</option>
+                        <option value="Bug Report">Bug Report</option>
+                        <option value="Cancellation Request">Cancellation Request</option>
+                        <option value="Billing Question">Billing Question</option>
+                        <option value="Feature Request">Feature Request</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="c-message">Message</label>
+                    <textarea id="c-message" placeholder="Tell us how we can help…" required></textarea>
+                </div>
+                <button type="submit" class="btn-submit" id="c-btn">Send Message →</button>
+            </form>
+        </div>
+
+    </div>
+</div>
+
+<footer>
+    <div>© 2026 PriceGuard. All rights reserved.</div>
+    <div class="footer-links-row">
+        <a href="/">Home</a>
+        <a href="/terms.html">Terms of Service</a>
+        <a href="/contact.html">Contact Us</a>
+        <a href="mailto:hello@dealnotify.co">hello@dealnotify.co</a>
+    </div>
+</footer>
+
+<script>
+    async function submitContact(e) {
+        e.preventDefault();
+        const name    = document.getElementById('c-name').value.trim();
+        const email   = document.getElementById('c-email').value.trim();
+        const subject = document.getElementById('c-subject').value;
+        const message = document.getElementById('c-message').value.trim();
+        const btn     = document.getElementById('c-btn');
+        const successEl = document.getElementById('form-success');
+        const errorEl   = document.getElementById('form-error');
+
+        successEl.style.display = 'none';
+        errorEl.style.display   = 'none';
+
+        if (!name || !email || !message) {
+            errorEl.textContent = 'Please fill in all required fields.';
+            errorEl.style.display = 'block';
+            return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = 'Sending…';
+
+        try {
+            const res = await fetch('/api/contact', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, email, subject, message })
+            });
+            const data = await res.json();
+            if (data.success) {
+                successEl.style.display = 'block';
+                document.getElementById('contactForm').reset();
+            } else {
+                throw new Error(data.error || 'Something went wrong');
+            }
+        } catch (err) {
+            errorEl.textContent = 'Failed to send message. Please email us directly at hello@dealnotify.co';
+            errorEl.style.display = 'block';
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Send Message →';
+        }
+    }
+
+    // Pre-fill subject from URL param e.g. contact.html?subject=Cancellation+Request
+    window.addEventListener('DOMContentLoaded', () => {
+        const params = new URLSearchParams(window.location.search);
+        const sub = params.get('subject');
+        if (sub) {
+            const sel = document.getElementById('c-subject');
+            for (let opt of sel.options) {
+                if (opt.value.toLowerCase() === sub.toLowerCase()) {
+                    sel.value = opt.value;
+                    break;
+                }
+            }
+        }
+    });
+</script>
+</body>
+</html>
