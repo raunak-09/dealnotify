@@ -1119,7 +1119,7 @@
                 <hr class="price-divider">
                 <ul class="price-features">
                     <li><span class="check">✓</span> Track up to 3 products</li>
-                    <li><span class="check">✓</span> Hourly price checks</li>
+                    <li><span class="check">✓</span> Price checks <strong>every 6 hours</strong></li>
                     <li><span class="check">✓</span> Instant email alerts</li>
                     <li><span class="check">✓</span> Amazon, Walmart, Best Buy & more</li>
                     <li><span class="check">✓</span> Personal dashboard</li>
@@ -1137,10 +1137,11 @@
                 <hr class="price-divider">
                 <ul class="price-features">
                     <li><span class="check">✓</span> <strong>Unlimited products</strong></li>
-                    <li><span class="check">✓</span> Hourly price checks</li>
+                    <li><span class="check pro-highlight">⚡</span> Price checks <strong>every 2 hours</strong> <span style="font-size:11px;color:#5b67f8;font-weight:600;">3× faster</span></li>
                     <li><span class="check">✓</span> Instant email alerts</li>
                     <li><span class="check">✓</span> Amazon, Walmart, Best Buy & more</li>
                     <li><span class="check">✓</span> Personal dashboard</li>
+                    <li><span class="check">✓</span> Price history charts</li>
                     <li><span class="check">✓</span> Priority email support</li>
                 </ul>
                 <button class="btn-plan btn-plan-pro" id="proBtn" onclick="handleProSignup()">Get Pro Now →</button>
@@ -1165,11 +1166,11 @@
     </div>
     <div class="faq-item" onclick="toggleFaq(this)">
         <div class="faq-question">How often does PriceGuard check prices? <span class="faq-toggle">+</span></div>
-        <div class="faq-answer">We check every hour, 24 hours a day. Most flash sales and price changes last only a few hours, so our hourly cadence means you'll almost never miss a deal.</div>
+        <div class="faq-answer">It depends on your plan. Free users get price checks every 6 hours. Pro users get checks every 2 hours — 3× more frequently — so you catch flash sales and short-window deals before they're gone. Both plans run 24/7 automatically.</div>
     </div>
     <div class="faq-item" onclick="toggleFaq(this)">
         <div class="faq-question">What happens after my free trial ends? <span class="faq-toggle">+</span></div>
-        <div class="faq-answer">Your monitoring simply pauses — we never charge you automatically. If you want to continue, you can upgrade to Pro for $4.99/month. If not, no worries and no charge.</div>
+        <div class="faq-answer">Your monitoring simply pauses — we never charge you automatically. If you want to continue, you can upgrade to PriceGuard Pro for $4.99/month (or $39.99/year). If not, no worries and no charge.</div>
     </div>
     <div class="faq-item" onclick="toggleFaq(this)">
         <div class="faq-question">Can I cancel my Pro plan at any time? <span class="faq-toggle">+</span></div>
@@ -1296,6 +1297,9 @@
             <h2>Welcome back</h2>
             <p class="modal-sub">Log in to your PriceGuard account</p>
 
+            <div class="alert-box alert-success" id="login-verified" style="display:none;">
+                ✅ Email verified! You can now log in.
+            </div>
             <div class="alert-box alert-error" id="login-error"></div>
 
             <form id="loginForm" onsubmit="submitLogin(event)" novalidate>
@@ -1703,7 +1707,13 @@ window.addEventListener('DOMContentLoaded', () => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('reset_token')) openModal('reset');
     if (params.get('verified') === '1') {
-        showToast('✅ Email verified! You can now log in.');
+        openModal('login');
+        const banner = document.getElementById('login-verified');
+        if (banner) {
+            banner.style.display = 'block';
+            banner.textContent = '✅ Email verified! You can now log in.';
+        }
+        history.replaceState(null, '', window.location.pathname);
     }
 });
 </script>

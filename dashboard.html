@@ -283,6 +283,33 @@
         }
         .btn-remove:hover { background: #fff0f0; border-color: #e74c3c; }
 
+        /* Inline target price editing */
+        .btn-edit-price {
+            background: none; border: none; cursor: pointer;
+            font-size: 12px; padding: 0 0 0 5px;
+            opacity: 0.5; transition: opacity 0.2s; vertical-align: middle;
+        }
+        .btn-edit-price:hover { opacity: 1; }
+        .edit-price-row {
+            display: flex; align-items: center; gap: 6px; margin-top: 6px;
+        }
+        .edit-price-input {
+            width: 90px; padding: 5px 8px; border: 1.5px solid #5b67f8;
+            border-radius: 8px; font-size: 14px; font-weight: 600;
+            color: #5b67f8; outline: none;
+        }
+        .btn-save-price {
+            background: #5b67f8; color: white; border: none;
+            padding: 5px 12px; border-radius: 8px; font-size: 13px;
+            font-weight: 600; cursor: pointer;
+        }
+        .btn-save-price:hover { background: #4a55e0; }
+        .btn-cancel-price {
+            background: none; border: 1px solid #ddd; color: #999;
+            padding: 5px 8px; border-radius: 8px; font-size: 12px; cursor: pointer;
+        }
+        .btn-cancel-price:hover { border-color: #e74c3c; color: #e74c3c; }
+
         /* Empty state */
         .empty-state {
             text-align: center; padding: 60px 20px;
@@ -985,8 +1012,15 @@
 
                 <div class="price-comparison">
                     <div class="price-box">
-                        <div class="price-label">Your Target</div>
-                        <div class="price-value target">${targetPriceDisplay}</div>
+                        <div class="price-label">Your Target <button class="btn-edit-price" onclick="startEditPrice(${product.id}, ${targetPriceVal || 0})" title="Edit target price">✏️</button></div>
+                        <div class="price-value target" id="target-display-${product.id}">${targetPriceDisplay}</div>
+                        <div class="edit-price-row" id="edit-price-${product.id}" style="display:none;">
+                            <input type="number" class="edit-price-input" id="edit-price-input-${product.id}"
+                                   min="0.01" step="0.01" placeholder="0.00"
+                                   onkeydown="if(event.key==='Enter') saveTargetPrice(${product.id}); if(event.key==='Escape') cancelEditPrice(${product.id});">
+                            <button class="btn-save-price" onclick="saveTargetPrice(${product.id})">Save</button>
+                            <button class="btn-cancel-price" onclick="cancelEditPrice(${product.id})">✕</button>
+                        </div>
                     </div>
                     <div class="price-arrow">→</div>
                     <div class="price-box">
@@ -1097,6 +1131,57 @@
                 }
             })
             .catch(() => showToast('Failed to remove product', 'error'));
+        }
+
+        function startEditPrice(productId, currentTarget) {
+            document.getElementById(`edit-price-${productId}`).style.display = 'flex';
+            document.getElementById(`target-display-${productId}`).style.display = 'none';
+            const input = document.getElementById(`edit-price-input-${productId}`);
+            input.value = currentTarget > 0 ? currentTarget.toFixed(2) : '';
+            input.focus();
+            input.select();
+        }
+
+        function cancelEditPrice(productId) {
+            document.getElementById(`edit-price-${productId}`).style.display = 'none';
+            document.getElementById(`target-display-${productId}`).style.display = '';
+        }
+
+        function saveTargetPrice(productId) {
+            const input = document.getElementById(`edit-price-input-${productId}`);
+            const newPrice = parseFloat(input.value);
+            if (!newPrice || newPrice <= 0) {
+                showToast('Please enter a valid price', 'error');
+                return;
+            }
+
+            const btn = input.nextElementSibling;
+            btn.textContent = '...';
+            btn.disabled = true;
+
+            fetch(`/api/update-target-price?token=${token}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ product_id: productId, target_price: newPrice })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    const prod = productsData.find(p => p.id === productId);
+                    if (prod) prod.target_price = data.target_price;
+                    renderProducts();
+                    showToast('✅ Target price updated!', 'success');
+                } else {
+                    showToast(data.error || 'Failed to update price', 'error');
+                    btn.textContent = 'Save';
+                    btn.disabled = false;
+                }
+            })
+            .catch(() => {
+                showToast('Something went wrong. Try again.', 'error');
+                btn.textContent = 'Save';
+                btn.disabled = false;
+            });
         }
 
         function openContactModal() {
@@ -1333,8 +1418,9 @@
                     <div style="background:#f0f7ff; border-radius:12px; padding:20px; margin-bottom:24px; text-align:left;">
                         <p style="color:#5b67f8; font-weight:700; margin:0 0 10px;">⭐ PriceGuard Pro — $4.99/month</p>
                         <p style="color:#555; font-size:14px; margin:4px 0;">✓ Unlimited products tracked</p>
-                        <p style="color:#555; font-size:14px; margin:4px 0;">✓ Hourly automatic price checks</p>
+                        <p style="color:#555; font-size:14px; margin:4px 0;">⚡ Price checks <strong>every 2 hours</strong> (3× faster than Free)</p>
                         <p style="color:#555; font-size:14px; margin:4px 0;">✓ Instant email alerts on price drops</p>
+                        <p style="color:#555; font-size:14px; margin:4px 0;">✓ Price history charts</p>
                         <p style="color:#555; font-size:14px; margin:4px 0;">✓ Priority support</p>
                     </div>
                     <button id="checkoutBtn" onclick="startCheckout()"
