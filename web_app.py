@@ -1455,7 +1455,19 @@ def get_alerts_log():
 
 @app.route('/admin')
 def admin():
-    """Admin dashboard"""
+    """Admin dashboard — restricted to ADMIN_EMAILS env var list"""
+    token = request.args.get('token')
+    if not token:
+        return "<h1>403 Forbidden</h1><p>Access denied. Admin token required.</p>", 403
+
+    user, _ = get_user_by_token(token)
+    if not user:
+        return "<h1>403 Forbidden</h1><p>Invalid token.</p>", 403
+
+    admin_emails = [e.strip().lower() for e in os.getenv('ADMIN_EMAILS', '').split(',') if e.strip()]
+    if user['email'].lower() not in admin_emails:
+        return "<h1>403 Forbidden</h1><p>You do not have admin access.</p>", 403
+
     conn = get_db_conn()
     cur = conn.cursor()
     try:
