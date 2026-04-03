@@ -1280,8 +1280,8 @@
                 </div>
                 <div class="form-group">
                     <label for="sg-phone">Mobile Number</label>
-                    <input type="tel" id="sg-phone" placeholder="+1 (555) 000-0000" autocomplete="tel" required>
-                    <div class="field-error" id="err-sg-phone">Please enter your mobile number</div>
+                    <input type="tel" id="sg-phone" placeholder="(555) 000-0000" autocomplete="tel" required maxlength="14" oninput="formatUSPhone(this)">
+                    <div class="field-error" id="err-sg-phone">Please enter a valid 10-digit US mobile number</div>
                 </div>
                 <div class="form-group">
                     <label for="sg-product">First Product URL <span style="font-weight:400; color:#aaa">(optional)</span></label>
@@ -1481,6 +1481,23 @@ function showToast(msg, duration = 4000) {
 
 function isValidEmail(e) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e); }
 
+function formatUSPhone(input) {
+    // Strip everything except digits
+    let digits = input.value.replace(/\D/g, '').slice(0, 10);
+    // Format as (XXX) XXX-XXXX progressively
+    let formatted = '';
+    if (digits.length === 0) {
+        formatted = '';
+    } else if (digits.length <= 3) {
+        formatted = '(' + digits;
+    } else if (digits.length <= 6) {
+        formatted = '(' + digits.slice(0,3) + ') ' + digits.slice(3);
+    } else {
+        formatted = '(' + digits.slice(0,3) + ') ' + digits.slice(3,6) + '-' + digits.slice(6);
+    }
+    input.value = formatted;
+}
+
 /* ─────────────────────────────────────
    SIGNUP
 ───────────────────────────────────── */
@@ -1504,8 +1521,9 @@ function submitSignup(e) {
     else                     fieldError('sg-email', null);
     if (password.length < 8){ fieldError('sg-password', 'Password must be at least 8 characters'); valid = false; }
     else                     fieldError('sg-password', null);
-    if (!phone)             { fieldError('sg-phone',    'Please enter your mobile number');     valid = false; }
-    else                     fieldError('sg-phone', null);
+    const phoneDigits = phone.replace(/\D/g, '');
+    if (phoneDigits.length !== 10) { fieldError('sg-phone', 'Please enter a valid 10-digit US mobile number'); valid = false; }
+    else                             fieldError('sg-phone', null);
     if (!valid) return;
 
     setLoading('sg-btn', true, 'Create Free Account');
@@ -1513,7 +1531,7 @@ function submitSignup(e) {
     fetch('/api/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password, phone, product_url: url || null, target_price: target || null, newsletter })
+        body: JSON.stringify({ name, email, password, phone: phoneDigits, product_url: url || null, target_price: target || null, newsletter })
     })
     .then(r => r.json())
     .then(data => {
