@@ -133,7 +133,7 @@
                 <div>
                     <h3>Report a Bug</h3>
                     <p>Something not working? Let us know which product URL or feature is causing issues and we'll fix it fast.</p>
-                    <a href="mailto:hello@dealnotify.co?subject=Bug Report">Send bug report →</a>
+                    <a href="/contact.html?subject=Bug+Report" onclick="prefillAndFocus('Bug Report'); return false;">Send bug report →</a>
                 </div>
             </div>
 
@@ -253,19 +253,24 @@
         }
     }
 
+    // Pre-fill subject dropdown and scroll/focus the form
+    function prefillAndFocus(subject) {
+        const sel = document.getElementById('c-subject');
+        for (let opt of sel.options) {
+            if (opt.value.toLowerCase() === subject.toLowerCase()) {
+                sel.value = opt.value;
+                break;
+            }
+        }
+        document.getElementById('c-name').focus();
+        document.querySelector('.contact-form-wrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
     // Pre-fill subject from URL param e.g. contact.html?subject=Cancellation+Request
     window.addEventListener('DOMContentLoaded', () => {
         const params = new URLSearchParams(window.location.search);
         const sub = params.get('subject');
-        if (sub) {
-            const sel = document.getElementById('c-subject');
-            for (let opt of sel.options) {
-                if (opt.value.toLowerCase() === sub.toLowerCase()) {
-                    sel.value = opt.value;
-                    break;
-                }
-            }
-        }
+        if (sub) prefillAndFocus(sub);
     });
 </script>
 </body>

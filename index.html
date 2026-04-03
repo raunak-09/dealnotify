@@ -1279,6 +1279,11 @@
                     <div class="field-error" id="err-sg-password">Password must be at least 8 characters</div>
                 </div>
                 <div class="form-group">
+                    <label for="sg-phone">Mobile Number</label>
+                    <input type="tel" id="sg-phone" placeholder="+1 (555) 000-0000" autocomplete="tel" required>
+                    <div class="field-error" id="err-sg-phone">Please enter your mobile number</div>
+                </div>
+                <div class="form-group">
                     <label for="sg-product">First Product URL <span style="font-weight:400; color:#aaa">(optional)</span></label>
                     <input type="url" id="sg-product" placeholder="https://amazon.com/..." autocomplete="off">
                 </div>
@@ -1485,6 +1490,7 @@ function submitSignup(e) {
     const name       = document.getElementById('sg-name').value.trim();
     const email      = document.getElementById('sg-email').value.trim();
     const password   = document.getElementById('sg-password').value;
+    const phone      = document.getElementById('sg-phone').value.trim();
     const url        = document.getElementById('sg-product').value.trim();
     const target     = document.getElementById('sg-target').value;
     const newsletter = document.getElementById('sg-newsletter').checked;
@@ -1492,12 +1498,14 @@ function submitSignup(e) {
 
     // Client-side validation
     let valid = true;
-    if (!name)              { fieldError('sg-name', 'Please enter your name');         valid = false; }
+    if (!name)              { fieldError('sg-name',     'Please enter your name');              valid = false; }
     else                     fieldError('sg-name', null);
-    if (!isValidEmail(email)){ fieldError('sg-email','Please enter a valid email');    valid = false; }
+    if (!isValidEmail(email)){ fieldError('sg-email',   'Please enter a valid email');          valid = false; }
     else                     fieldError('sg-email', null);
-    if (password.length < 8){ fieldError('sg-password','Password must be at least 8 characters'); valid = false; }
+    if (password.length < 8){ fieldError('sg-password', 'Password must be at least 8 characters'); valid = false; }
     else                     fieldError('sg-password', null);
+    if (!phone)             { fieldError('sg-phone',    'Please enter your mobile number');     valid = false; }
+    else                     fieldError('sg-phone', null);
     if (!valid) return;
 
     setLoading('sg-btn', true, 'Create Free Account');
@@ -1505,7 +1513,7 @@ function submitSignup(e) {
     fetch('/api/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password, product_url: url || null, target_price: target || null, newsletter })
+        body: JSON.stringify({ name, email, password, phone, product_url: url || null, target_price: target || null, newsletter })
     })
     .then(r => r.json())
     .then(data => {

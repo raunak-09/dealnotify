@@ -647,6 +647,7 @@ def signup():
         verification_token = secrets.token_urlsafe(32)
         password_hash      = generate_password_hash(password) if password else None
         newsletter         = bool(data.get('newsletter', True))
+        phone              = (data.get('phone') or '').strip() or None
         dashboard_url      = f"{get_base_url()}/dashboard?token={token}"
 
         conn = get_db_conn()
@@ -654,11 +655,11 @@ def signup():
         try:
             cur.execute("""
                 INSERT INTO users (name, email, token, signup_date, status, trial_days_remaining,
-                                   password_hash, email_verified, verification_token, newsletter)
-                VALUES (%s, %s, %s, %s, 'active', 7, %s, FALSE, %s, %s)
+                                   password_hash, email_verified, verification_token, newsletter, phone)
+                VALUES (%s, %s, %s, %s, 'active', 7, %s, FALSE, %s, %s, %s)
                 RETURNING id
             """, (data['name'], data['email'], token, datetime.now(),
-                  password_hash, verification_token, newsletter))
+                  password_hash, verification_token, newsletter, phone))
             user_id = _fetchone(cur)['id']
 
             # Add first product if provided
