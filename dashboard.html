@@ -687,7 +687,7 @@
     <!-- Header -->
     <header>
         <nav>
-            <a href="/" class="logo">🛡️ PriceGuard</a>
+            <a href="#" onclick="window.location.href='/dashboard?token='+token; return false;" class="logo">🛡️ PriceGuard</a>
 
             <!-- Account dropdown trigger -->
             <div class="account-btn" id="accountBtn" onclick="toggleDropdown()">
@@ -972,12 +972,21 @@
 
     <script>
         const params = new URLSearchParams(window.location.search);
-        const token = params.get('token');
+        // Prefer token from URL, fall back to localStorage for returning users
+        const token = params.get('token') || localStorage.getItem('pg_token');
         let userData = null;
         let productsData = [];
 
         window.onload = function() {
             if (!token) { showError(); return; }
+            // Persist token so navigating away and back doesn't log the user out
+            localStorage.setItem('pg_token', token);
+            // Keep token in URL clean without reloading
+            if (!params.get('token') && token) {
+                const url = new URL(window.location.href);
+                url.searchParams.set('token', token);
+                window.history.replaceState({}, '', url);
+            }
             loadDashboard();
         };
 

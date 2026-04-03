@@ -1714,6 +1714,26 @@ window.addEventListener('DOMContentLoaded', () => {
             banner.textContent = '✅ Email verified! You can now log in.';
         }
         history.replaceState(null, '', window.location.pathname);
+        return; // don't redirect verified users — they need to log in
+    }
+
+    // If user already has a session token, show a "Go to Dashboard" button
+    // instead of silently redirecting (respects user intent to visit home page)
+    const savedToken = localStorage.getItem('pg_token');
+    if (savedToken) {
+        // Validate the token is still active before showing the button
+        fetch(`/api/dashboard?token=${savedToken}`)
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    // Inject a "Go to Dashboard" banner at the top of the page
+                    const banner = document.createElement('div');
+                    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#5b67f8;color:white;text-align:center;padding:10px 20px;font-size:14px;font-weight:600;';
+                    banner.innerHTML = `👋 Welcome back, ${data.user?.name || 'back'}! <a href="/dashboard?token=${savedToken}" style="color:white;text-decoration:underline;margin-left:10px;">Go to your Dashboard →</a> <span onclick="this.parentElement.remove()" style="cursor:pointer;margin-left:15px;opacity:0.8;">✕</span>`;
+                    document.body.prepend(banner);
+                }
+            })
+            .catch(() => {}); // silently ignore if token is invalid
     }
 });
 </script>
