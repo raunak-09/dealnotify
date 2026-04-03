@@ -1455,18 +1455,26 @@ def get_alerts_log():
 
 @app.route('/admin')
 def admin():
-    """Admin dashboard — restricted to ADMIN_EMAILS env var list"""
-    token = request.args.get('token')
-    if not token:
-        return "<h1>403 Forbidden</h1><p>Access denied. Admin token required.</p>", 403
+    """Admin dashboard — restricted to ADMIN_EMAILS or ADMIN_PASSWORD env var"""
+    authorized = False
 
-    user, _ = get_user_by_token(token)
-    if not user:
-        return "<h1>403 Forbidden</h1><p>Invalid token.</p>", 403
+    # Option 1: direct password access via ?password=
+    admin_password = os.getenv('ADMIN_PASSWORD', '')
+    if admin_password and request.args.get('password') == admin_password:
+        authorized = True
 
-    admin_emails = [e.strip().lower() for e in os.getenv('ADMIN_EMAILS', '').split(',') if e.strip()]
-    if user['email'].lower() not in admin_emails:
-        return "<h1>403 Forbidden</h1><p>You do not have admin access.</p>", 403
+    # Option 2: user token must belong to an email in ADMIN_EMAILS
+    if not authorized:
+        token = request.args.get('token')
+        if token:
+            user, _ = get_user_by_token(token)
+            if user:
+                admin_emails = [e.strip().lower() for e in os.getenv('ADMIN_EMAILS', '').split(',') if e.strip()]
+                if user['email'].lower() in admin_emails:
+                    authorized = True
+
+    if not authorized:
+        return "<h1>403 Forbidden</h1><p>Access denied.</p>", 403
 
     conn = get_db_conn()
     cur = conn.cursor()
