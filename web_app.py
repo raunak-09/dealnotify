@@ -1453,6 +1453,56 @@ def get_alerts_log():
         conn.close()
 
 
+@app.route('/api/user-check-history', methods=['GET'])
+def user_check_history():
+    """Admin: return all price check timestamps for a given user email.
+    Usage: /api/user-check-history?email=foo@bar.com&password=ADMIN_PASSWORD
+    """
+    admin_password = os.getenv('ADMIN_PASSWORD', '')
+    if not admin_password or request.args.get('password') != admin_password:
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    email = request.args.get('email', '').strip().lower()
+    if not email:
+        return jsonify({'error': 'email param required'}), 400
+
+    conn = get_db_conn()
+    cur  = conn.cursor()
+    try:
+        cur.execute("SELECT id, name FROM users WHERE LOWER(email) = %s", (email,))
+        user = _fetchone(cur)
+        if not user:
+            return jsonify({'error': f'No user found for {email}'}), 404
+
+        cur.execute("""
+            SELECT ph.checked_at, ph.price, p.url, p.store, p.name AS product_name
+            FROM price_history ph
+            JOIN products p ON p.id = ph.product_id
+            WHERE p.user_id = %s
+            ORDER BY ph.checked_at DESC
+            LIMIT 200
+        """, (user['id'],))
+        rows = _fetchall(cur)
+
+        return jsonify({
+            'user': user['name'],
+            'email': email,
+            'total_checks': len(rows),
+            'checks': [{
+                'checked_at': str(r['checked_at']),
+                'price': str(r['price']),
+                'store': r['store'],
+                'product_name': r['product_name'],
+                'url': r['url']
+            } for r in rows]
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
 @app.route('/admin')
 def admin():
     """Admin dashboard — restricted to ADMIN_EMAILS or ADMIN_PASSWORD env var"""
