@@ -216,7 +216,7 @@ def user_to_dict(user_row, products):
         'name': user_row['name'],
         'email': user_row['email'],
         'token': user_row['token'],
-        'signup_date': user_row['signup_date'].isoformat() if hasattr(user_row['signup_date'], 'isoformat') else user_row['signup_date'],
+        'signup_date': (user_row['signup_date'].isoformat() + 'Z') if hasattr(user_row['signup_date'], 'isoformat') else user_row['signup_date'],
         'status': user_row['status'],
         'trial_days_remaining': user_row['trial_days_remaining'],
         'products': [product_to_dict(p) for p in products]
@@ -230,9 +230,9 @@ def product_to_dict(p):
         'url': p['url'],
         'target_price': float(p['target_price']) if p['target_price'] is not None else None,
         'store': p['store'],
-        'added_date': p['added_date'].isoformat() if hasattr(p['added_date'], 'isoformat') else p['added_date'],
+        'added_date': (p['added_date'].isoformat() + 'Z') if hasattr(p['added_date'], 'isoformat') else p['added_date'],
         'status': p['status'],
-        'last_checked': p['last_checked'].isoformat() if p['last_checked'] and hasattr(p['last_checked'], 'isoformat') else p['last_checked'],
+        'last_checked': (p['last_checked'].isoformat() + 'Z') if p['last_checked'] and hasattr(p['last_checked'], 'isoformat') else p['last_checked'],
         'current_price': float(p['current_price']) if p['current_price'] is not None else None,
         'alert_sent': p['alert_sent']
     }
@@ -965,7 +965,7 @@ def get_price_history(product_id):
         history = [
             {
                 'price': float(r['price']),
-                'checked_at': r['checked_at'].isoformat() if hasattr(r['checked_at'], 'isoformat') else r['checked_at']
+                'checked_at': (r['checked_at'].isoformat() + 'Z') if hasattr(r['checked_at'], 'isoformat') else r['checked_at']
             }
             for r in rows
         ]
