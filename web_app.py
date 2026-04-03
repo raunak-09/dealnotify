@@ -1475,7 +1475,7 @@ def user_check_history():
             return jsonify({'error': f'No user found for {email}'}), 404
 
         cur.execute("""
-            SELECT ph.checked_at, ph.price, p.url, p.store, p.name AS product_name
+            SELECT ph.checked_at, ph.price, p.url, p.store
             FROM price_history ph
             JOIN products p ON p.id = ph.product_id
             WHERE p.user_id = %s
@@ -1492,7 +1492,6 @@ def user_check_history():
                 'checked_at': str(r['checked_at']),
                 'price': str(r['price']),
                 'store': r['store'],
-                'product_name': r['product_name'],
                 'url': r['url']
             } for r in rows]
         }), 200
