@@ -285,28 +285,32 @@
 
         /* Inline target price editing */
         .btn-edit-price {
-            background: none; border: none; cursor: pointer;
-            font-size: 12px; padding: 0 0 0 5px;
-            opacity: 0.5; transition: opacity 0.2s; vertical-align: middle;
+            background: #f0eeff; border: 1px solid #d8d5f0; cursor: pointer;
+            font-size: 11px; padding: 2px 8px;
+            border-radius: 50px; color: #5b67f8; font-weight: 600;
+            transition: all 0.2s; vertical-align: middle;
+            margin-left: 4px;
         }
-        .btn-edit-price:hover { opacity: 1; }
+        .btn-edit-price:hover { background: #5b67f8; color: white; border-color: #5b67f8; }
         .edit-price-row {
-            display: flex; align-items: center; gap: 6px; margin-top: 6px;
+            display: flex; align-items: center; gap: 6px; margin-top: 8px;
+            justify-content: center;
         }
         .edit-price-input {
-            width: 90px; padding: 5px 8px; border: 1.5px solid #5b67f8;
-            border-radius: 8px; font-size: 14px; font-weight: 600;
-            color: #5b67f8; outline: none;
+            width: 100px; padding: 6px 10px; border: 2px solid #5b67f8;
+            border-radius: 8px; font-size: 15px; font-weight: 700;
+            color: #5b67f8; outline: none; text-align: center;
         }
+        .edit-price-input:focus { box-shadow: 0 0 0 3px rgba(91,103,248,0.2); }
         .btn-save-price {
             background: #5b67f8; color: white; border: none;
-            padding: 5px 12px; border-radius: 8px; font-size: 13px;
-            font-weight: 600; cursor: pointer;
+            padding: 6px 16px; border-radius: 8px; font-size: 13px;
+            font-weight: 600; cursor: pointer; transition: background 0.2s;
         }
         .btn-save-price:hover { background: #4a55e0; }
         .btn-cancel-price {
             background: none; border: 1px solid #ddd; color: #999;
-            padding: 5px 8px; border-radius: 8px; font-size: 12px; cursor: pointer;
+            padding: 6px 10px; border-radius: 8px; font-size: 12px; cursor: pointer;
         }
         .btn-cancel-price:hover { border-color: #e74c3c; color: #e74c3c; }
 
@@ -1012,8 +1016,9 @@
 
                 <div class="price-comparison">
                     <div class="price-box">
-                        <div class="price-label">Your Target <button class="btn-edit-price" onclick="startEditPrice(${product.id}, ${targetPriceVal || 0})" title="Edit target price">✏️</button></div>
+                        <div class="price-label">Your Target</div>
                         <div class="price-value target" id="target-display-${product.id}">${targetPriceDisplay}</div>
+                        <button class="btn-edit-price" onclick="startEditPrice(${product.id}, ${targetPriceVal || 0})" title="Edit target price">✏️ Edit</button>
                         <div class="edit-price-row" id="edit-price-${product.id}" style="display:none;">
                             <input type="number" class="edit-price-input" id="edit-price-input-${product.id}"
                                    min="0.01" step="0.01" placeholder="0.00"
@@ -1150,22 +1155,27 @@
         function saveTargetPrice(productId) {
             const input = document.getElementById(`edit-price-input-${productId}`);
             const newPrice = parseFloat(input.value);
+            console.log('[PriceGuard] saveTargetPrice called', { productId, newPrice, token: token ? 'present' : 'missing' });
+
             if (!newPrice || newPrice <= 0) {
                 showToast('Please enter a valid price', 'error');
                 return;
             }
 
-            const btn = input.nextElementSibling;
-            btn.textContent = '...';
-            btn.disabled = true;
+            const saveBtn = document.querySelector(`#edit-price-${productId} .btn-save-price`);
+            if (saveBtn) { saveBtn.textContent = '...'; saveBtn.disabled = true; }
 
             fetch(`/api/update-target-price?token=${token}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ product_id: productId, target_price: newPrice })
             })
-            .then(res => res.json())
+            .then(res => {
+                console.log('[PriceGuard] API response status:', res.status);
+                return res.json();
+            })
             .then(data => {
+                console.log('[PriceGuard] API response data:', data);
                 if (data.success) {
                     const prod = productsData.find(p => p.id === productId);
                     if (prod) prod.target_price = data.target_price;
@@ -1173,14 +1183,13 @@
                     showToast('✅ Target price updated!', 'success');
                 } else {
                     showToast(data.error || 'Failed to update price', 'error');
-                    btn.textContent = 'Save';
-                    btn.disabled = false;
+                    if (saveBtn) { saveBtn.textContent = 'Save'; saveBtn.disabled = false; }
                 }
             })
-            .catch(() => {
+            .catch(err => {
+                console.error('[PriceGuard] saveTargetPrice error:', err);
                 showToast('Something went wrong. Try again.', 'error');
-                btn.textContent = 'Save';
-                btn.disabled = false;
+                if (saveBtn) { saveBtn.textContent = 'Save'; saveBtn.disabled = false; }
             });
         }
 
