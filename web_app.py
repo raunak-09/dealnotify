@@ -1574,31 +1574,41 @@ def robots():
 def check_all_prices_job():
     """
     Hourly background job: check prices for every tracked product across
-    all active users and send email alerts whenever a price drops to target.
+    all users. Interval is based on plan:
+      - Pro  users → check if last_checked > 2 hours ago  (or never checked)
+      - Free users → check if last_checked > 6 hours ago  (or never checked)
+    The scheduler still runs every hour; per-product interval logic is handled here.
     """
+    PRO_INTERVAL_HOURS  = 2
+    FREE_INTERVAL_HOURS = 6
+
     started_at = datetime.now().isoformat()
-    print(f"\n⏰ === Hourly price check started at {started_at} ===")
+    print(f"\n⏰ === Price check job started at {started_at} ===")
 
     total_checked = 0
+    total_skipped = 0
     total_alerts  = 0
     total_errors  = 0
+    now           = datetime.now()
 
     try:
-        # Fetch all active users
+        # Fetch ALL users regardless of plan (active + pro)
         conn = get_db_conn()
         cur  = conn.cursor()
         try:
-            cur.execute("SELECT * FROM users WHERE status = 'active'")
+            cur.execute("SELECT * FROM users WHERE status IN ('active', 'pro')")
             users = _fetchall(cur)
         finally:
             cur.close()
             conn.close()
 
-        print(f"   → {len(users)} active user(s) to check")
+        print(f"   → {len(users)} user(s) to process")
 
         for user in users:
-            user_id      = user['id']
-            token        = user['token']
+            user_id       = user['id']
+            token         = user['token']
+            is_pro        = bool(user.get('is_pro'))
+            interval_hrs  = PRO_INTERVAL_HOURS if is_pro else FREE_INTERVAL_HOURS
             dashboard_url = f"{get_base_url()}/dashboard?token={token}"
 
             # Fetch this user's products
@@ -1619,7 +1629,19 @@ def check_all_prices_job():
                 if not url:
                     continue
 
-                print(f"🔍 [{user['email']}] {url[:70]}")
+                # ── Interval gate ──────────────────────────────────────────
+                last_checked = product.get('last_checked')
+                if last_checked:
+                    if isinstance(last_checked, str):
+                        last_checked = datetime.fromisoformat(last_checked)
+                    hours_since = (now - last_checked).total_seconds() / 3600
+                    if hours_since < interval_hrs:
+                        total_skipped += 1
+                        continue   # not due yet
+                # ───────────────────────────────────────────────────────────
+
+                plan_label = '⭐Pro' if is_pro else 'Free'
+                print(f"🔍 [{plan_label}] [{user['email']}] {url[:60]}")
                 try:
                     current_price = scrape_price(url)
                     total_checked += 1
@@ -1698,10 +1720,16 @@ def check_all_prices_job():
         print(f"❌ Hourly job fatal error: {e}")
 
     print(
-        f"✅ Hourly check done — "
-        f"{total_checked} checked, {total_alerts} alerts sent, {total_errors} errors\n"
+        f"✅ Price check done — "
+        f"{total_checked} checked, {total_skipped} skipped (not due), "
+        f"{total_alerts} alerts sent, {total_errors} errors\n"
     )
-    return {'checked': total_checked, 'alerts': total_alerts, 'errors': total_errors}
+    return {
+        'checked': total_checked,
+        'skipped': total_skipped,
+        'alerts':  total_alerts,
+        'errors':  total_errors
+    }
 
 
 @app.route('/api/check-all-prices', methods=['GET'])
@@ -1735,7 +1763,8 @@ if __name__ == '__main__':
     except Exception as e:
         print(f"⚠️  Could not init DB: {e}")
 
-    # Start hourly background price check scheduler
+    # Scheduler runs every hour; per-product interval logic inside the job:
+    # Pro users checked every 2h, Free users every 6h
     try:
         scheduler = BackgroundScheduler()
         scheduler.add_job(
@@ -1747,7 +1776,7 @@ if __name__ == '__main__':
             misfire_grace_time=300 # if delayed up to 5 min, still run it
         )
         scheduler.start()
-        print("⏰ Hourly price check scheduler started\n")
+        print("⏰ Price check scheduler started (runs hourly; Pro=2h interval, Free=6h interval)\n")
     except Exception as e:
         print(f"⚠️  Scheduler could not start: {e}\n")
 
