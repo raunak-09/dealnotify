@@ -946,12 +946,13 @@
         <div class="logo">
             <span class="logo-icon">🛡️</span> PriceGuard
         </div>
-        <ul>
+        <ul id="nav-links">
             <li class="hide-mobile"><a href="#how-it-works">How it works</a></li>
             <li class="hide-mobile"><a href="#features">Features</a></li>
             <li class="hide-mobile"><a href="#pricing">Pricing</a></li>
-            <li><a href="#" class="nav-cta" onclick="openModal('signup'); return false;">Start Free</a></li>
-            <li><a href="#" onclick="openModal('login'); return false;" style="color: var(--text-light); font-size:15px; font-weight:500; padding: 8px 14px;">Log in</a></li>
+            <li id="nav-dashboard-btn" style="display:none;"><a href="#" id="nav-dashboard-link" class="nav-cta">My Dashboard</a></li>
+            <li id="nav-start-btn"><a href="#" class="nav-cta" onclick="openModal('signup'); return false;">Start Free</a></li>
+            <li id="nav-login-btn"><a href="#" onclick="openModal('login'); return false;" style="color: var(--text-light); font-size:15px; font-weight:500; padding: 8px 14px;">Log in</a></li>
         </ul>
     </nav>
 </header>
@@ -1717,23 +1718,27 @@ window.addEventListener('DOMContentLoaded', () => {
         return; // don't redirect verified users — they need to log in
     }
 
-    // If user already has a session token, show a "Go to Dashboard" button
-    // instead of silently redirecting (respects user intent to visit home page)
+    // If user already has a session token, swap navbar to show "My Dashboard"
     const savedToken = localStorage.getItem('pg_token');
     if (savedToken) {
-        // Validate the token is still active before showing the button
         fetch(`/api/dashboard?token=${savedToken}`)
             .then(r => r.json())
             .then(data => {
                 if (data.success) {
-                    // Inject a "Go to Dashboard" banner at the top of the page
-                    const banner = document.createElement('div');
-                    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#5b67f8;color:white;text-align:center;padding:10px 20px;font-size:14px;font-weight:600;';
-                    banner.innerHTML = `👋 Welcome back, ${data.user?.name || 'back'}! <a href="/dashboard?token=${savedToken}" style="color:white;text-decoration:underline;margin-left:10px;">Go to your Dashboard →</a> <span onclick="this.parentElement.remove()" style="cursor:pointer;margin-left:15px;opacity:0.8;">✕</span>`;
-                    document.body.prepend(banner);
+                    // Show "My Dashboard" button, hide "Start Free" and "Log in"
+                    const dashBtn = document.getElementById('nav-dashboard-btn');
+                    const dashLink = document.getElementById('nav-dashboard-link');
+                    const startBtn = document.getElementById('nav-start-btn');
+                    const loginBtn = document.getElementById('nav-login-btn');
+                    if (dashBtn && dashLink) {
+                        dashLink.href = `/dashboard?token=${savedToken}`;
+                        dashBtn.style.display = '';
+                    }
+                    if (startBtn) startBtn.style.display = 'none';
+                    if (loginBtn) loginBtn.style.display = 'none';
                 }
             })
-            .catch(() => {}); // silently ignore if token is invalid
+            .catch(() => {}); // silently ignore if token is expired/invalid
     }
 });
 </script>
