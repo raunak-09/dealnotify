@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Dashboard – PriceGuard</title>
+    <title>My Dashboard – DealNotify</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -687,7 +687,7 @@
     <!-- Header -->
     <header>
         <nav>
-            <a href="/" class="logo">🛡️ PriceGuard</a>
+            <a href="/" class="logo">🔔 DealNotify</a>
 
             <!-- Account dropdown trigger -->
             <div class="account-btn" id="accountBtn" onclick="toggleDropdown()">
@@ -745,7 +745,7 @@
             <div class="acct-form-group">
                 <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:500;">
                     <input type="checkbox" id="acct-newsletter" style="width:15px;height:15px;accent-color:#5b67f8;">
-                    Subscribe to PriceGuard newsletter (weekly deal tips &amp; updates)
+                    Subscribe to DealNotify newsletter (weekly deal tips &amp; updates)
                 </label>
             </div>
 
@@ -776,8 +776,8 @@
 
         <!-- Login fallback (shown when no token in URL) -->
         <div id="errorState" class="error-state" style="display:none;">
-            <div class="error-icon">🛡️</div>
-            <h3 style="color:#1a1a2e;">Log in to PriceGuard</h3>
+            <div class="error-icon">🔔</div>
+            <h3 style="color:#1a1a2e;">Log in to DealNotify</h3>
             <p style="margin-bottom:24px;">Enter your email and password to access your dashboard.</p>
 
             <div id="loginFormWrap" style="max-width:380px; margin:0 auto; text-align:left;">
@@ -947,8 +947,8 @@
         <div class="footer-inner">
             <div class="footer-grid">
                 <div class="footer-brand">
-                    <a href="/" class="footer-logo">🛡️ PriceGuard</a>
-                    <p>Never overpay online again. PriceGuard monitors your favourite products 24/7 and sends you instant email alerts when prices hit your target.</p>
+                    <a href="/" class="footer-logo">🔔 DealNotify</a>
+                    <p>Never overpay online again. DealNotify monitors your favourite products 24/7 and sends you instant email alerts when prices hit your target.</p>
                 </div>
                 <div class="footer-col">
                     <h4>Quick Links</h4>
@@ -970,7 +970,7 @@
                 </div>
             </div>
             <div class="footer-bottom">
-                <span>© 2026 PriceGuard. All rights reserved. Made with ❤️ in Austin, TX.</span>
+                <span>© 2026 DealNotify. All rights reserved. Made with ❤️ in Austin, TX.</span>
                 <span><a href="/terms.html">Terms of Service</a> · <a href="/contact.html">Contact</a> · <a href="mailto:hello@dealnotify.co">hello@dealnotify.co</a></span>
             </div>
         </div>
@@ -1254,7 +1254,7 @@
         function saveTargetPrice(productId) {
             const input = document.getElementById(`edit-price-input-${productId}`);
             const newPrice = parseFloat(input.value);
-            console.log('[PriceGuard] saveTargetPrice called', { productId, newPrice, token: token ? 'present' : 'missing' });
+            console.log('[DealNotify] saveTargetPrice called', { productId, newPrice, token: token ? 'present' : 'missing' });
 
             if (!newPrice || newPrice <= 0) {
                 showToast('Please enter a valid price', 'error');
@@ -1270,11 +1270,11 @@
                 body: JSON.stringify({ product_id: productId, target_price: newPrice })
             })
             .then(res => {
-                console.log('[PriceGuard] API response status:', res.status);
+                console.log('[DealNotify] API response status:', res.status);
                 return res.json();
             })
             .then(data => {
-                console.log('[PriceGuard] API response data:', data);
+                console.log('[DealNotify] API response data:', data);
                 if (data.success) {
                     const prod = productsData.find(p => p.id === productId);
                     if (prod) prod.target_price = data.target_price;
@@ -1286,7 +1286,7 @@
                 }
             })
             .catch(err => {
-                console.error('[PriceGuard] saveTargetPrice error:', err);
+                console.error('[DealNotify] saveTargetPrice error:', err);
                 showToast('Something went wrong. Try again.', 'error');
                 if (saveBtn) { saveBtn.textContent = 'Save'; saveBtn.disabled = false; }
             });
@@ -1665,7 +1665,7 @@
                         ${message || "You've reached the 3-product limit on the free plan."}
                     </p>
                     <div style="background:#f0f7ff; border-radius:12px; padding:20px; margin-bottom:24px; text-align:left;">
-                        <p style="color:#5b67f8; font-weight:700; margin:0 0 10px;">⭐ PriceGuard Pro — $4.99/month</p>
+                        <p style="color:#5b67f8; font-weight:700; margin:0 0 10px;">⭐ DealNotify Pro — $4.99/month</p>
                         <p style="color:#555; font-size:14px; margin:4px 0;">✓ Unlimited products tracked</p>
                         <p style="color:#555; font-size:14px; margin:4px 0;">⚡ Price checks <strong>every 2 hours</strong> (3× faster than Free)</p>
                         <p style="color:#555; font-size:14px; margin:4px 0;">✓ Instant email alerts on price drops</p>

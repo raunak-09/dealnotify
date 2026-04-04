@@ -1,5 +1,5 @@
 """
-PriceGuard - Web App (Landing Page + Backend)
+DealNotify - Web App (Landing Page + Backend)
 Database: PostgreSQL (via DATABASE_URL env var — provisioned by Railway)
 Auth: password hashing via werkzeug, email verification, forgot/reset password
 """
@@ -339,7 +339,7 @@ def send_welcome_email(name, email, dashboard_url):
         <h1 style="color: #667eea; text-align: center;">🎉 Welcome, {name}!</h1>
 
         <p style="color: #333; font-size: 16px;">
-        Thank you for signing up for <strong>PriceGuard</strong>! We're now monitoring prices for you.
+        Thank you for signing up for <strong>DealNotify</strong>! We're now monitoring prices for you.
         </p>
 
         <div style="background-color: #f0f7ff; padding: 20px; border-radius: 10px; margin: 25px 0; text-align: center; border: 2px solid #5b67f8;">
@@ -374,12 +374,12 @@ def send_welcome_email(name, email, dashboard_url):
 
         <hr style="border: none; border-top: 2px solid #eee; margin: 30px 0;">
         <p style="color: #333; font-size: 14px;">Best regards,<br>
-        <strong>🛡️ The PriceGuard Team</strong><br>
+        <strong>🔔 The DealNotify Team</strong><br>
         <a href="mailto:hello@dealnotify.co" style="color: #5b67f8;">hello@dealnotify.co</a> | <a href="https://www.dealnotify.co" style="color: #5b67f8;">www.dealnotify.co</a><br><br>
         💰 <em>Never miss a price drop again!</em>
         </p>
         <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-        <p style="color: #999; font-size: 12px; text-align: center;">© 2026 PriceGuard. All rights reserved.</p>
+        <p style="color: #999; font-size: 12px; text-align: center;">© 2026 DealNotify. All rights reserved.</p>
         </div>
         </body>
         </html>
@@ -388,7 +388,7 @@ def send_welcome_email(name, email, dashboard_url):
         text_content = f"""
 Welcome, {name}!
 
-Thank you for signing up for PriceGuard!
+Thank you for signing up for DealNotify!
 
 YOUR PERSONAL DASHBOARD:
 {dashboard_url}
@@ -406,17 +406,17 @@ After that, it's just $4.99/month for unlimited monitoring.
 Questions? Reply to this email at hello@dealnotify.co
 
 Best regards,
-🛡️ The PriceGuard Team
+🔔 The DealNotify Team
 hello@dealnotify.co | www.dealnotify.co
 💰 Never miss a price drop again!
 
-© 2026 PriceGuard. All rights reserved.
+© 2026 DealNotify. All rights reserved.
         """
 
         message = Mail(
             from_email=from_email,
             to_emails=email,
-            subject='🛡️ Welcome to PriceGuard! Your dashboard is ready',
+            subject='🔔 Welcome to DealNotify! Your dashboard is ready',
             html_content=html_content,
             plain_text_content=text_content
         )
@@ -443,7 +443,7 @@ def send_verification_email(name, email, verify_url):
         html_content = f"""
         <html><body style="font-family:Arial,sans-serif;background:#f5f5f5;padding:20px;">
         <div style="background:white;max-width:600px;margin:0 auto;padding:36px;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.08);">
-        <h1 style="color:#5b67f8;text-align:center;margin-bottom:6px;">🛡️ PriceGuard</h1>
+        <h1 style="color:#5b67f8;text-align:center;margin-bottom:6px;">🔔 DealNotify</h1>
         <h2 style="text-align:center;color:#1a1a2e;font-size:22px;">Verify your email, {name}!</h2>
         <p style="color:#555;font-size:15px;text-align:center;margin:12px 0 28px;">
             Click the button below to confirm your email address and activate your account.
@@ -460,17 +460,17 @@ def send_verification_email(name, email, verify_url):
             <a href="{verify_url}" style="color:#5b67f8;word-break:break-all;">{verify_url}</a>
         </p>
         <p style="color:#bbb;font-size:12px;text-align:center;margin-top:24px;">
-            This link expires in 48 hours. If you didn't create a PriceGuard account, you can safely ignore this email.
+            This link expires in 48 hours. If you didn't create a DealNotify account, you can safely ignore this email.
         </p>
         <hr style="border:none;border-top:1px solid #eee;margin:24px 0;">
-        <p style="color:#999;font-size:12px;text-align:center;">© 2026 PriceGuard · <a href="mailto:hello@dealnotify.co" style="color:#5b67f8;">hello@dealnotify.co</a></p>
+        <p style="color:#999;font-size:12px;text-align:center;">© 2026 DealNotify · <a href="mailto:hello@dealnotify.co" style="color:#5b67f8;">hello@dealnotify.co</a></p>
         </div></body></html>
         """
 
         message = Mail(
             from_email=from_email,
             to_emails=email,
-            subject='✅ Verify your PriceGuard email address',
+            subject='✅ Verify your DealNotify email address',
             html_content=html_content
         )
         sg = SendGridAPIClient(api_key)
@@ -494,7 +494,7 @@ def send_password_reset_email(name, email, reset_url):
         html_content = f"""
         <html><body style="font-family:Arial,sans-serif;background:#f5f5f5;padding:20px;">
         <div style="background:white;max-width:600px;margin:0 auto;padding:36px;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.08);">
-        <h1 style="color:#5b67f8;text-align:center;margin-bottom:6px;">🛡️ PriceGuard</h1>
+        <h1 style="color:#5b67f8;text-align:center;margin-bottom:6px;">🔔 DealNotify</h1>
         <h2 style="text-align:center;color:#1a1a2e;font-size:22px;">Reset your password</h2>
         <p style="color:#555;font-size:15px;text-align:center;margin:12px 0 28px;">
             Hi {name}, we received a request to reset your password.
@@ -516,14 +516,14 @@ def send_password_reset_email(name, email, reset_url):
             Your password will not be changed.
         </p>
         <hr style="border:none;border-top:1px solid #eee;margin:24px 0;">
-        <p style="color:#999;font-size:12px;text-align:center;">© 2026 PriceGuard · <a href="mailto:hello@dealnotify.co" style="color:#5b67f8;">hello@dealnotify.co</a></p>
+        <p style="color:#999;font-size:12px;text-align:center;">© 2026 DealNotify · <a href="mailto:hello@dealnotify.co" style="color:#5b67f8;">hello@dealnotify.co</a></p>
         </div></body></html>
         """
 
         message = Mail(
             from_email=from_email,
             to_emails=email,
-            subject='🔑 Reset your PriceGuard password',
+            subject='🔑 Reset your DealNotify password',
             html_content=html_content
         )
         sg = SendGridAPIClient(api_key)
@@ -583,12 +583,12 @@ def send_price_drop_alert(name, email, product_url, current_price, target_price,
 
         <hr style="border: none; border-top: 2px solid #eee; margin: 30px 0;">
         <p style="color: #333; font-size: 14px;">Best regards,<br>
-        <strong>🛡️ The PriceGuard Team</strong><br>
+        <strong>🔔 The DealNotify Team</strong><br>
         <a href="mailto:hello@dealnotify.co" style="color: #5b67f8;">hello@dealnotify.co</a> | <a href="https://www.dealnotify.co" style="color: #5b67f8;">www.dealnotify.co</a><br><br>
         💰 <em>Never miss a price drop again!</em>
         </p>
         <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-        <p style="color: #999; font-size: 12px; text-align: center;">© 2026 PriceGuard. All rights reserved.</p>
+        <p style="color: #999; font-size: 12px; text-align: center;">© 2026 DealNotify. All rights reserved.</p>
         </div>
         </body>
         </html>
@@ -597,7 +597,7 @@ def send_price_drop_alert(name, email, product_url, current_price, target_price,
         message = Mail(
             from_email=from_email,
             to_emails=email,
-            subject=f'🎉 Price Drop Alert! ${float(current_price):.2f} on {store} — PriceGuard',
+            subject=f'🎉 Price Drop Alert! ${float(current_price):.2f} on {store} — DealNotify',
             html_content=html_content
         )
 
@@ -1330,14 +1330,14 @@ def contact():
         <tr style="background:#f9f9f9;"><td style="padding: 10px; font-weight: bold; color: #555;">Email:</td><td style="padding: 10px;"><a href="mailto:{email}">{email}</a></td></tr>
         <tr><td style="padding: 10px; font-weight: bold; color: #555;">Message:</td><td style="padding: 10px;">{message}</td></tr>
         </table>
-        <p style="color: #888; font-size: 12px; margin-top: 20px;">Sent from PriceGuard Contact Form</p>
+        <p style="color: #888; font-size: 12px; margin-top: 20px;">Sent from DealNotify Contact Form</p>
         </body></html>
         """
 
         msg = Mail(
             from_email=from_email,
             to_emails='hello@dealnotify.co',
-            subject=f'📬 PriceGuard Contact: Message from {name}',
+            subject=f'📬 DealNotify Contact: Message from {name}',
             html_content=html_content
         )
 
@@ -1352,7 +1352,7 @@ def contact():
         <div style="background: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0;">
         <p style="color: #666; font-size: 14px; margin: 0;"><strong>Your message:</strong><br>{message}</p>
         </div>
-        <p style="color: #333; font-size: 14px;">Best regards,<br><strong>🛡️ The PriceGuard Team</strong><br>
+        <p style="color: #333; font-size: 14px;">Best regards,<br><strong>🔔 The DealNotify Team</strong><br>
         <a href="mailto:hello@dealnotify.co" style="color: #5b67f8;">hello@dealnotify.co</a> | <a href="https://www.dealnotify.co" style="color: #5b67f8;">www.dealnotify.co</a><br><br>
         💰 <em>Never miss a price drop again!</em></p>
         </div></body></html>
@@ -1361,7 +1361,7 @@ def contact():
         confirm_msg = Mail(
             from_email=from_email,
             to_emails=email,
-            subject='✅ We received your message — PriceGuard Support',
+            subject='✅ We received your message — DealNotify Support',
             html_content=confirm_html
         )
         sg.send(confirm_msg)
