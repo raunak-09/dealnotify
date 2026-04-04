@@ -142,22 +142,56 @@ def extract_price_from_text(html, markdown=''):
 
     # ── Step 3: Amazon-specific JSON patterns ────────────────────────────────
     # Amazon uses priceToPay, priceAmount, buyingPrice, displayPrice
+    # IMPORTANT: priceToPay sometimes reflects a coupon-adjusted price (e.g. "clip coupon")
+    # which is lower than the true shelf price. We collect all candidates and pick the
+    # HIGHEST (most conservative) to avoid false alerts from coupon-adjusted prices.
     if html:
-        amazon_patterns = [
-            r'"priceToPay"\s*:\s*\{[^}]*"amount"\s*:\s*"?([\d,]+\.?\d*)"?',
-            r'"priceAmount"\s*:\s*"?([\d,]+\.?\d*)"?',
-            r'"buyingPrice"\s*:\s*"?([\d,]+\.?\d*)"?',
-            r'"displayPrice"\s*:\s*"\$?([\d,]+\.?\d*)"',
-            r'"ourPrice"\s*:\s*"\$?([\d,]+\.?\d*)"',
-            r'"price"\s*:\s*\{"amount"\s*:\s*"?([\d,]+\.?\d*)"',
-        ]
-        for pat in amazon_patterns:
+        amazon_candidates = []
+
+        # priceToPay — may include coupon discount; collect but don't trust blindly
+        m = re.search(r'"priceToPay"\s*:\s*\{[^}]*"amount"\s*:\s*"?([\d,]+\.?\d*)"?', html)
+        if m:
+            p = valid_price(m.group(1))
+            if p:
+                amazon_candidates.append(('priceToPay', p))
+
+        # basisPrice / listPrice — the "real" price before coupons; more reliable
+        for pat, label in [
+            (r'"basisPrice"\s*:\s*\{[^}]*"amount"\s*:\s*"?([\d,]+\.?\d*)"?', 'basisPrice'),
+            (r'"listPrice"\s*:\s*\{[^}]*"amount"\s*:\s*"?([\d,]+\.?\d*)"?', 'listPrice'),
+            (r'"priceAmount"\s*:\s*"?([\d,]+\.?\d*)"?', 'priceAmount'),
+            (r'"buyingPrice"\s*:\s*"?([\d,]+\.?\d*)"?', 'buyingPrice'),
+            (r'"displayPrice"\s*:\s*"\$?([\d,]+\.?\d*)"', 'displayPrice'),
+            (r'"ourPrice"\s*:\s*"\$?([\d,]+\.?\d*)"', 'ourPrice'),
+            (r'"price"\s*:\s*\{"amount"\s*:\s*"?([\d,]+\.?\d*)"', 'price.amount'),
+        ]:
             m = re.search(pat, html)
             if m:
                 p = valid_price(m.group(1))
                 if p:
-                    print(f"   → Amazon-specific price pattern: ${p}")
-                    return p
+                    amazon_candidates.append((label, p))
+
+        if amazon_candidates:
+            # Check if there's a coupon context nearby in the HTML
+            coupon_in_page = bool(re.search(
+                r'coupon|clip\s+coupon|save\s+with\s+coupon|couponBadge|promotionBadge',
+                html, re.IGNORECASE
+            ))
+            labels = [lbl for lbl, _ in amazon_candidates]
+            prices = [p for _, p in amazon_candidates]
+            print(f"   → Amazon candidates: {amazon_candidates}, coupon_in_page={coupon_in_page}")
+
+            if coupon_in_page and len(prices) > 1:
+                # When a coupon is present, prefer the HIGHEST price found
+                # (the true shelf price before coupon). The coupon price is a bonus
+                # but shouldn't trigger a false alert.
+                best = max(prices)
+                print(f"   → Coupon detected — using highest (shelf) price: ${best}")
+            else:
+                # No coupon evidence — use the first / lowest price as normal
+                best = prices[0]
+                print(f"   → Amazon price: ${best}")
+            return best
 
     # ── Step 4: Target-specific JSON patterns ────────────────────────────────
     if html:

@@ -546,6 +546,10 @@ def send_price_drop_alert(name, email, product_url, current_price, target_price,
 
         savings = float(target_price) - float(current_price)
 
+        # Human-readable timestamp for when the price was detected (UTC)
+        from datetime import timezone
+        alert_time_utc = datetime.now(timezone.utc).strftime('%b %d, %Y at %I:%M %p UTC')
+
         html_content = f"""
         <html>
         <body style="font-family: Arial, sans-serif; background-color: #f5f5f5; padding: 20px;">
@@ -557,7 +561,7 @@ def send_price_drop_alert(name, email, product_url, current_price, target_price,
         <p style="color: #555; font-size: 14px; margin-bottom: 10px;">A product you're tracking just dropped in price!</p>
         <div style="display: flex; justify-content: center; gap: 30px; margin: 15px 0;">
         <div>
-            <div style="font-size: 13px; color: #888;">Current Price</div>
+            <div style="font-size: 13px; color: #888;">Price When Detected</div>
             <div style="font-size: 32px; font-weight: bold; color: #27ae60;">${float(current_price):.2f}</div>
         </div>
         <div style="font-size: 30px; color: #ccc; padding-top: 15px;">→</div>
@@ -569,6 +573,17 @@ def send_price_drop_alert(name, email, product_url, current_price, target_price,
         <div style="background: #27ae60; color: white; border-radius: 50px; padding: 8px 20px; display: inline-block; font-weight: bold; margin-top: 10px;">
         🎯 You save ${savings:.2f}!
         </div>
+        <p style="color: #888; font-size: 12px; margin-top: 14px; margin-bottom: 0;">
+        ⏱ Price detected on {alert_time_utc}
+        </p>
+        </div>
+
+        <div style="background: #fff8e1; border-left: 4px solid #f59e0b; border-radius: 6px; padding: 12px 16px; margin: 0 0 20px 0;">
+        <p style="margin: 0; font-size: 13px; color: #78350f;">
+        <strong>⚡ Act fast!</strong> Online prices — especially on Amazon — can change within minutes.
+        The price shown above was detected by our monitor. If the current price on the retailer's page
+        looks different, the deal may have ended or a coupon may be required to reach that price.
+        </p>
         </div>
 
         <div style="text-align: center; margin: 25px 0;">
