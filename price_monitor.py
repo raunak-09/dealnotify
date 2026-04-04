@@ -36,7 +36,9 @@ def clean_url(url):
     STRIP = {
         'adsRedirect', 'ref', 'ref_', 'tag', 'linkCode', 'linkId',
         'pf_rd_p', 'pf_rd_r', 'pd_rd_wg', 'pd_rd_w', 'pd_rd_r',
-        'th', 'ascsubtag', 'smid', 'asc_refurl', 'asc_campaign',
+        'ascsubtag', 'smid', 'asc_refurl', 'asc_campaign',
+        # NOTE: 'th' was removed — on Amazon it's the variant selector,
+        # stripping it can load a different product variant at a different price.
     }
     try:
         parsed = urlparse(url)

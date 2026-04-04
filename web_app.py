@@ -1258,6 +1258,120 @@ def update_target_price():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/test-scrape', methods=['GET'])
+def test_scrape():
+    """Debug endpoint — scrape a single URL and return every price signal found.
+       Usage: /api/test-scrape?url=https://...&password=ADMIN_PASSWORD
+    """
+    import re, io, sys
+
+    # Require admin password for security
+    admin_password = os.getenv('ADMIN_PASSWORD', '')
+    if not admin_password or request.args.get('password') != admin_password:
+        return jsonify({'error': 'Admin password required'}), 403
+
+    url = request.args.get('url', '').strip()
+    if not url:
+        return jsonify({'error': 'url parameter required'}), 400
+
+    from price_monitor import clean_url, _init_firecrawl, _do_scrape, _extract_amazon_price, _extract_meta_price, _extract_jsonld_blocks
+
+    cleaned = clean_url(url)
+    result = {
+        'original_url': url,
+        'cleaned_url': cleaned,
+        'is_amazon': bool(re.search(r'amazon\.(com|co\.uk|ca|com\.au|de|fr|it|es)', cleaned, re.IGNORECASE)),
+    }
+
+    # Capture all print() output from scraping
+    old_stdout = sys.stdout
+    sys.stdout = captured = io.StringIO()
+
+    try:
+        api_key = os.getenv('FIRECRAWL_API_KEY')
+        if not api_key:
+            result['error'] = 'FIRECRAWL_API_KEY not set'
+            return jsonify(result), 500
+
+        fc, api_version = _init_firecrawl(api_key)
+        result['firecrawl_version'] = api_version
+
+        markdown, html = _do_scrape(fc, api_version, cleaned)
+        result['html_length'] = len(html)
+        result['markdown_length'] = len(markdown)
+
+        # Show what each extraction method finds
+        signals = {}
+
+        # Meta tag
+        meta_price = _extract_meta_price(html) if html else None
+        signals['meta_tag'] = meta_price
+
+        # JSON-LD
+        jsonld = _extract_jsonld_blocks(html) if html else ''
+        jsonld_prices = []
+        for m in re.finditer(r'"priceCurrency"\s*:\s*"USD"', jsonld + (html or ''), re.IGNORECASE):
+            window = (jsonld + (html or ''))[max(0, m.start()-600): m.end()+600]
+            for pat in (r'"price"\s*:\s*"([\d,]+\.?\d*)"', r'"price"\s*:\s*([\d,]+\.?\d*)'):
+                pm = re.search(pat, window)
+                if pm:
+                    try:
+                        p = float(pm.group(1).replace(',', ''))
+                        if 0.5 < p < 100000:
+                            jsonld_prices.append(p)
+                    except: pass
+                    break
+        signals['jsonld_priceCurrency'] = jsonld_prices if jsonld_prices else None
+
+        # Amazon-specific fields (scan even if not Amazon, for debugging)
+        def find_amount(key):
+            m = re.search(rf'"{key}"\s*:\s*\{{', html or '')
+            if not m: return None
+            snippet = html[m.start(): m.start()+400]
+            am = re.search(r'"amount"\s*:\s*"?([\d,]+\.?\d*)"?', snippet)
+            if am:
+                try: return float(am.group(1).replace(',',''))
+                except: pass
+            return None
+
+        signals['amazon_basisPrice'] = find_amount('basisPrice')
+        signals['amazon_listPrice'] = find_amount('listPrice')
+        signals['amazon_priceToPay'] = find_amount('priceToPay')
+
+        def find_str(key):
+            m = re.search(rf'"{key}"\s*:\s*"\$?([\d,]+\.?\d*)"', html or '')
+            if m:
+                try: return float(m.group(1).replace(',',''))
+                except: pass
+            return None
+
+        signals['amazon_priceAmount'] = find_str('priceAmount')
+        signals['amazon_displayPrice'] = find_str('displayPrice')
+        signals['amazon_ourPrice'] = find_str('ourPrice')
+        signals['amazon_buyingPrice'] = find_str('buyingPrice')
+
+        # Coupon detection
+        signals['coupon_keywords_found'] = bool(re.search(
+            r'coupon|clip\s+coupon|save\s+with\s+coupon|couponBadge|promotionBadge',
+            html or '', re.IGNORECASE
+        ))
+
+        result['price_signals'] = signals
+
+        # Now run the actual scraper to see what it returns
+        from price_monitor import scrape_price
+        final_price = scrape_price(url)
+        result['final_scrape_price'] = final_price
+
+    except Exception as e:
+        result['error'] = str(e)
+    finally:
+        sys.stdout = old_stdout
+        result['scraper_logs'] = captured.getvalue()
+
+    return jsonify(result), 200
+
+
 @app.route('/api/check-prices', methods=['GET'])
 def check_prices_for_user():
     """Check current prices for all of a user's products"""
