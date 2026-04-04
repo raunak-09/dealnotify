@@ -82,18 +82,98 @@ def _extract_meta_price(html):
     return None
 
 
-def extract_price_from_text(html, markdown=''):
+def _extract_amazon_price(html):
+    """
+    Amazon-specific price extraction.
+
+    Priority order (most → least reliable):
+      1. basisPrice  — the "real" shelf price before any coupon is applied
+      2. listPrice   — MSRP / regular price, also pre-coupon
+      3. priceToPay  — what the customer pays at checkout; MAY be post-coupon
+      4. priceAmount / ourPrice / displayPrice — fallbacks
+
+    We use a two-step window search for each key so we aren't tripped up by
+    nested JSON objects: find the key, then scan the next N chars for "amount".
+    """
+    import re
+
+    def valid_price(s):
+        try:
+            p = float(str(s).replace(',', '').replace('$', '').strip())
+            return p if 0.5 < p < 100000 else None
+        except Exception:
+            return None
+
+    def find_amount_after_key(key, text, window=400):
+        """Find the first 'amount' value within `window` chars after `key`."""
+        m = re.search(rf'"{key}"\s*:\s*\{{', text)
+        if not m:
+            return None
+        snippet = text[m.start(): m.start() + window]
+        am = re.search(r'"amount"\s*:\s*"?([\d,]+\.?\d*)"?', snippet)
+        if am:
+            return valid_price(am.group(1))
+        return None
+
+    def find_string_value(key, text):
+        m = re.search(rf'"{key}"\s*:\s*"\$?([\d,]+\.?\d*)"', text)
+        return valid_price(m.group(1)) if m else None
+
+    # 1. basisPrice — real shelf price, ignore this only if it looks unreasonably high
+    basis = find_amount_after_key('basisPrice', html)
+    if basis:
+        print(f"   → Amazon basisPrice: ${basis}")
+        return basis
+
+    # 2. listPrice
+    list_p = find_amount_after_key('listPrice', html)
+    if list_p:
+        print(f"   → Amazon listPrice: ${list_p}")
+        return list_p
+
+    # 3. priceToPay — potentially post-coupon; use only when nothing better found
+    pay = find_amount_after_key('priceToPay', html)
+    print(f"   → Amazon priceToPay: ${pay}" if pay else "   → Amazon priceToPay: (none)")
+
+    # Fallbacks
+    fallbacks = [
+        find_string_value('priceAmount', html),
+        find_string_value('ourPrice', html),
+        find_string_value('displayPrice', html),
+        find_string_value('buyingPrice', html),
+    ]
+    for fb in fallbacks:
+        if fb:
+            print(f"   → Amazon fallback price: ${fb}")
+            # If priceToPay and a fallback both exist, pick the HIGHER one
+            # (coupon pages: priceToPay is lower; non-coupon: they should match)
+            if pay and abs(pay - fb) > 0.5:
+                best = max(pay, fb)
+                print(f"   → Coupon likely — using higher price: ${best}")
+                return best
+            return fb
+
+    # Nothing else found — return priceToPay as last resort
+    if pay:
+        return pay
+
+    return None
+
+
+def extract_price_from_text(html, markdown='', url=''):
     """
     Extract the main product price from page HTML and/or markdown.
 
-    Strategy (in priority order):
-    1. <meta> property price tags  — fastest, unambiguous
-    2. JSON-LD <script> blocks     — structured data with priceCurrency
-    3. Amazon-specific JSON fields — priceToPay, priceAmount, buyingPrice
-    4. Target-specific JSON fields — formatted_current_price, currentRetailPrice
-    5. Best Buy / generic patterns — salePrice, regularPrice, etc.
-    6. Full-text priceCurrency scan — search ALL content (not just 8k chars)
-    7. Markdown line-by-line scan  — intent keywords, bold prices, frequency
+    Strategy:
+    • Amazon URLs → skip JSON-LD (which Amazon populates with post-coupon prices)
+                    and go straight to basisPrice-first extraction.
+    • All other URLs (in priority order):
+      1. <meta> property price tags
+      2. JSON-LD <script> blocks (priceCurrency proximity)
+      3. Target-specific JSON fields
+      4. Best Buy / generic patterns
+      5. Full-text priceCurrency scan
+      6. Markdown line-by-line scan
     """
     import re
     from collections import Counter
@@ -110,90 +190,50 @@ def extract_price_from_text(html, markdown=''):
         re.IGNORECASE
     )
 
-    # ── Step 1: Meta tag price (most reliable when present) ──────────────────
-    if html:
+    is_amazon = bool(re.search(r'amazon\.(com|co\.uk|ca|com\.au|de|fr|it|es)', url or '', re.IGNORECASE))
+
+    # ── Amazon fast-path ─────────────────────────────────────────────────────
+    # Skip Steps 1 & 2 for Amazon: JSON-LD on Amazon often contains the
+    # post-coupon price (priceToPay), not the shelf price. Go directly to the
+    # basisPrice-first extractor which is tuned for Amazon's JS data structures.
+    if is_amazon and html:
+        print(f"   → Amazon URL detected — using basisPrice-first extraction")
+        price = _extract_amazon_price(html)
+        if price:
+            return price
+        print(f"   → Amazon extractor found nothing, falling through to generic steps")
+
+    # ── Step 1: Meta tag price (most reliable for non-Amazon retailers) ───────
+    if not is_amazon and html:
         p = _extract_meta_price(html)
         if p:
             print(f"   → Meta tag price: ${p}")
             return p
 
-    # ── Step 2: JSON-LD blocks + priceCurrency proximity ─────────────────────
+    # ── Step 2: JSON-LD blocks + priceCurrency proximity (skip for Amazon) ───
     jsonld = _extract_jsonld_blocks(html) if html else ''
-    # Search JSON-LD blocks for price near priceCurrency
-    search_targets = [jsonld, html or '', markdown or '']
-    for corpus in search_targets:
-        if not corpus:
-            continue
-        offer_prices = []
-        for m in re.finditer(r'"priceCurrency"\s*:\s*"USD"', corpus, re.IGNORECASE):
-            window = corpus[max(0, m.start() - 600): m.end() + 600]
-            for pat in (r'"price"\s*:\s*"([\d,]+\.?\d*)"',
-                        r'"price"\s*:\s*([\d,]+\.?\d*)'):
-                pm = re.search(pat, window)
-                if pm:
-                    p = valid_price(pm.group(1))
-                    if p:
-                        offer_prices.append(p)
-                        break
-        if offer_prices:
-            best = Counter(offer_prices).most_common(1)[0][0]
-            print(f"   → priceCurrency prices: {sorted(set(offer_prices))} → ${best}")
-            return best
+    if not is_amazon:
+        search_targets = [jsonld, html or '', markdown or '']
+        for corpus in search_targets:
+            if not corpus:
+                continue
+            offer_prices = []
+            for m in re.finditer(r'"priceCurrency"\s*:\s*"USD"', corpus, re.IGNORECASE):
+                window = corpus[max(0, m.start() - 600): m.end() + 600]
+                for pat in (r'"price"\s*:\s*"([\d,]+\.?\d*)"',
+                            r'"price"\s*:\s*([\d,]+\.?\d*)'):
+                    pm = re.search(pat, window)
+                    if pm:
+                        p = valid_price(pm.group(1))
+                        if p:
+                            offer_prices.append(p)
+                            break
+            if offer_prices:
+                best = Counter(offer_prices).most_common(1)[0][0]
+                print(f"   → priceCurrency prices: {sorted(set(offer_prices))} → ${best}")
+                return best
 
-    # ── Step 3: Amazon-specific JSON patterns ────────────────────────────────
-    # Amazon uses priceToPay, priceAmount, buyingPrice, displayPrice
-    # IMPORTANT: priceToPay sometimes reflects a coupon-adjusted price (e.g. "clip coupon")
-    # which is lower than the true shelf price. We collect all candidates and pick the
-    # HIGHEST (most conservative) to avoid false alerts from coupon-adjusted prices.
-    if html:
-        amazon_candidates = []
-
-        # priceToPay — may include coupon discount; collect but don't trust blindly
-        m = re.search(r'"priceToPay"\s*:\s*\{[^}]*"amount"\s*:\s*"?([\d,]+\.?\d*)"?', html)
-        if m:
-            p = valid_price(m.group(1))
-            if p:
-                amazon_candidates.append(('priceToPay', p))
-
-        # basisPrice / listPrice — the "real" price before coupons; more reliable
-        for pat, label in [
-            (r'"basisPrice"\s*:\s*\{[^}]*"amount"\s*:\s*"?([\d,]+\.?\d*)"?', 'basisPrice'),
-            (r'"listPrice"\s*:\s*\{[^}]*"amount"\s*:\s*"?([\d,]+\.?\d*)"?', 'listPrice'),
-            (r'"priceAmount"\s*:\s*"?([\d,]+\.?\d*)"?', 'priceAmount'),
-            (r'"buyingPrice"\s*:\s*"?([\d,]+\.?\d*)"?', 'buyingPrice'),
-            (r'"displayPrice"\s*:\s*"\$?([\d,]+\.?\d*)"', 'displayPrice'),
-            (r'"ourPrice"\s*:\s*"\$?([\d,]+\.?\d*)"', 'ourPrice'),
-            (r'"price"\s*:\s*\{"amount"\s*:\s*"?([\d,]+\.?\d*)"', 'price.amount'),
-        ]:
-            m = re.search(pat, html)
-            if m:
-                p = valid_price(m.group(1))
-                if p:
-                    amazon_candidates.append((label, p))
-
-        if amazon_candidates:
-            # Check if there's a coupon context nearby in the HTML
-            coupon_in_page = bool(re.search(
-                r'coupon|clip\s+coupon|save\s+with\s+coupon|couponBadge|promotionBadge',
-                html, re.IGNORECASE
-            ))
-            labels = [lbl for lbl, _ in amazon_candidates]
-            prices = [p for _, p in amazon_candidates]
-            print(f"   → Amazon candidates: {amazon_candidates}, coupon_in_page={coupon_in_page}")
-
-            if coupon_in_page and len(prices) > 1:
-                # When a coupon is present, prefer the HIGHEST price found
-                # (the true shelf price before coupon). The coupon price is a bonus
-                # but shouldn't trigger a false alert.
-                best = max(prices)
-                print(f"   → Coupon detected — using highest (shelf) price: ${best}")
-            else:
-                # No coupon evidence — use the first / lowest price as normal
-                best = prices[0]
-                print(f"   → Amazon price: ${best}")
-            return best
-
-    # ── Step 4: Target-specific JSON patterns ────────────────────────────────
+    # ── Step 3: Target-specific JSON patterns ────────────────────────────────
     if html:
         target_patterns = [
             r'"formatted_current_price"\s*:\s*"\$?([\d,]+\.?\d*)"',
@@ -210,7 +250,7 @@ def extract_price_from_text(html, markdown=''):
                     print(f"   → Target-specific price pattern: ${p}")
                     return p
 
-    # ── Step 5: Generic retailer JSON patterns ───────────────────────────────
+    # ── Step 4: Generic retailer JSON patterns ───────────────────────────────
     if html:
         generic_patterns = [
             r'"salePrice"\s*:\s*"?\$?([\d,]+\.?\d*)"?',
@@ -228,7 +268,7 @@ def extract_price_from_text(html, markdown=''):
                     print(f"   → Generic price pattern: ${p}")
                     return p
 
-    # ── Step 6: Broader JSON "price" keys in JSON-LD ─────────────────────────
+    # ── Step 5: Broader JSON "price" keys in JSON-LD ─────────────────────────
     for corpus in (jsonld, html or ''):
         if not corpus:
             continue
@@ -246,7 +286,7 @@ def extract_price_from_text(html, markdown=''):
             print(f"   → Broad JSON prices: {sorted(set(json_prices[:20]))} → ${best}")
             return best
 
-    # ── Step 7: Markdown line-by-line scan ───────────────────────────────────
+    # ── Step 6: Markdown line-by-line scan ───────────────────────────────────
     if not markdown:
         return None
 
@@ -358,7 +398,7 @@ def scrape_price(url):
         print(f"   → Content snippet: {snippet}...")
         print(f"   → HTML length: {len(html)} chars, Markdown length: {len(markdown)} chars")
 
-        price = extract_price_from_text(html, markdown)
+        price = extract_price_from_text(html, markdown, url=clean)
         if price:
             print(f"   ✅ Price: ${price}")
             return price
