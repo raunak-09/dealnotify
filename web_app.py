@@ -1030,6 +1030,7 @@ def get_dashboard():
             'email': user['email'],
             'phone': user.get('phone') or '',
             'newsletter': user.get('newsletter', True),
+            'timezone': user.get('timezone') or '',
             'signup_date': signup_date.strftime('%Y-%m-%d'),
             'trial_days_remaining': trial_days_remaining,
             'status': user['status'],

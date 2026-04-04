@@ -743,6 +743,36 @@
                 <input type="tel" id="acct-phone" placeholder="+1 (555) 000-0000">
             </div>
             <div class="acct-form-group">
+                <label>Timezone <span style="font-weight:400;color:#aaa">(used for alert email timestamps)</span></label>
+                <select id="acct-timezone" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:14px;color:#1a1a2e;background:#fff;cursor:pointer;">
+                    <optgroup label="🇺🇸 United States">
+                        <option value="America/New_York">Eastern Time — New York, Miami</option>
+                        <option value="America/Chicago">Central Time — Chicago, Dallas, Austin</option>
+                        <option value="America/Denver">Mountain Time — Denver, Phoenix</option>
+                        <option value="America/Los_Angeles">Pacific Time — Los Angeles, Seattle</option>
+                        <option value="America/Anchorage">Alaska Time — Anchorage</option>
+                        <option value="Pacific/Honolulu">Hawaii Time — Honolulu</option>
+                    </optgroup>
+                    <optgroup label="🌍 Europe">
+                        <option value="Europe/London">London (GMT/BST)</option>
+                        <option value="Europe/Paris">Paris / Berlin / Rome (CET)</option>
+                        <option value="Europe/Helsinki">Helsinki / Athens (EET)</option>
+                    </optgroup>
+                    <optgroup label="🌏 Asia & Pacific">
+                        <option value="Asia/Dubai">Dubai (GST)</option>
+                        <option value="Asia/Kolkata">India — Mumbai, Delhi (IST)</option>
+                        <option value="Asia/Singapore">Singapore / Kuala Lumpur</option>
+                        <option value="Asia/Shanghai">China — Beijing, Shanghai</option>
+                        <option value="Asia/Tokyo">Japan — Tokyo</option>
+                        <option value="Australia/Sydney">Australia — Sydney (AEST)</option>
+                        <option value="Pacific/Auckland">New Zealand — Auckland (NZST)</option>
+                    </optgroup>
+                    <optgroup label="🌐 UTC">
+                        <option value="UTC">UTC — Coordinated Universal Time</option>
+                    </optgroup>
+                </select>
+            </div>
+            <div class="acct-form-group">
                 <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:500;">
                     <input type="checkbox" id="acct-newsletter" style="width:15px;height:15px;accent-color:#5b67f8;">
                     Subscribe to DealNotify newsletter (weekly deal tips &amp; updates)
@@ -1519,6 +1549,21 @@
                 document.getElementById('acct-email').value     = userData.email || '';
                 document.getElementById('acct-phone').value     = userData.phone || '';
                 document.getElementById('acct-newsletter').checked = userData.newsletter !== false;
+                // Pre-select timezone: stored value → browser detected → first option
+                const storedTz = userData.timezone || '';
+                const browserTz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch(e) { return ''; } })();
+                const tzSelect = document.getElementById('acct-timezone');
+                const tzToSet = storedTz || browserTz;
+                let found = false;
+                for (let opt of tzSelect.options) {
+                    if (opt.value === tzToSet) { opt.selected = true; found = true; break; }
+                }
+                if (!found && tzToSet) {
+                    // Timezone not in list — add it dynamically
+                    const opt = document.createElement('option');
+                    opt.value = tzToSet; opt.textContent = tzToSet; opt.selected = true;
+                    tzSelect.appendChild(opt);
+                }
                 const tag = document.getElementById('planTag');
                 const isPro = userData.is_pro || userData.status === 'pro';
                 if (isPro) {
@@ -1549,6 +1594,7 @@
             const name       = document.getElementById('acct-name').value.trim();
             const phone      = document.getElementById('acct-phone').value.trim();
             const newsletter = document.getElementById('acct-newsletter').checked;
+            const timezone   = document.getElementById('acct-timezone').value;
             const btn        = document.getElementById('acct-save-btn');
 
             document.getElementById('acct-success').style.display = 'none';
@@ -1563,17 +1609,26 @@
             btn.disabled = true;
             btn.textContent = 'Saving…';
 
-            fetch(`/api/update-account?token=${token}`, {
+            // Save account details + timezone in parallel
+            const saveAccount = fetch(`/api/update-account?token=${token}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name, phone, newsletter })
-            })
-            .then(r => r.json())
-            .then(data => {
+            }).then(r => r.json());
+
+            const saveTz = fetch(`/api/update-timezone?token=${token}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ timezone })
+            }).then(r => r.json());
+
+            Promise.all([saveAccount, saveTz])
+            .then(([data]) => {
                 if (data.success) {
                     userData.name        = name;
                     userData.phone       = phone;
                     userData.newsletter  = newsletter;
+                    userData.timezone    = timezone;
                     document.getElementById('headerName').textContent    = name;
                     document.getElementById('dropdownName').textContent  = name;
                     document.getElementById('headerAvatar').textContent  = name.charAt(0).toUpperCase();
