@@ -147,6 +147,7 @@ def init_db():
         # Profile / marketing columns
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT;")
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS newsletter BOOLEAN NOT NULL DEFAULT TRUE;")
+        cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS timezone TEXT;")
         cur.execute("""
             CREATE TABLE IF NOT EXISTS products (
                 id SERIAL PRIMARY KEY,
@@ -535,7 +536,7 @@ def send_password_reset_email(name, email, reset_url):
         return False
 
 
-def send_price_drop_alert(name, email, product_url, current_price, target_price, store, dashboard_url):
+def send_price_drop_alert(name, email, product_url, current_price, target_price, store, dashboard_url, user_timezone=None):
     """Send price drop alert email via SendGrid"""
     try:
         api_key = os.getenv('SENDGRID_API_KEY')
@@ -546,9 +547,17 @@ def send_price_drop_alert(name, email, product_url, current_price, target_price,
 
         savings = float(target_price) - float(current_price)
 
-        # Human-readable timestamp for when the price was detected (UTC)
-        from datetime import timezone
-        alert_time_utc = datetime.now(timezone.utc).strftime('%b %d, %Y at %I:%M %p UTC')
+        # Format alert timestamp in the user's local timezone if known, else UTC
+        from datetime import timezone as _tz
+        now_utc = datetime.now(_tz.utc)
+        try:
+            import zoneinfo
+            tz_obj = zoneinfo.ZoneInfo(user_timezone) if user_timezone else _tz.utc
+            now_local = now_utc.astimezone(tz_obj)
+            tz_label = now_local.strftime('%Z')  # e.g. "CST", "PDT"
+            alert_time_str = now_local.strftime(f'%b %d, %Y at %I:%M %p {tz_label}')
+        except Exception:
+            alert_time_str = now_utc.strftime('%b %d, %Y at %I:%M %p UTC')
 
         html_content = f"""
         <html>
@@ -574,7 +583,7 @@ def send_price_drop_alert(name, email, product_url, current_price, target_price,
         🎯 You save ${savings:.2f}!
         </div>
         <p style="color: #888; font-size: 12px; margin-top: 14px; margin-bottom: 0;">
-        ⏱ Price detected on {alert_time_utc}
+        ⏱ Price detected on {alert_time_str}
         </p>
         </div>
 
@@ -1168,6 +1177,35 @@ def remove_product():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/update-timezone', methods=['POST'])
+def update_timezone():
+    """Store the user's browser timezone (e.g. 'America/Chicago') so alert emails show local time."""
+    try:
+        token = request.args.get('token') or (request.get_json(silent=True) or {}).get('token')
+        tz = (request.get_json(silent=True) or {}).get('timezone', '').strip()
+        if not token or not tz:
+            return jsonify({'error': 'token and timezone required'}), 400
+        user, _ = get_user_by_token(token)
+        if not user:
+            return jsonify({'error': 'invalid token'}), 401
+        # Basic validation — IANA timezone strings contain '/' or are 3-letter codes
+        import zoneinfo
+        try:
+            zoneinfo.ZoneInfo(tz)
+        except Exception:
+            return jsonify({'error': 'invalid timezone'}), 400
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("UPDATE users SET timezone = %s WHERE id = %s", (tz, user['id']))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({'ok': True})
+    except Exception as e:
+        print(f"update_timezone error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/update-target-price', methods=['POST'])
 def update_target_price():
     """Update the target price for a specific product"""
@@ -1262,7 +1300,8 @@ def check_prices_for_user():
                         current_price=current_price,
                         target_price=target,
                         store=product.get('store', 'the store'),
-                        dashboard_url=dashboard_url
+                        dashboard_url=dashboard_url,
+                        user_timezone=user.get('timezone')
                     )
                     alerts_sent += 1
                     print(f"🔔 Alert sent for {user['email']} - price ${current_price} <= target ${target}")
@@ -1937,7 +1976,8 @@ def check_all_prices_job():
                         current_price=current_price,
                         target_price=target,
                         store=product.get('store', 'the store'),
-                        dashboard_url=dashboard_url
+                        dashboard_url=dashboard_url,
+                        user_timezone=user.get('timezone')
                     )
                     total_alerts += 1
                     print(f"   🔔 Alert sent — ${current_price} <= target ${target}")

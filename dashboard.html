@@ -993,6 +993,18 @@
                 url.searchParams.set('token', token);
                 window.history.replaceState({}, '', url);
             }
+            // Send the user's browser timezone to the server so alert emails
+            // can display timestamps in their local time.
+            try {
+                const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                if (tz) {
+                    fetch(`/api/update-timezone?token=${token}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ timezone: tz })
+                    }).catch(() => {}); // fire-and-forget, non-critical
+                }
+            } catch(e) {}
             loadDashboard();
         };
 
