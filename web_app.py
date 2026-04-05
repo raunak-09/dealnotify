@@ -1955,6 +1955,16 @@ def upgrade_success():
     return send_from_directory('.', 'upgrade-success.html')
 
 
+# ── Blog routes ───────────────────────────────
+@app.route('/blog')
+def blog_index():
+    return send_from_directory('.', 'blog.html')
+
+@app.route('/blog/amazon-dynamic-pricing-algorithm')
+def blog_post_1():
+    return send_from_directory('.', 'blog-dynamic-pricing.html')
+
+
 @app.route('/sitemap.xml')
 def sitemap():
     from flask import Response
@@ -1962,9 +1972,33 @@ def sitemap():
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://www.dealnotify.co/</loc>
-    <lastmod>2026-03-31</lastmod>
+    <lastmod>2026-04-05</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://www.dealnotify.co/blog</loc>
+    <lastmod>2026-04-05</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.dealnotify.co/blog/amazon-dynamic-pricing-algorithm</loc>
+    <lastmod>2026-04-05</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.dealnotify.co/terms.html</loc>
+    <lastmod>2026-04-01</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://www.dealnotify.co/contact.html</loc>
+    <lastmod>2026-04-01</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.4</priority>
   </url>
 </urlset>"""
     return Response(xml, mimetype='application/xml')

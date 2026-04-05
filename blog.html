@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Blog – Smart Shopping Tips & Price Tracking Guides | DealNotify</title>
+  <meta name="description" content="The DealNotify blog — learn how retailers use pricing algorithms, how to save money online, and how to never overpay again." />
+  <link rel="canonical" href="https://www.dealnotify.co/blog" />
+  <meta name="robots" content="index, follow" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Blog",
+    "name": "DealNotify Blog",
+    "url": "https://www.dealnotify.co/blog",
+    "description": "Smart shopping tips, price tracking guides, and insights on how retailers use pricing algorithms.",
+    "publisher": {
+      "@type": "Organization",
+      "name": "DealNotify",
+      "url": "https://www.dealnotify.co"
+    }
+  }
+  </script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', sans-serif; background: #f8f9fc; color: #1a1a2e; line-height: 1.6; }
+
+    /* Nav */
+    nav {
+      background: #fff;
+      border-bottom: 1px solid #e5e7eb;
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky; top: 0; z-index: 100;
+    }
+    .logo { font-size: 20px; font-weight: 800; color: #1a1a2e; text-decoration: none; }
+    .nav-links { display: flex; gap: 28px; list-style: none; align-items: center; }
+    .nav-links a { text-decoration: none; color: #6b7280; font-size: 14px; font-weight: 500; transition: color 0.2s; }
+    .nav-links a:hover, .nav-links a.active { color: #5b67f8; }
+    .nav-cta {
+      background: linear-gradient(135deg, #5b67f8, #818cf8);
+      color: #fff !important;
+      padding: 8px 20px;
+      border-radius: 50px;
+      font-weight: 700 !important;
+    }
+
+    /* Hero */
+    .blog-hero {
+      background: linear-gradient(135deg, #1a1a2e 0%, #0f3460 100%);
+      color: #fff;
+      text-align: center;
+      padding: 72px 24px 80px;
+    }
+    .blog-hero .tag {
+      display: inline-block;
+      background: rgba(91,103,248,0.25);
+      border: 1px solid rgba(91,103,248,0.4);
+      color: #a5b4fc;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      padding: 5px 14px;
+      border-radius: 50px;
+      margin-bottom: 20px;
+    }
+    .blog-hero h1 { font-size: clamp(28px, 4vw, 44px); font-weight: 800; margin-bottom: 14px; }
+    .blog-hero p { color: rgba(255,255,255,0.65); font-size: 17px; max-width: 480px; margin: 0 auto; }
+
+    /* Grid */
+    .blog-grid {
+      max-width: 1060px;
+      margin: -30px auto 80px;
+      padding: 0 24px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 28px;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Card */
+    .blog-card {
+      background: #fff;
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: 0 2px 20px rgba(0,0,0,0.07);
+      text-decoration: none;
+      color: inherit;
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .blog-card:hover { transform: translateY(-4px); box-shadow: 0 8px 32px rgba(91,103,248,0.15); }
+    .card-thumb {
+      background: linear-gradient(135deg, #1a1a2e 0%, #0f3460 100%);
+      height: 180px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 64px;
+      position: relative;
+      overflow: hidden;
+    }
+    .card-thumb::after {
+      content: '';
+      position: absolute;
+      bottom: -20px; right: -20px;
+      width: 100px; height: 100px;
+      background: rgba(91,103,248,0.2);
+      border-radius: 50%;
+    }
+    .card-body { padding: 24px; flex: 1; display: flex; flex-direction: column; }
+    .card-tag {
+      display: inline-block;
+      background: #eff0fe;
+      color: #5b67f8;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 4px 10px;
+      border-radius: 50px;
+      margin-bottom: 12px;
+    }
+    .card-title { font-size: 19px; font-weight: 800; color: #1a1a2e; margin-bottom: 10px; line-height: 1.3; }
+    .card-excerpt { font-size: 14px; color: #6b7280; line-height: 1.6; flex: 1; margin-bottom: 18px; }
+    .card-meta { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: #9ca3af; }
+    .card-read { color: #5b67f8; font-weight: 700; font-size: 13px; }
+
+    /* Coming soon card */
+    .coming-soon {
+      background: #f8f9fc;
+      border: 2px dashed #e5e7eb;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 40px 24px;
+      border-radius: 18px;
+      color: #9ca3af;
+      min-height: 320px;
+    }
+    .coming-soon .cs-icon { font-size: 36px; margin-bottom: 12px; }
+    .coming-soon h3 { font-size: 16px; font-weight: 700; color: #6b7280; margin-bottom: 8px; }
+    .coming-soon p { font-size: 13px; }
+
+    /* Footer */
+    footer {
+      background: #1a1a2e;
+      color: rgba(255,255,255,0.5);
+      text-align: center;
+      padding: 32px 24px;
+      font-size: 13px;
+    }
+    footer a { color: #5b67f8; text-decoration: none; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a href="/" class="logo">🔔 DealNotify</a>
+  <ul class="nav-links">
+    <li><a href="/">Home</a></li>
+    <li><a href="/blog" class="active">Blog</a></li>
+    <li><a href="/contact.html">Contact</a></li>
+    <li><a href="/" class="nav-cta">Start Free →</a></li>
+  </ul>
+</nav>
+
+<div class="blog-hero">
+  <div class="tag">📝 DealNotify Blog</div>
+  <h1>Shop Smarter. Pay Less.</h1>
+  <p>Tips, guides, and the inside story on how retailers price their products — and how you can beat them.</p>
+</div>
+
+<div class="blog-grid">
+
+  <!-- Post 1 -->
+  <a href="/blog/amazon-dynamic-pricing-algorithm" class="blog-card">
+    <div class="card-thumb">💸</div>
+    <div class="card-body">
+      <span class="card-tag">🔍 Dynamic Pricing</span>
+      <h2 class="card-title">The Price You See Isn't Always the Price You Pay</h2>
+      <p class="card-excerpt">Amazon changes prices 2.5 million times a day. Here's how retailers use algorithms against you — and how DealNotify helps you fight back.</p>
+      <div class="card-meta">
+        <span>📅 April 2026 · ⏱ 6 min read</span>
+        <span class="card-read">Read →</span>
+      </div>
+    </div>
+  </a>
+
+  <!-- Coming soon placeholders -->
+  <div class="coming-soon">
+    <div class="cs-icon">✍️</div>
+    <h3>Coming Soon</h3>
+    <p>The Best Days & Times to Buy on Amazon (Backed by Data)</p>
+  </div>
+
+  <div class="coming-soon">
+    <div class="cs-icon">✍️</div>
+    <h3>Coming Soon</h3>
+    <p>Black Friday Myth vs Reality: Are the Deals Actually Real?</p>
+  </div>
+
+</div>
+
+<footer>
+  <p>© 2026 <a href="/">DealNotify</a> · <a href="/terms.html">Terms</a> · <a href="/contact.html">Contact</a> · Made with ❤️ in Austin, TX</p>
+</footer>
+
+</body>
+</html>
