@@ -135,7 +135,7 @@ def init_db():
                 token TEXT UNIQUE NOT NULL,
                 signup_date TIMESTAMP NOT NULL DEFAULT NOW(),
                 status TEXT NOT NULL DEFAULT 'active',
-                trial_days_remaining INTEGER NOT NULL DEFAULT 7
+                trial_days_remaining INTEGER NOT NULL DEFAULT 30
             );
         """)
         # Auth columns migration — safe to run repeatedly
@@ -363,7 +363,7 @@ def send_welcome_email(name, email, dashboard_url):
 
         <div style="background-color: #f0f7ff; padding: 20px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #5b67f8;">
         <h3 style="color: #5b67f8; margin-top: 0;">💝 Your Free Trial</h3>
-        <p style="color: #333;">You have <strong>7 days free</strong> to try all features!</p>
+        <p style="color: #333;">You have <strong>30 days free</strong> to try all features!</p>
         <p style="color: #666; font-size: 14px;">After that, it's just <strong>$4.99/month</strong> for unlimited monitoring.</p>
         </div>
 
@@ -401,7 +401,7 @@ WHAT HAPPENS NEXT:
 3. You can add more products anytime from your dashboard
 
 YOUR FREE TRIAL:
-You have 7 days free to try all features!
+You have 30 days free to try all features!
 After that, it's just $4.99/month for unlimited monitoring.
 
 Questions? Reply to this email at hello@dealnotify.co
@@ -1019,7 +1019,7 @@ def get_dashboard():
     if isinstance(signup_date, str):
         signup_date = datetime.fromisoformat(signup_date)
     days_elapsed = (datetime.now() - signup_date).days
-    trial_days_remaining = max(0, 7 - days_elapsed)
+    trial_days_remaining = max(0, 30 - days_elapsed)
 
     is_pro = bool(user.get('is_pro'))
 
