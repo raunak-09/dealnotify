@@ -2126,6 +2126,10 @@ def blog_index():
 def blog_post_1():
     return send_from_directory('.', 'blog-dynamic-pricing.html')
 
+@app.route('/blog/restock-alerts-back-in-stock-notifications')
+def blog_post_2():
+    return send_from_directory('.', 'blog-restock-alerts.html')
+
 
 @app.route('/sitemap.xml')
 def sitemap():
@@ -2147,6 +2151,12 @@ def sitemap():
   <url>
     <loc>https://www.dealnotify.co/blog/amazon-dynamic-pricing-algorithm</loc>
     <lastmod>2026-04-05</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.dealnotify.co/blog/restock-alerts-back-in-stock-notifications</loc>
+    <lastmod>2026-04-06</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
