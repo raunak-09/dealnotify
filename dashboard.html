@@ -13,15 +13,30 @@
     </script>
     <title>My Dashboard – DealNotify</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --primary: #5b67f8;
+            --primary-dark: #4351d8;
+            --text: #1a1a2e;
+            --text-light: #5c5c7a;
+            --bg-light: #f7f8ff;
+            --white: #ffffff;
+            --border: #e5e7eb;
+            --green: #22c55e;
+            --shadow: 0 4px 24px rgba(91,103,248,0.10);
+            --radius: 14px;
+            --radius-sm: 8px;
+        }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #f0f2f5;
-            color: #333;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--bg-light);
+            color: var(--text);
             min-height: 100vh;
             display: flex;
             flex-direction: column;
+            -webkit-font-smoothing: antialiased;
         }
 
         /* Header */
@@ -37,9 +52,10 @@
         }
 
         nav {
-            max-width: 1200px;
+            max-width: 1160px;
             margin: 0 auto;
-            padding: 18px 24px;
+            padding: 0 24px;
+            height: 66px;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -47,11 +63,16 @@
 
         .logo {
             font-size: 22px;
-            font-weight: 700;
+            font-weight: 800;
+            letter-spacing: -0.5px;
             color: white;
             text-decoration: none;
             transition: opacity 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
+        .logo-icon { font-size: 26px; }
         .logo:hover { opacity: 0.85; }
 
         .user-info { display: flex; align-items: center; gap: 12px; }
@@ -69,9 +90,9 @@
 
         /* Main */
         .main {
-            max-width: 1200px;
+            max-width: 1160px;
             margin: 0 auto;
-            padding: 100px 24px 40px;
+            padding: 90px 24px 40px;
             flex: 1;
         }
 
@@ -535,71 +556,74 @@
             display: flex; align-items: center; gap: 10px;
         }
 
-        /* Footer */
+        /* Footer — matches index.html */
         footer {
-            background: #1a1a2e;
+            background: #0f0f1a;
             color: #aaa;
-            padding: 40px 24px 24px;
+            padding: 48px 24px 32px;
             margin-top: auto;
         }
 
         .footer-inner {
-            max-width: 1200px;
+            max-width: 1160px;
             margin: 0 auto;
         }
 
-        .footer-grid {
-            display: grid;
-            grid-template-columns: 2fr 1fr 1fr;
-            gap: 40px;
-            margin-bottom: 30px;
+        .footer-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            gap: 32px;
+            margin-bottom: 40px;
         }
 
         .footer-brand .footer-logo {
             font-size: 20px;
-            font-weight: 700;
+            font-weight: 800;
             color: white;
             text-decoration: none;
             display: block;
             margin-bottom: 12px;
+            letter-spacing: -0.3px;
         }
 
         .footer-brand p {
             font-size: 14px;
-            line-height: 1.7;
-            color: #888;
+            line-height: 1.6;
+            max-width: 260px;
         }
 
         .footer-col h4 {
             color: white;
-            font-size: 14px;
-            font-weight: 600;
+            font-size: 13px;
+            font-weight: 700;
             margin-bottom: 14px;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.08em;
         }
 
         .footer-col ul { list-style: none; }
         .footer-col ul li { margin-bottom: 10px; }
         .footer-col ul li a {
-            color: #888; text-decoration: none;
+            color: #aaa; text-decoration: none;
             font-size: 14px; transition: color 0.2s;
         }
-        .footer-col ul li a:hover { color: #5b67f8; }
+        .footer-col ul li a:hover { color: white; }
 
         .footer-bottom {
-            border-top: 1px solid #2a2a3e;
-            padding-top: 20px;
+            border-top: 1px solid #2a2a3a;
+            padding-top: 24px;
             display: flex;
             justify-content: space-between;
             align-items: center;
             font-size: 13px;
-            color: #666;
             flex-wrap: wrap;
-            gap: 10px;
+            gap: 12px;
         }
 
-        .footer-bottom a { color: #5b67f8; text-decoration: none; }
+        .footer-bottom a { color: #aaa; text-decoration: none; }
+        .footer-bottom a:hover { color: white; }
 
         /* Account dropdown */
         .account-btn {
@@ -757,9 +781,9 @@
             .products-grid { grid-template-columns: 1fr; }
             .stats-row { grid-template-columns: 1fr 1fr; }
             .welcome-text h1 { font-size: 20px; }
-            nav { padding: 14px 16px; }
-            .main { padding: 88px 16px 30px; }
-            .footer-grid { grid-template-columns: 1fr; gap: 24px; }
+            nav { padding: 0 16px; }
+            .main { padding: 82px 16px 30px; }
+            .footer-top { flex-direction: column; gap: 24px; }
             .footer-bottom { flex-direction: column; text-align: center; }
             /* Show hamburger, hide account dropdown trigger text */
             .hamburger { display: flex; }
@@ -795,7 +819,7 @@
     <!-- Header -->
     <header>
         <nav>
-            <a href="/" class="logo">🔔 DealNotify</a>
+            <a href="/" class="logo"><span class="logo-icon">🔔</span> DealNotify</a>
 
             <!-- Desktop: Account dropdown trigger -->
             <div class="account-btn" id="accountBtn" onclick="toggleDropdown()">
@@ -1111,18 +1135,26 @@
     <!-- Footer -->
     <footer>
         <div class="footer-inner">
-            <div class="footer-grid">
+            <div class="footer-top">
                 <div class="footer-brand">
                     <a href="/" class="footer-logo">🔔 DealNotify</a>
-                    <p>Never overpay online again. DealNotify monitors your favourite products 24/7 and sends you instant email alerts when prices hit your target.</p>
+                    <p>Automatic price drop alerts for Amazon, Walmart, Best Buy, Target and more. Never overpay online again.</p>
                 </div>
                 <div class="footer-col">
-                    <h4>Quick Links</h4>
+                    <h4>Product</h4>
                     <ul>
-                        <li><a href="/">Home</a></li>
+                        <li><a href="/#how-it-works">How it works</a></li>
                         <li><a href="/#features">Features</a></li>
                         <li><a href="/#pricing">Pricing</a></li>
-                        <li><a href="/#signup">Sign Up</a></li>
+                        <li><a href="/blog">Blog</a></li>
+                    </ul>
+                </div>
+                <div class="footer-col">
+                    <h4>Account</h4>
+                    <ul>
+                        <li><a href="#" onclick="openAccountModal(); return false;">My Account</a></li>
+                        <li><a href="#" onclick="signOut(); return false;">Sign Out</a></li>
+                        <li><a href="/contact.html?subject=Cancellation+Request" target="_blank" style="color:#f87171;">Cancel Subscription</a></li>
                     </ul>
                 </div>
                 <div class="footer-col">
@@ -1131,13 +1163,12 @@
                         <li><a href="mailto:hello@dealnotify.co">hello@dealnotify.co</a></li>
                         <li><a href="#" onclick="openContactModal(); return false;">Contact Us</a></li>
                         <li><a href="/terms.html" target="_blank">Terms of Service</a></li>
-                        <li><a href="/contact.html?subject=Cancellation+Request" target="_blank" style="color:#e74c3c;">Cancel Subscription</a></li>
                     </ul>
                 </div>
             </div>
             <div class="footer-bottom">
-                <span>© 2026 DealNotify. All rights reserved. Made with ❤️ in Austin, TX.</span>
-                <span><a href="/blog">Blog</a> · <a href="/terms.html">Terms of Service</a> · <a href="/contact.html">Contact</a> · <a href="mailto:hello@dealnotify.co">hello@dealnotify.co</a></span>
+                <span>© 2026 DealNotify. All rights reserved.</span>
+                <span><a href="/blog">Blog</a> · <a href="/terms.html">Terms of Service</a> · <a href="/contact.html">Contact</a> · Made with ❤️ in Austin, TX</span>
             </div>
         </div>
     </footer>
