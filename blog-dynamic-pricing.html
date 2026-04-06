@@ -484,10 +484,23 @@
     }
     .blog-footer a { color: #5b67f8; text-decoration: none; font-weight: 600; }
 
-    @media (max-width: 640px) {
-      .article-body { padding: 32px 24px; }
+    @media (max-width: 768px) {
+      .article-body { padding: 36px 28px; margin: -30px auto 40px; }
       .stat-grid { grid-template-columns: 1fr 1fr; }
       .how-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 480px) {
+      .hero { padding: 60px 16px 80px; }
+      .hero h1 { font-size: 26px; }
+      .hero-sub { font-size: 15px; }
+      .hero-meta { flex-wrap: wrap; gap: 8px; justify-content: center; }
+      .article-body { padding: 24px 16px; margin: -20px auto 32px; border-radius: 16px; }
+      .stat-grid { grid-template-columns: 1fr; }
+      .pull-quote { padding: 20px 18px; }
+      .pull-quote p { font-size: 18px !important; }
+      .article-body h2 { font-size: 22px; }
+      .retailer-name { min-width: 70px; font-size: 13px; }
+      .retailer-label { min-width: 70px; font-size: 12px; }
     }
   </style>
 </head>

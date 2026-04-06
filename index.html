@@ -935,9 +935,57 @@
         }
 
         /* ── Responsive ── */
+        /* ── Hamburger (landing page) ── */
+        .nav-hamburger {
+            display: none;
+            flex-direction: column;
+            gap: 5px;
+            cursor: pointer;
+            padding: 7px;
+            border-radius: 8px;
+            background: var(--bg-light);
+            border: 1px solid #e5e7eb;
+        }
+        .nav-hamburger span {
+            display: block;
+            width: 22px; height: 2px;
+            background: var(--primary);
+            border-radius: 2px;
+            transition: all 0.3s;
+        }
+        .nav-mobile-dropdown {
+            display: none;
+            flex-direction: column;
+            background: white;
+            border-top: 1px solid #e5e7eb;
+            padding: 8px 16px 16px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+        }
+        .nav-mobile-dropdown.open { display: flex; }
+        .nav-mobile-link {
+            padding: 13px 12px;
+            font-size: 16px;
+            font-weight: 500;
+            color: var(--text);
+            text-decoration: none;
+            border-radius: 10px;
+            transition: background 0.2s;
+        }
+        .nav-mobile-link:hover { background: var(--bg-light); color: var(--primary); }
+        .nav-mobile-cta {
+            margin-top: 8px;
+            background: var(--primary);
+            color: white !important;
+            text-align: center;
+            padding: 14px !important;
+            border-radius: 50px;
+            font-weight: 700;
+            font-size: 16px;
+        }
+
         @media (max-width: 768px) {
-            nav ul { gap: 4px; }
-            nav ul li a { padding: 7px 10px; font-size: 14px; }
+            nav ul { display: none; } /* hide desktop nav, show hamburger */
+            .nav-hamburger { display: flex; }
             .hero { padding-top: 110px; }
             .price-card.featured { transform: none; }
             .modal { padding: 28px 22px; }
@@ -945,7 +993,12 @@
         }
 
         @media (max-width: 480px) {
-            nav ul .hide-mobile { display: none; }
+            .hero { padding: 100px 16px 60px; }
+            .hero h1 { font-size: 32px; }
+            .hero-actions { flex-direction: column; gap: 12px; }
+            .hero-actions button { width: 100%; }
+            .hero-trust { flex-direction: column; gap: 6px; align-items: center; }
+            .modal { width: 96%; padding: 24px 18px; }
         }
     </style>
 </head>
@@ -957,6 +1010,7 @@
         <div class="logo">
             <span class="logo-icon">🔔</span> DealNotify
         </div>
+        <!-- Desktop nav -->
         <ul id="nav-links">
             <li class="hide-mobile"><a href="#how-it-works">How it works</a></li>
             <li class="hide-mobile"><a href="#features">Features</a></li>
@@ -966,7 +1020,20 @@
             <li id="nav-start-btn"><a href="#" class="nav-cta" onclick="openModal('signup'); return false;">Start Free</a></li>
             <li id="nav-login-btn"><a href="#" onclick="openModal('login'); return false;" style="color: var(--text-light); font-size:15px; font-weight:500; padding: 8px 14px;">Log in</a></li>
         </ul>
+        <!-- Mobile hamburger -->
+        <button class="nav-hamburger" id="navHamburger" onclick="toggleMobileNav()" aria-label="Menu">
+            <span></span><span></span><span></span>
+        </button>
     </nav>
+    <!-- Mobile nav dropdown -->
+    <div class="nav-mobile-dropdown" id="mobileNavDropdown">
+        <a href="#how-it-works" class="nav-mobile-link" onclick="toggleMobileNav()">How it works</a>
+        <a href="#features" class="nav-mobile-link" onclick="toggleMobileNav()">Features</a>
+        <a href="#pricing" class="nav-mobile-link" onclick="toggleMobileNav()">Pricing</a>
+        <a href="/blog" class="nav-mobile-link" onclick="toggleMobileNav()">Blog</a>
+        <a href="#" class="nav-mobile-link" onclick="openModal('login'); toggleMobileNav(); return false;">Log in</a>
+        <a href="#" class="nav-mobile-link nav-mobile-cta" onclick="openModal('signup'); toggleMobileNav(); return false;">Start Free →</a>
+    </div>
 </header>
 
 
@@ -1418,6 +1485,18 @@
    MODAL CONTROL
 ───────────────────────────────────── */
 const PANELS = ['signup','login','forgot','reset'];
+
+function toggleMobileNav() {
+    document.getElementById('mobileNavDropdown').classList.toggle('open');
+}
+// Close mobile nav when clicking outside
+document.addEventListener('click', function(e) {
+    const dropdown = document.getElementById('mobileNavDropdown');
+    const btn = document.getElementById('navHamburger');
+    if (dropdown && btn && !dropdown.contains(e.target) && !btn.contains(e.target)) {
+        dropdown.classList.remove('open');
+    }
+});
 
 function openModal(panel) {
     clearAlerts();
