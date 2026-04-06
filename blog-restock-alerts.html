@@ -121,10 +121,11 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      font-family: 'Inter', sans-serif;
-      background: #f8f9fc;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: #f7f8ff;
       color: #1a1a2e;
       line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
     }
 
     /* ── Hero ── */
@@ -512,52 +513,108 @@
 </head>
 <body>
 
-<!-- Nav styles -->
+<!-- Shared nav styles (matches index.html) -->
 <style>
-  .blog-nav { background:#fff; border-bottom:1px solid #e5e7eb; padding:0 32px; height:66px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100; }
-  .blog-nav .logo { font-size:22px; font-weight:800; color:#5b67f8; letter-spacing:-0.5px; text-decoration:none; display:flex; align-items:center; gap:6px; }
-  .blog-nav .logo-icon { font-size:26px; }
-  .blog-nav-links { display:flex; gap:28px; list-style:none; align-items:center; }
-  .blog-nav-links a { text-decoration:none; color:#6b7280; font-size:14px; font-weight:500; transition:color 0.2s; }
-  .blog-nav-links a:hover { color:#5b67f8; }
-  .blog-nav-links .nav-active { color:#5b67f8; }
-  .blog-nav-links .nav-login { color:#5b67f8 !important; font-weight:600; }
-  .blog-nav-links .nav-cta { background:linear-gradient(135deg,#5b67f8,#818cf8); color:#fff !important; padding:8px 20px; border-radius:50px; font-weight:700; }
-  /* Hamburger */
-  .bn-hamburger { display:none; flex-direction:column; gap:5px; cursor:pointer; background:none; border:none; padding:4px; }
-  .bn-hamburger span { display:block; width:22px; height:2px; background:#1a1a2e; border-radius:2px; }
-  .bn-mobile { display:none; background:#fff; border-bottom:1px solid #e5e7eb; padding:16px 24px; flex-direction:column; gap:4px; position:sticky; top:57px; z-index:99; }
-  .bn-mobile.open { display:flex; }
-  .bn-mobile a { text-decoration:none; color:#374151; font-size:15px; font-weight:500; padding:10px 0; border-bottom:1px solid #f3f4f6; display:block; }
-  .bn-mobile .m-login { color:#5b67f8 !important; font-weight:600; }
-  .bn-mobile .m-cta { background:linear-gradient(135deg,#5b67f8,#818cf8); color:#fff !important; padding:10px 20px; border-radius:50px; text-align:center; font-weight:700; margin-top:6px; }
-  @media (max-width:768px) {
-    .blog-nav-links { display:none; }
-    .bn-hamburger { display:flex; }
+  :root {
+    --primary: #5b67f8; --primary-dark: #4351d8;
+    --text: #1a1a2e; --text-light: #5c5c7a;
+    --bg-light: #f7f8ff; --white: #ffffff;
+    --border: #e5e7eb; --radius-sm: 8px;
+  }
+  body { padding-top: 66px; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  .site-header {
+    background: rgba(255,255,255,0.97);
+    backdrop-filter: blur(10px);
+    position: fixed; width: 100%; top: 0; z-index: 200;
+    border-bottom: 1px solid var(--border);
+  }
+  .site-nav {
+    max-width: 1160px; margin: 0 auto; padding: 0 24px;
+    height: 66px; display: flex; justify-content: space-between; align-items: center;
+  }
+  .site-nav .logo {
+    font-size: 22px; font-weight: 800; color: var(--primary);
+    letter-spacing: -0.5px; text-decoration: none;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .site-nav .logo-icon { font-size: 26px; }
+  .site-nav .nav-links { list-style: none; display: flex; gap: 8px; align-items: center; }
+  .site-nav .nav-links a {
+    color: var(--text-light); font-size: 15px; font-weight: 500;
+    padding: 8px 14px; border-radius: var(--radius-sm);
+    transition: color 0.2s, background 0.2s; text-decoration: none;
+  }
+  .site-nav .nav-links a:hover, .site-nav .nav-links a.active { color: var(--primary); background: var(--bg-light); }
+  .site-nav .nav-cta {
+    background: var(--primary) !important; color: var(--white) !important;
+    padding: 9px 20px !important; border-radius: 50px !important; font-weight: 600 !important;
+    transition: background 0.2s, transform 0.2s !important;
+  }
+  .site-nav .nav-cta:hover { background: var(--primary-dark) !important; transform: translateY(-1px); }
+  .nav-hamburger {
+    display: none; flex-direction: column; gap: 5px; cursor: pointer;
+    padding: 7px; border-radius: 8px; background: var(--bg-light); border: 1px solid var(--border);
+  }
+  .nav-hamburger span { display: block; width: 22px; height: 2px; background: var(--primary); border-radius: 2px; transition: all 0.3s; }
+  .nav-mobile-dropdown {
+    display: none; flex-direction: column; background: white;
+    border-top: 1px solid var(--border); padding: 8px 16px 16px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+  }
+  .nav-mobile-dropdown.open { display: flex; }
+  .nav-mobile-link {
+    padding: 13px 12px; font-size: 16px; font-weight: 500;
+    color: var(--text); text-decoration: none; border-radius: 10px; transition: background 0.2s;
+  }
+  .nav-mobile-link:hover { background: var(--bg-light); color: var(--primary); }
+  .nav-mobile-cta {
+    margin-top: 8px; background: var(--primary); color: white !important;
+    text-align: center; padding: 14px !important; border-radius: 50px;
+    font-weight: 700; font-size: 16px;
+  }
+  /* Footer */
+  .site-footer { background: #0f0f1a; color: #aaa; padding: 48px 24px 32px; }
+  .site-footer .footer-inner { max-width: 1160px; margin: 0 auto; }
+  .site-footer .footer-top { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 32px; margin-bottom: 40px; }
+  .site-footer .footer-brand .logo { color: #fff; font-size: 20px; text-decoration: none; }
+  .site-footer .footer-brand p { font-size: 14px; margin-top: 10px; max-width: 260px; line-height: 1.6; }
+  .site-footer .footer-links h4 { font-size: 13px; font-weight: 700; color: #fff; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 14px; }
+  .site-footer .footer-links ul { list-style: none; }
+  .site-footer .footer-links ul li { margin-bottom: 10px; }
+  .site-footer .footer-links ul li a { font-size: 14px; color: #aaa; transition: color 0.2s; text-decoration: none; }
+  .site-footer .footer-links ul li a:hover { color: #fff; }
+  .site-footer .footer-bottom { border-top: 1px solid #2a2a3a; padding-top: 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; font-size: 13px; }
+  @media (max-width: 768px) {
+    .site-nav .nav-links { display: none; }
+    .nav-hamburger { display: flex; }
+    .site-footer .footer-top { flex-direction: column; }
+    .site-footer .footer-bottom { flex-direction: column; text-align: center; }
   }
 </style>
 
 <!-- Nav -->
-<nav class="blog-nav">
-  <a href="/" class="logo"><span class="logo-icon">🔔</span> DealNotify</a>
-  <ul class="blog-nav-links">
-    <li><a href="/">Home</a></li>
-    <li><a href="/blog" class="nav-active">Blog</a></li>
-    <li><a href="/contact.html">Contact</a></li>
-    <li><a href="/dashboard" class="nav-login">Login</a></li>
-    <li><a href="/" class="nav-cta">Start Free →</a></li>
-  </ul>
-  <button class="bn-hamburger" onclick="toggleBlogNav()" aria-label="Open menu">
-    <span></span><span></span><span></span>
-  </button>
-</nav>
-<div class="bn-mobile" id="blogMobileNav">
-  <a href="/">Home</a>
-  <a href="/blog">Blog</a>
-  <a href="/contact.html">Contact</a>
-  <a href="/dashboard" class="m-login">Login</a>
-  <a href="/" class="m-cta">Start Free →</a>
-</div>
+<header class="site-header">
+  <nav class="site-nav">
+    <a href="/" class="logo"><span class="logo-icon">🔔</span> DealNotify</a>
+    <ul class="nav-links">
+      <li><a href="/">Home</a></li>
+      <li><a href="/blog" class="active">Blog</a></li>
+      <li><a href="/contact.html">Contact</a></li>
+      <li><a href="/dashboard">Log in</a></li>
+      <li><a href="/" class="nav-cta">Start Free</a></li>
+    </ul>
+    <button class="nav-hamburger" onclick="toggleBlogNav()" aria-label="Menu">
+      <span></span><span></span><span></span>
+    </button>
+  </nav>
+  <div class="nav-mobile-dropdown" id="blogMobileNav">
+    <a href="/" class="nav-mobile-link">Home</a>
+    <a href="/blog" class="nav-mobile-link">Blog</a>
+    <a href="/contact.html" class="nav-mobile-link">Contact</a>
+    <a href="/dashboard" class="nav-mobile-link">Log in</a>
+    <a href="/" class="nav-mobile-link nav-mobile-cta">Start Free →</a>
+  </div>
+</header>
 <script>
   function toggleBlogNav() { document.getElementById('blogMobileNav').classList.toggle('open'); }
 </script>
@@ -806,9 +863,44 @@
 </div>
 
 <!-- Footer -->
-<div class="blog-footer">
-  <p>© 2026 <a href="https://www.dealnotify.co">DealNotify</a> · <a href="/blog">Back to Blog</a> · <a href="/">Home</a></p>
-</div>
+<footer class="site-footer">
+  <div class="footer-inner">
+    <div class="footer-top">
+      <div class="footer-brand">
+        <div class="logo">🔔 DealNotify</div>
+        <p>Automatic price drop alerts for Amazon, Walmart, Best Buy, Target and more. Never overpay online again.</p>
+      </div>
+      <div class="footer-links">
+        <h4>Product</h4>
+        <ul>
+          <li><a href="/#how-it-works">How it works</a></li>
+          <li><a href="/#features">Features</a></li>
+          <li><a href="/#pricing">Pricing</a></li>
+          <li><a href="/blog">Blog</a></li>
+        </ul>
+      </div>
+      <div class="footer-links">
+        <h4>Account</h4>
+        <ul>
+          <li><a href="/">Sign up free</a></li>
+          <li><a href="/dashboard">Log in</a></li>
+        </ul>
+      </div>
+      <div class="footer-links">
+        <h4>Support</h4>
+        <ul>
+          <li><a href="mailto:hello@dealnotify.co">hello@dealnotify.co</a></li>
+          <li><a href="/contact.html">Contact Us</a></li>
+          <li><a href="/terms.html">Terms of Service</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 DealNotify. All rights reserved.</span>
+      <span><a href="/blog" style="color:#aaa;">Blog</a> · <a href="/terms.html" style="color:#aaa;">Terms</a> · <a href="/contact.html" style="color:#aaa;">Contact</a> · Made with ❤️ in Austin, TX</span>
+    </div>
+  </div>
+</footer>
 
 </body>
 </html>
