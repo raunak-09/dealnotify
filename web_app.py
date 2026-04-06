@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 from dotenv import load_dotenv
-from price_monitor import scrape_price
+from price_monitor import scrape_price, scrape_stock_status, extract_stock_status
 import pg8000.dbapi as pg8000
 from urllib.parse import urlparse
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -162,6 +162,13 @@ def init_db():
                 alert_sent BOOLEAN NOT NULL DEFAULT FALSE
             );
         """)
+        # ── Restock-alert columns ──────────────────────────────────
+        cur.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS track_type TEXT NOT NULL DEFAULT 'price';")
+        cur.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS stock_status TEXT;")           # in_stock / out_of_stock
+        cur.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS last_stock_status TEXT;")      # previous check's status
+        cur.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS stock_detail TEXT;")           # raw signal text
+        cur.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS restock_alert_sent BOOLEAN NOT NULL DEFAULT FALSE;")
+
         # Stripe migration — add columns if they don't exist yet
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT;")
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT;")
@@ -199,6 +206,22 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_alerts_log_sent
             ON alerts_log(sent_at DESC);
         """)
+        # alert_type column so alerts_log can record both price-drop and restock alerts
+        cur.execute("ALTER TABLE alerts_log ADD COLUMN IF NOT EXISTS alert_type TEXT NOT NULL DEFAULT 'price_drop';")
+        # Stock-status history — every recorded stock check
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS stock_history (
+                id         SERIAL PRIMARY KEY,
+                product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+                status     TEXT NOT NULL,
+                detail     TEXT,
+                checked_at TIMESTAMP NOT NULL DEFAULT NOW()
+            );
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_stock_history_product
+            ON stock_history(product_id, checked_at DESC);
+        """)
         conn.commit()
         print("✅ Database tables ready")
     except Exception as e:
@@ -235,7 +258,11 @@ def product_to_dict(p):
         'status': p['status'],
         'last_checked': (p['last_checked'].isoformat() + 'Z') if p['last_checked'] and hasattr(p['last_checked'], 'isoformat') else p['last_checked'],
         'current_price': float(p['current_price']) if p['current_price'] is not None else None,
-        'alert_sent': p['alert_sent']
+        'alert_sent': p['alert_sent'],
+        'track_type': p.get('track_type', 'price'),
+        'stock_status': p.get('stock_status'),
+        'stock_detail': p.get('stock_detail'),
+        'restock_alert_sent': p.get('restock_alert_sent', False),
     }
 
 
@@ -632,6 +659,90 @@ def send_price_drop_alert(name, email, product_url, current_price, target_price,
 
     except Exception as e:
         print(f"❌ Error sending price alert: {str(e)}")
+        return False
+
+
+def send_restock_alert(name, email, product_url, store, dashboard_url, user_timezone=None):
+    """Send restock alert email via SendGrid when an item comes back in stock"""
+    try:
+        api_key = os.getenv('SENDGRID_API_KEY')
+        from_email = os.getenv('SENDGRID_FROM_EMAIL', 'hello@dealnotify.co')
+
+        if not api_key:
+            return False
+
+        from datetime import timezone as _tz
+        now_utc = datetime.now(_tz.utc)
+        try:
+            import zoneinfo
+            tz_obj = zoneinfo.ZoneInfo(user_timezone) if user_timezone else _tz.utc
+            now_local = now_utc.astimezone(tz_obj)
+            tz_label = now_local.strftime('%Z')
+            alert_time_str = now_local.strftime(f'%b %d, %Y at %I:%M %p {tz_label}')
+        except Exception:
+            alert_time_str = now_utc.strftime('%b %d, %Y at %I:%M %p UTC')
+
+        html_content = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; background-color: #f5f5f5; padding: 20px;">
+        <div style="background-color: white; max-width: 600px; margin: 0 auto; padding: 30px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+
+        <h1 style="color: #5b67f8; text-align: center;">📦 Back in Stock, {name}!</h1>
+
+        <div style="background-color: #eff0fe; border: 2px solid #5b67f8; border-radius: 10px; padding: 25px; margin: 25px 0; text-align: center;">
+        <p style="color: #555; font-size: 16px; margin-bottom: 10px;">Great news! A product you were waiting for is <strong>back in stock</strong>!</p>
+        <div style="font-size: 48px; margin: 15px 0;">✅</div>
+        <div style="background: #5b67f8; color: white; border-radius: 50px; padding: 8px 20px; display: inline-block; font-weight: bold; margin-top: 10px;">
+        Available Now on {store}
+        </div>
+        <p style="color: #888; font-size: 12px; margin-top: 14px; margin-bottom: 0;">
+        ⏱ Detected on {alert_time_str}
+        </p>
+        </div>
+
+        <div style="background: #fff8e1; border-left: 4px solid #f59e0b; border-radius: 6px; padding: 12px 16px; margin: 0 0 20px 0;">
+        <p style="margin: 0; font-size: 13px; color: #78350f;">
+        <strong>⚡ Act fast!</strong> Popular items sell out quickly. Grab yours before it's gone again!
+        </p>
+        </div>
+
+        <div style="text-align: center; margin: 25px 0;">
+        <a href="{product_url}" style="display: inline-block; background: linear-gradient(135deg, #5b67f8 0%, #818cf8 100%); color: white; padding: 15px 40px; text-decoration: none; border-radius: 50px; font-weight: bold; font-size: 16px;">
+        🛒 Buy Now on {store}
+        </a>
+        </div>
+
+        <div style="text-align: center; margin: 15px 0;">
+        <a href="{dashboard_url}" style="color: #667eea; font-size: 14px;">View your full dashboard →</a>
+        </div>
+
+        <hr style="border: none; border-top: 2px solid #eee; margin: 30px 0;">
+        <p style="color: #333; font-size: 14px;">Best regards,<br>
+        <strong>🔔 The DealNotify Team</strong><br>
+        <a href="mailto:hello@dealnotify.co" style="color: #5b67f8;">hello@dealnotify.co</a> | <a href="https://www.dealnotify.co" style="color: #5b67f8;">www.dealnotify.co</a><br><br>
+        📦 <em>Never miss a restock again!</em>
+        </p>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+        <p style="color: #999; font-size: 12px; text-align: center;">© 2026 DealNotify. All rights reserved.</p>
+        </div>
+        </body>
+        </html>
+        """
+
+        message = Mail(
+            from_email=from_email,
+            to_emails=email,
+            subject=f'📦 Back in Stock on {store}! — DealNotify',
+            html_content=html_content
+        )
+
+        sg = SendGridAPIClient(api_key)
+        response = sg.send(message)
+        print(f"✅ Restock alert sent to {email} (status: {response.status_code})")
+        return True
+
+    except Exception as e:
+        print(f"❌ Error sending restock alert: {str(e)}")
         return False
 
 
@@ -1111,16 +1222,20 @@ def add_product_to_dashboard():
         conn = get_db_conn()
         cur = conn.cursor()
         try:
+            track_type = data.get('track_type', 'price')  # 'price' or 'restock'
+            if track_type not in ('price', 'restock'):
+                track_type = 'price'
             cur.execute("""
-                INSERT INTO products (user_id, url, target_price, store, added_date, status, current_price, alert_sent)
-                VALUES (%s, %s, %s, %s, %s, 'monitoring', NULL, FALSE)
+                INSERT INTO products (user_id, url, target_price, store, added_date, status, current_price, alert_sent, track_type)
+                VALUES (%s, %s, %s, %s, %s, 'monitoring', NULL, FALSE, %s)
                 RETURNING *
             """, (
                 user['id'],
                 data['url'],
                 data.get('target_price') or None,
                 get_store_name(data['url']),
-                datetime.now()
+                datetime.now(),
+                track_type
             ))
             new_product = _fetchone(cur)
             conn.commit()
@@ -1398,14 +1513,21 @@ def check_prices_for_user():
                 updated_products.append(product_to_dict(product))
                 continue
 
-            print(f"🔍 Checking price for: {url}")
-            current_price = scrape_price(url)
-            print(f"   → scrape_price returned: {current_price}")
+            track_type = product.get('track_type', 'price')
+            print(f"🔍 Checking [{track_type}] for: {url}")
+            scrape_result = scrape_stock_status(url)
+            current_price = scrape_result.get('price')
+            new_stock_status = scrape_result.get('stock_status', 'unknown')
+            stock_detail = scrape_result.get('stock_detail', '')
+            old_stock_status = product.get('last_stock_status') or product.get('stock_status')
+            print(f"   → price: {current_price}, stock: {new_stock_status}")
 
-            if current_price is not None:
+            alert_sent = False
+            restock_alert_sent = product.get('restock_alert_sent', False)
+
+            # Price-drop alert logic
+            if track_type == 'price' and current_price is not None:
                 target = product.get('target_price')
-                alert_sent = False
-
                 if target and float(current_price) <= float(target):
                     alert_sent = True
                     send_price_drop_alert(
@@ -1419,39 +1541,74 @@ def check_prices_for_user():
                         user_timezone=user.get('timezone')
                     )
                     alerts_sent += 1
-                    print(f"🔔 Alert sent for {user['email']} - price ${current_price} <= target ${target}")
-                    # Log to alerts_log
+                    print(f"🔔 Price alert sent for {user['email']} - ${current_price} <= target ${target}")
                     try:
                         cur.execute("""
-                            INSERT INTO alerts_log (user_id, product_id, product_url, store, price_at_alert, target_price)
-                            VALUES (%s, %s, %s, %s, %s, %s)
+                            INSERT INTO alerts_log (user_id, product_id, product_url, store, price_at_alert, target_price, alert_type)
+                            VALUES (%s, %s, %s, %s, %s, %s, 'price_drop')
                         """, (user['id'], product['id'], url, product.get('store'), current_price, target))
                     except Exception as log_err:
                         print(f"⚠️ alerts_log insert error (non-fatal): {log_err}")
 
-                cur.execute("""
-                    UPDATE products
-                    SET current_price = %s,
-                        last_checked = %s,
-                        status = %s,
-                        alert_sent = %s
-                    WHERE id = %s AND user_id = %s
-                """, (
-                    current_price,
-                    datetime.now(),
-                    'alert_sent' if alert_sent else 'monitoring',
-                    alert_sent,
-                    product['id'],
-                    user['id']
-                ))
+            # Restock alert logic
+            if track_type == 'restock' and new_stock_status == 'in_stock':
+                if old_stock_status in ('out_of_stock', None, '') and not restock_alert_sent:
+                    restock_alert_sent = True
+                    send_restock_alert(
+                        name=user['name'],
+                        email=user['email'],
+                        product_url=url,
+                        store=product.get('store', 'the store'),
+                        dashboard_url=dashboard_url,
+                        user_timezone=user.get('timezone')
+                    )
+                    alerts_sent += 1
+                    print(f"🔔 Restock alert sent for {user['email']} - {old_stock_status} → in_stock!")
+                    try:
+                        cur.execute("""
+                            INSERT INTO alerts_log (user_id, product_id, product_url, store, price_at_alert, target_price, alert_type)
+                            VALUES (%s, %s, %s, %s, %s, %s, 'restock')
+                        """, (user['id'], product['id'], url, product.get('store'), current_price, product.get('target_price')))
+                    except Exception as log_err:
+                        print(f"⚠️ alerts_log insert error (non-fatal): {log_err}")
 
-                product['current_price'] = current_price
-                product['last_checked'] = datetime.now().isoformat()
-                if alert_sent:
-                    product['status'] = 'alert_sent'
-                    product['alert_sent'] = True
+            if track_type == 'restock' and new_stock_status == 'out_of_stock':
+                restock_alert_sent = False
 
-                # Record in price history (outside the shared transaction — non-blocking)
+            cur.execute("""
+                UPDATE products
+                SET current_price      = COALESCE(%s, current_price),
+                    last_checked       = %s,
+                    status             = %s,
+                    alert_sent         = %s,
+                    stock_status       = %s,
+                    last_stock_status  = %s,
+                    stock_detail       = %s,
+                    restock_alert_sent = %s
+                WHERE id = %s AND user_id = %s
+            """, (
+                current_price,
+                datetime.now(),
+                'alert_sent' if (alert_sent or restock_alert_sent) else 'monitoring',
+                alert_sent,
+                new_stock_status,
+                product.get('stock_status'),
+                stock_detail,
+                restock_alert_sent,
+                product['id'],
+                user['id']
+            ))
+
+            product['current_price'] = current_price if current_price is not None else product.get('current_price')
+            product['last_checked'] = datetime.now().isoformat()
+            product['stock_status'] = new_stock_status
+            product['stock_detail'] = stock_detail
+            product['restock_alert_sent'] = restock_alert_sent
+            if alert_sent:
+                product['status'] = 'alert_sent'
+                product['alert_sent'] = True
+
+            if current_price is not None:
                 log_price_history(product['id'], current_price)
 
             updated_products.append(product_to_dict(product))
@@ -2084,20 +2241,28 @@ def check_all_prices_job():
                         continue   # not due yet
                 # ───────────────────────────────────────────────────────────
 
+                track_type = product.get('track_type', 'price')
                 plan_label = '⭐Pro' if is_pro else 'Free'
-                print(f"🔍 [{plan_label}] [{user['email']}] {url[:60]}")
+                type_label = '📦Restock' if track_type == 'restock' else '💰Price'
+                print(f"🔍 [{plan_label}] [{type_label}] [{user['email']}] {url[:60]}")
+
+                # ── Scrape: use unified scraper that returns price + stock ──
                 try:
-                    current_price = scrape_price(url)
+                    scrape_result = scrape_stock_status(url)
                     total_checked += 1
                 except Exception as scrape_err:
                     print(f"   ❌ Scrape error: {scrape_err}")
                     total_errors += 1
                     continue
 
-                if current_price is None:
+                current_price = scrape_result.get('price')
+                new_stock_status = scrape_result.get('stock_status', 'unknown')
+                stock_detail = scrape_result.get('stock_detail', '')
+                old_stock_status = product.get('last_stock_status') or product.get('stock_status')
+
+                if current_price is None and track_type == 'price':
                     print(f"   ⚠️  Price not found")
                     total_errors += 1
-                    # Still record the check time even if price wasn't found
                     conn = get_db_conn()
                     cur  = conn.cursor()
                     try:
@@ -2113,53 +2278,95 @@ def check_all_prices_job():
                         conn.close()
                     continue
 
-                # Check if price meets target
-                target     = product.get('target_price')
                 alert_sent = False
-                if target and float(current_price) <= float(target):
-                    alert_sent = True
-                    send_price_drop_alert(
-                        name=user['name'],
-                        email=user['email'],
-                        product_url=url,
-                        current_price=current_price,
-                        target_price=target,
-                        store=product.get('store', 'the store'),
-                        dashboard_url=dashboard_url,
-                        user_timezone=user.get('timezone')
-                    )
-                    total_alerts += 1
-                    print(f"   🔔 Alert sent — ${current_price} <= target ${target}")
-                    # Log to alerts_log
-                    try:
-                        aconn = get_db_conn()
-                        acur  = aconn.cursor()
-                        acur.execute("""
-                            INSERT INTO alerts_log (user_id, product_id, product_url, store, price_at_alert, target_price)
-                            VALUES (%s, %s, %s, %s, %s, %s)
-                        """, (user_id, product['id'], url, product.get('store'), current_price, target))
-                        aconn.commit()
-                        acur.close()
-                        aconn.close()
-                    except Exception as log_err:
-                        print(f"⚠️ alerts_log insert error (non-fatal): {log_err}")
+                restock_alert_sent = product.get('restock_alert_sent', False)
 
-                # Persist updated price to DB
+                # ── Price-drop alert logic (for track_type = 'price') ──────
+                if track_type == 'price' and current_price is not None:
+                    target = product.get('target_price')
+                    if target and float(current_price) <= float(target):
+                        alert_sent = True
+                        send_price_drop_alert(
+                            name=user['name'],
+                            email=user['email'],
+                            product_url=url,
+                            current_price=current_price,
+                            target_price=target,
+                            store=product.get('store', 'the store'),
+                            dashboard_url=dashboard_url,
+                            user_timezone=user.get('timezone')
+                        )
+                        total_alerts += 1
+                        print(f"   🔔 Price alert sent — ${current_price} <= target ${target}")
+                        try:
+                            aconn = get_db_conn()
+                            acur  = aconn.cursor()
+                            acur.execute("""
+                                INSERT INTO alerts_log (user_id, product_id, product_url, store, price_at_alert, target_price, alert_type)
+                                VALUES (%s, %s, %s, %s, %s, %s, 'price_drop')
+                            """, (user_id, product['id'], url, product.get('store'), current_price, target))
+                            aconn.commit()
+                            acur.close()
+                            aconn.close()
+                        except Exception as log_err:
+                            print(f"⚠️ alerts_log insert error (non-fatal): {log_err}")
+
+                # ── Restock alert logic (for track_type = 'restock') ───────
+                if track_type == 'restock' and new_stock_status == 'in_stock':
+                    # Transition: was out_of_stock (or unknown) → now in_stock
+                    if old_stock_status in ('out_of_stock', None, '') and not restock_alert_sent:
+                        restock_alert_sent = True
+                        send_restock_alert(
+                            name=user['name'],
+                            email=user['email'],
+                            product_url=url,
+                            store=product.get('store', 'the store'),
+                            dashboard_url=dashboard_url,
+                            user_timezone=user.get('timezone')
+                        )
+                        total_alerts += 1
+                        print(f"   🔔 Restock alert sent — {old_stock_status} → in_stock!")
+                        try:
+                            aconn = get_db_conn()
+                            acur  = aconn.cursor()
+                            acur.execute("""
+                                INSERT INTO alerts_log (user_id, product_id, product_url, store, price_at_alert, target_price, alert_type)
+                                VALUES (%s, %s, %s, %s, %s, %s, 'restock')
+                            """, (user_id, product['id'], url, product.get('store'), current_price, product.get('target_price')))
+                            aconn.commit()
+                            acur.close()
+                            aconn.close()
+                        except Exception as log_err:
+                            print(f"⚠️ alerts_log insert error (non-fatal): {log_err}")
+
+                # Reset restock_alert_sent when item goes out of stock again
+                if track_type == 'restock' and new_stock_status == 'out_of_stock':
+                    restock_alert_sent = False
+
+                # ── Persist updated state to DB ───────────────────────────
                 conn = get_db_conn()
                 cur  = conn.cursor()
                 try:
                     cur.execute("""
                         UPDATE products
-                        SET current_price = %s,
-                            last_checked  = %s,
-                            status        = %s,
-                            alert_sent    = %s
+                        SET current_price      = COALESCE(%s, current_price),
+                            last_checked       = %s,
+                            status             = %s,
+                            alert_sent         = %s,
+                            stock_status       = %s,
+                            last_stock_status  = %s,
+                            stock_detail       = %s,
+                            restock_alert_sent = %s
                         WHERE id = %s AND user_id = %s
                     """, (
                         current_price,
                         datetime.now(),
-                        'alert_sent' if alert_sent else 'monitoring',
+                        'alert_sent' if (alert_sent or restock_alert_sent) else 'monitoring',
                         alert_sent,
+                        new_stock_status,
+                        product.get('stock_status'),   # old status becomes last_stock_status
+                        stock_detail,
+                        restock_alert_sent,
                         product['id'],
                         user_id
                     ))
@@ -2172,15 +2379,31 @@ def check_all_prices_job():
                     conn.close()
 
                 # Record in price history (non-blocking)
-                log_price_history(product['id'], current_price)
+                if current_price is not None:
+                    log_price_history(product['id'], current_price)
+
+                # Record in stock history (non-blocking)
+                if new_stock_status != 'unknown':
+                    try:
+                        sconn = get_db_conn()
+                        scur  = sconn.cursor()
+                        scur.execute("""
+                            INSERT INTO stock_history (product_id, status, detail)
+                            VALUES (%s, %s, %s)
+                        """, (product['id'], new_stock_status, stock_detail))
+                        sconn.commit()
+                        scur.close()
+                        sconn.close()
+                    except Exception as sh_err:
+                        print(f"⚠️ stock_history insert error (non-fatal): {sh_err}")
 
     except Exception as e:
         print(f"❌ Hourly job fatal error: {e}")
 
     print(
-        f"✅ Price check done — "
+        f"✅ Check done — "
         f"{total_checked} checked, {total_skipped} skipped (not due), "
-        f"{total_alerts} alerts sent, {total_errors} errors\n"
+        f"{total_alerts} alerts sent (price + restock), {total_errors} errors\n"
     )
     return {
         'checked': total_checked,

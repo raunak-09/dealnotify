@@ -326,6 +326,114 @@ def extract_price_from_text(html, markdown='', url=''):
     return None
 
 
+def extract_stock_status(html, markdown='', url=''):
+    """
+    Detect whether a product is in-stock or out-of-stock from page content.
+
+    Returns a dict:
+        {"status": "in_stock" | "out_of_stock" | "unknown",
+         "detail": "<signal that matched>"}
+
+    Priority of signals (first match wins):
+      1. JSON-LD / structured data  availability fields
+      2. HTML class/id patterns (Amazon, Walmart, Best Buy, Target, etc.)
+      3. Common text patterns in HTML and markdown
+    """
+    import re
+    result = {"status": "unknown", "detail": ""}
+    combined = (html or '') + '\n' + (markdown or '')
+
+    # ── Out-of-stock signals (check first — explicit OOS is more reliable) ────
+    oos_patterns = [
+        # JSON-LD availability
+        (r'"availability"\s*:\s*"https?://schema\.org/OutOfStock"', 'schema.org OutOfStock'),
+        (r'"availability"\s*:\s*"https?://schema\.org/SoldOut"', 'schema.org SoldOut'),
+        (r'"availability"\s*:\s*"https?://schema\.org/Discontinued"', 'schema.org Discontinued'),
+        # Amazon-specific
+        (r'id="outOfStock"', 'Amazon #outOfStock'),
+        (r'id="availability"[^>]*>\s*Currently unavailable', 'Amazon Currently unavailable'),
+        # Generic HTML / text
+        (r'(?i)\b(?:out\s+of\s+stock|sold\s+out|currently\s+unavailable|not\s+available|no\s+longer\s+available)\b',
+         'text: out of stock'),
+        (r'(?i)class="[^"]*(?:outOfStock|out-of-stock|soldOut|sold-out|unavailable)[^"]*"',
+         'CSS class: out of stock'),
+        # Walmart / Best Buy
+        (r'(?i)"availabilityStatus"\s*:\s*"(?:NOT_AVAILABLE|OUT_OF_STOCK)"', 'retailer JSON: OOS'),
+    ]
+
+    for pattern, detail in oos_patterns:
+        if re.search(pattern, combined):
+            result["status"] = "out_of_stock"
+            result["detail"] = detail
+            print(f"   📦 Stock status: OUT OF STOCK ({detail})")
+            return result
+
+    # ── In-stock signals ──────────────────────────────────────────────────────
+    in_stock_patterns = [
+        # JSON-LD availability
+        (r'"availability"\s*:\s*"https?://schema\.org/InStock"', 'schema.org InStock'),
+        (r'"availability"\s*:\s*"https?://schema\.org/LimitedAvailability"', 'schema.org LimitedAvailability'),
+        (r'"availability"\s*:\s*"https?://schema\.org/PreOrder"', 'schema.org PreOrder'),
+        # Amazon
+        (r'id="add-to-cart-button"', 'Amazon Add to Cart button'),
+        (r'id="buy-now-button"', 'Amazon Buy Now button'),
+        (r'id="availability"[^>]*>\s*In Stock', 'Amazon In Stock'),
+        # Generic "Add to Cart" / "Buy Now" buttons
+        (r'(?i)\b(?:add\s+to\s+cart|buy\s+now|add\s+to\s+bag)\b', 'text: Add to Cart / Buy Now'),
+        (r'(?i)"availabilityStatus"\s*:\s*"(?:IN_STOCK|AVAILABLE)"', 'retailer JSON: in stock'),
+        # Generic "In Stock" text
+        (r'(?i)\bIn\s+Stock\b', 'text: In Stock'),
+    ]
+
+    for pattern, detail in in_stock_patterns:
+        if re.search(pattern, combined):
+            result["status"] = "in_stock"
+            result["detail"] = detail
+            print(f"   📦 Stock status: IN STOCK ({detail})")
+            return result
+
+    print("   📦 Stock status: UNKNOWN (no signals matched)")
+    return result
+
+
+def scrape_stock_status(url):
+    """
+    Scrape both price AND stock status from a product URL.
+    Returns a dict: {"price": float|None, "stock_status": str, "stock_detail": str}
+    """
+    api_key = os.getenv('FIRECRAWL_API_KEY')
+    if not api_key:
+        print("❌ FIRECRAWL_API_KEY not set")
+        return {"price": None, "stock_status": "unknown", "stock_detail": ""}
+
+    clean = clean_url(url)
+    if clean != url:
+        print(f"   → Cleaned URL: {clean}")
+
+    try:
+        fc, api_version = _init_firecrawl(api_key)
+        print(f"   → Using Firecrawl API {api_version}")
+
+        markdown, html = _do_scrape(fc, api_version, clean)
+
+        if not html and not markdown:
+            print("   → Empty result from Firecrawl")
+            return {"price": None, "stock_status": "unknown", "stock_detail": ""}
+
+        price = extract_price_from_text(html, markdown, url=clean)
+        stock = extract_stock_status(html, markdown, url=clean)
+
+        return {
+            "price": price,
+            "stock_status": stock["status"],
+            "stock_detail": stock["detail"],
+        }
+
+    except Exception as e:
+        print(f"❌ Scraping error for {url}: {str(e)}")
+        return {"price": None, "stock_status": "unknown", "stock_detail": ""}
+
+
 def _init_firecrawl(api_key):
     """
     Return a (client, api_version) tuple.

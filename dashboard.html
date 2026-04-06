@@ -396,6 +396,37 @@
         .empty-state h3 { font-size: 20px; color: #333; margin-bottom: 10px; }
         .empty-state p { color: #888; margin-bottom: 25px; font-size: 15px; }
 
+        /* Track type toggle */
+        .track-type-btn {
+            flex: 1; padding: 10px 14px;
+            border: 2px solid #e5e7eb; border-radius: 10px;
+            background: #fff; font-size: 14px; font-weight: 600;
+            cursor: pointer; transition: all 0.2s; color: #6b7280;
+        }
+        .track-type-btn:hover { border-color: #5b67f8; color: #5b67f8; }
+        .track-type-btn.active {
+            border-color: #5b67f8; background: #eff0fe; color: #5b67f8;
+        }
+
+        /* Stock status badge */
+        .stock-badge {
+            display: inline-block; font-size: 11px; font-weight: 700;
+            padding: 3px 10px; border-radius: 50px; letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+        .stock-badge.in-stock { background: #edfaf1; color: #27ae60; }
+        .stock-badge.out-of-stock { background: #fef2f2; color: #ef4444; }
+        .stock-badge.unknown { background: #f3f4f6; color: #9ca3af; }
+
+        /* Track type label */
+        .track-type-label {
+            display: inline-block; font-size: 10px; font-weight: 700;
+            padding: 2px 8px; border-radius: 50px; letter-spacing: 0.5px;
+            text-transform: uppercase; margin-left: 6px;
+        }
+        .track-type-label.price { background: #fef3c7; color: #d97706; }
+        .track-type-label.restock { background: #eff0fe; color: #5b67f8; }
+
         /* Modal */
         .modal-overlay {
             display: none; position: fixed;
@@ -920,12 +951,23 @@
     <div class="modal-overlay" id="addModal">
         <div class="modal">
             <h2>➕ Add New Product</h2>
-            <p>Paste the product URL and set your target price. We'll alert you the moment it drops!</p>
+            <p>Paste the product URL. Track a price drop or get notified when it's back in stock!</p>
+
+            <!-- Track type toggle -->
+            <div class="form-group">
+                <label>What do you want to track?</label>
+                <div style="display:flex; gap:8px; margin-top:6px;">
+                    <button type="button" id="btnTrackPrice" class="track-type-btn active" onclick="setTrackType('price')">💰 Price Drop</button>
+                    <button type="button" id="btnTrackRestock" class="track-type-btn" onclick="setTrackType('restock')">📦 Back in Stock</button>
+                </div>
+                <input type="hidden" id="newTrackType" value="price">
+            </div>
+
             <div class="form-group">
                 <label>Product URL *</label>
                 <input type="url" id="newProductUrl" placeholder="https://amazon.com/product/..." required>
             </div>
-            <div class="form-group">
+            <div class="form-group" id="targetPriceGroup">
                 <label>Target Price (USD) *</label>
                 <input type="number" id="newTargetPrice" placeholder="e.g. 49.99" step="0.01" min="0" required>
             </div>
@@ -1108,40 +1150,71 @@
         }
 
         function productCard(product) {
+            const trackType = product.track_type || 'price';
+            const isRestock = trackType === 'restock';
             const hasCurrentPrice = product.current_price !== null && product.current_price !== undefined;
             const currentPriceVal = hasCurrentPrice ? parseFloat(product.current_price) : null;
             const targetPriceVal = product.target_price ? parseFloat(product.target_price) : null;
-            const priceDropped = currentPriceVal !== null && targetPriceVal !== null && currentPriceVal <= targetPriceVal;
+            const priceDropped = !isRestock && currentPriceVal !== null && targetPriceVal !== null && currentPriceVal <= targetPriceVal;
             const savings = priceDropped ? (targetPriceVal - currentPriceVal).toFixed(2) : null;
 
-            const statusClass = product.alert_sent ? 'alert-sent' : 'monitoring';
-            const statusLabel = product.alert_sent ? '🔔 Alert Sent' : '🟢 Monitoring';
+            let statusClass, statusLabel;
+            if (isRestock) {
+                if (product.restock_alert_sent) {
+                    statusClass = 'alert-sent'; statusLabel = '🔔 Restock Alert Sent';
+                } else {
+                    statusClass = 'monitoring'; statusLabel = '📦 Watching Stock';
+                }
+            } else {
+                statusClass = product.alert_sent ? 'alert-sent' : 'monitoring';
+                statusLabel = product.alert_sent ? '🔔 Alert Sent' : '🟢 Monitoring';
+            }
 
             const targetPriceDisplay = targetPriceVal ? `$${targetPriceVal.toFixed(2)}` : 'Not set';
 
-            // Current price display: show clear state depending on what we know
+            // Current price display
             let currentPriceDisplay, currentPriceClass;
             if (hasCurrentPrice) {
                 currentPriceDisplay = `$${currentPriceVal.toFixed(2)}`;
                 currentPriceClass = priceDropped ? 'current-below' : 'current-above';
             } else if (product.last_checked) {
-                // Refresh was run but price couldn't be fetched from the page
                 currentPriceDisplay = '<span style="font-size:13px;color:#e67e22;font-weight:600;">⚠️ Unable to fetch</span>';
                 currentPriceClass = 'current-na';
             } else {
-                // Never been checked yet
                 currentPriceDisplay = '<span style="font-size:13px;color:#888;">Click 🔄 Refresh</span>';
                 currentPriceClass = 'current-na';
             }
+
+            // Stock status badge for restock products
+            let stockBadgeHtml = '';
+            if (isRestock && product.stock_status) {
+                const badgeClass = product.stock_status === 'in_stock' ? 'in-stock'
+                                 : product.stock_status === 'out_of_stock' ? 'out-of-stock' : 'unknown';
+                const badgeText = product.stock_status === 'in_stock' ? '✅ In Stock'
+                                : product.stock_status === 'out_of_stock' ? '❌ Out of Stock' : '❓ Unknown';
+                stockBadgeHtml = `<span class="stock-badge ${badgeClass}">${badgeText}</span>`;
+            }
+
+            const trackLabel = isRestock
+                ? '<span class="track-type-label restock">📦 Restock</span>'
+                : '<span class="track-type-label price">💰 Price</span>';
 
             const shortUrl = truncateUrl(product.url);
             const lastCheckedText = product.last_checked
                 ? `Last checked: ${formatDate(product.last_checked)}`
                 : 'Not checked yet — click Refresh Prices above';
 
-            // Savings hint: show how much more to drop even if not there yet
+            // Hint banners
             let hintBanner = '';
-            if (priceDropped) {
+            if (isRestock) {
+                if (product.stock_status === 'in_stock') {
+                    hintBanner = `<div class="deal-banner">🎉 This item is back in stock! Check your email for the alert.</div>`;
+                } else if (product.stock_status === 'out_of_stock') {
+                    hintBanner = `<div style="margin-top:10px;padding:8px 12px;background:#fef2f2;border-radius:8px;font-size:13px;color:#ef4444;">
+                        📦 Currently out of stock. We'll email you the moment it's available again!
+                    </div>`;
+                }
+            } else if (priceDropped) {
                 hintBanner = `<div class="deal-banner">🎉 Price is at or below your target! Check your email for the alert.</div>`;
             } else if (hasCurrentPrice && targetPriceVal) {
                 const gap = (currentPriceVal - targetPriceVal).toFixed(2);
@@ -1150,16 +1223,17 @@
                 </div>`;
             }
 
-            return `
-            <div class="product-card ${priceDropped ? 'deal' : ''}" id="product-${product.id}">
-                <div class="product-card-header">
-                    <div class="store-badge">${getStoreEmoji(product.url)} ${product.store || 'Online Store'}</div>
-                    <span class="status-badge ${statusClass}">${statusLabel}</span>
-                </div>
-                <a href="${product.url}" target="_blank" class="product-url" title="${product.url}">
-                    🔗 ${shortUrl}
-                </a>
-
+            // For restock products, show stock status instead of price comparison
+            let mainContent;
+            if (isRestock) {
+                mainContent = `
+                <div style="text-align:center; padding:15px 0;">
+                    <div style="font-size:13px; color:#888; margin-bottom:8px;">Stock Status</div>
+                    ${stockBadgeHtml || '<span class="stock-badge unknown">❓ Not checked yet</span>'}
+                    ${hasCurrentPrice ? `<div style="margin-top:12px;font-size:13px;color:#888;">Current price: <strong>$${currentPriceVal.toFixed(2)}</strong></div>` : ''}
+                </div>`;
+            } else {
+                mainContent = `
                 <div class="price-comparison">
                     <div class="price-box">
                         <div class="price-label">Your Target</div>
@@ -1179,14 +1253,26 @@
                         <div class="price-value ${currentPriceClass}">${currentPriceDisplay}</div>
                         ${savings ? `<div class="price-savings">You save $${savings}! 🎉</div>` : ''}
                     </div>
-                </div>
+                </div>`;
+            }
 
+            return `
+            <div class="product-card ${priceDropped ? 'deal' : ''} ${isRestock && product.stock_status === 'in_stock' ? 'deal' : ''}" id="product-${product.id}">
+                <div class="product-card-header">
+                    <div class="store-badge">${getStoreEmoji(product.url)} ${product.store || 'Online Store'} ${trackLabel}</div>
+                    <span class="status-badge ${statusClass}">${statusLabel}</span>
+                </div>
+                <a href="${product.url}" target="_blank" class="product-url" title="${product.url}">
+                    🔗 ${shortUrl}
+                </a>
+
+                ${mainContent}
                 ${hintBanner}
 
                 <div class="product-footer">
                     <span class="added-date">${lastCheckedText}</span>
                     <div>
-                        <button class="btn-history" onclick="showPriceHistory(${product.id}, '${(product.store || 'Product').replace(/'/g, "\\'")}')">📈 History</button>
+                        ${!isRestock ? `<button class="btn-history" onclick="showPriceHistory(${product.id}, '${(product.store || 'Product').replace(/'/g, "\\'")}')">📈 History</button>` : ''}
                         <button class="btn-remove" onclick="removeProduct(${product.id})">✕ Remove</button>
                     </div>
                 </div>
@@ -1228,26 +1314,39 @@
             document.getElementById('newProductUrl').focus();
         }
 
+        function setTrackType(type) {
+            document.getElementById('newTrackType').value = type;
+            document.getElementById('btnTrackPrice').classList.toggle('active', type === 'price');
+            document.getElementById('btnTrackRestock').classList.toggle('active', type === 'restock');
+            // Hide target price for restock tracking
+            document.getElementById('targetPriceGroup').style.display = type === 'restock' ? 'none' : 'block';
+        }
+
         function closeAddModal() {
             document.getElementById('addModal').classList.remove('active');
             document.getElementById('newProductUrl').value = '';
             document.getElementById('newTargetPrice').value = '';
+            setTrackType('price');  // reset to default
         }
 
         function addProduct() {
             const url = document.getElementById('newProductUrl').value.trim();
+            const trackType = document.getElementById('newTrackType').value;
             const targetPrice = document.getElementById('newTargetPrice').value.trim();
             if (!url) { showToast('Please enter a product URL', 'error'); return; }
-            if (!targetPrice) { showToast('Please enter a target price', 'error'); return; }
+            if (trackType === 'price' && !targetPrice) { showToast('Please enter a target price', 'error'); return; }
 
             const btn = document.getElementById('addBtn');
             btn.textContent = 'Adding...';
             btn.disabled = true;
 
+            const body = { url, track_type: trackType };
+            if (trackType === 'price') body.target_price = targetPrice;
+
             fetch(`/api/add-product?token=${token}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url, target_price: targetPrice })
+                body: JSON.stringify(body)
             })
             .then(res => res.json())
             .then(data => {
