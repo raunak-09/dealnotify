@@ -334,62 +334,119 @@ def extract_stock_status(html, markdown='', url=''):
         {"status": "in_stock" | "out_of_stock" | "unknown",
          "detail": "<signal that matched>"}
 
-    Priority of signals (first match wins):
-      1. JSON-LD / structured data  availability fields
-      2. HTML class/id patterns (Amazon, Walmart, Best Buy, Target, etc.)
-      3. Common text patterns in HTML and markdown
+    Priority logic:
+      1. Structured data (schema.org JSON-LD) — most authoritative
+      2. Amazon-specific HTML element IDs (add-to-cart-button, outOfStock)
+      3. Retailer JSON fields (availabilityStatus)
+      4. Generic text patterns — ONLY as last resort, and only when no
+         conflicting in-stock signals were found
+
+    The key insight: generic text like "out of stock" can appear anywhere
+    on a page (related products, reviews, ads). So we check high-confidence
+    in-stock signals BEFORE falling back to broad text matching.
     """
     import re
     result = {"status": "unknown", "detail": ""}
-    combined = (html or '') + '\n' + (markdown or '')
+    is_amazon = bool(re.search(r'amazon\.(com|co\.uk|ca|com\.au|de|fr|it|es)', url or '', re.IGNORECASE))
 
-    # ── Out-of-stock signals (check first — explicit OOS is more reliable) ────
-    oos_patterns = [
-        # JSON-LD availability
-        (r'"availability"\s*:\s*"https?://schema\.org/OutOfStock"', 'schema.org OutOfStock'),
-        (r'"availability"\s*:\s*"https?://schema\.org/SoldOut"', 'schema.org SoldOut'),
-        (r'"availability"\s*:\s*"https?://schema\.org/Discontinued"', 'schema.org Discontinued'),
-        # Amazon-specific
-        (r'id="outOfStock"', 'Amazon #outOfStock'),
-        (r'id="availability"[^>]*>\s*Currently unavailable', 'Amazon Currently unavailable'),
-        # Generic HTML / text
-        (r'(?i)\b(?:out\s+of\s+stock|sold\s+out|currently\s+unavailable|not\s+available|no\s+longer\s+available)\b',
-         'text: out of stock'),
-        (r'(?i)class="[^"]*(?:outOfStock|out-of-stock|soldOut|sold-out|unavailable)[^"]*"',
-         'CSS class: out of stock'),
-        # Walmart / Best Buy
-        (r'(?i)"availabilityStatus"\s*:\s*"(?:NOT_AVAILABLE|OUT_OF_STOCK)"', 'retailer JSON: OOS'),
-    ]
+    # ── Layer 1: Schema.org JSON-LD availability (most authoritative) ─────
+    # These are explicit structured-data declarations by the retailer.
+    if html:
+        schema_match = re.search(r'"availability"\s*:\s*"(https?://schema\.org/\w+)"', html)
+        if schema_match:
+            avail = schema_match.group(1).lower()
+            if 'outofstock' in avail or 'soldout' in avail or 'discontinued' in avail:
+                result["status"] = "out_of_stock"
+                result["detail"] = f"schema.org: {schema_match.group(1)}"
+                print(f"   📦 Stock status: OUT OF STOCK ({result['detail']})")
+                return result
+            elif 'instock' in avail or 'limitedavailability' in avail or 'preorder' in avail:
+                result["status"] = "in_stock"
+                result["detail"] = f"schema.org: {schema_match.group(1)}"
+                print(f"   📦 Stock status: IN STOCK ({result['detail']})")
+                return result
 
-    for pattern, detail in oos_patterns:
-        if re.search(pattern, combined):
+    # ── Layer 2: Amazon-specific element IDs ──────────────────────────────
+    # These are structural page elements, not loose text — very reliable.
+    if is_amazon and html:
+        # In-stock signals (Amazon)
+        if re.search(r'id="add-to-cart-button"', html):
+            result["status"] = "in_stock"
+            result["detail"] = "Amazon Add to Cart button"
+            print(f"   📦 Stock status: IN STOCK ({result['detail']})")
+            return result
+        if re.search(r'id="buy-now-button"', html):
+            result["status"] = "in_stock"
+            result["detail"] = "Amazon Buy Now button"
+            print(f"   📦 Stock status: IN STOCK ({result['detail']})")
+            return result
+        # Out-of-stock signals (Amazon)
+        if re.search(r'id="outOfStock"', html):
             result["status"] = "out_of_stock"
-            result["detail"] = detail
-            print(f"   📦 Stock status: OUT OF STOCK ({detail})")
+            result["detail"] = "Amazon #outOfStock element"
+            print(f"   📦 Stock status: OUT OF STOCK ({result['detail']})")
+            return result
+        if re.search(r'id="availability"[^>]*>\s*Currently unavailable', html):
+            result["status"] = "out_of_stock"
+            result["detail"] = "Amazon Currently unavailable"
+            print(f"   📦 Stock status: OUT OF STOCK ({result['detail']})")
+            return result
+        # Amazon availability span — check the specific element, not page-wide text
+        avail_match = re.search(r'id="availability"[^>]*>(.*?)</(?:span|div)', html, re.DOTALL)
+        if avail_match:
+            avail_text = avail_match.group(1).strip()
+            if re.search(r'(?i)in\s+stock', avail_text):
+                result["status"] = "in_stock"
+                result["detail"] = "Amazon #availability: In Stock"
+                print(f"   📦 Stock status: IN STOCK ({result['detail']})")
+                return result
+
+    # ── Layer 3: Retailer JSON fields (Walmart, Best Buy, etc.) ───────────
+    if html:
+        status_match = re.search(r'(?i)"availabilityStatus"\s*:\s*"([^"]+)"', html)
+        if status_match:
+            status_val = status_match.group(1).upper()
+            if status_val in ('NOT_AVAILABLE', 'OUT_OF_STOCK'):
+                result["status"] = "out_of_stock"
+                result["detail"] = f"retailer JSON: {status_match.group(1)}"
+                print(f"   📦 Stock status: OUT OF STOCK ({result['detail']})")
+                return result
+            elif status_val in ('IN_STOCK', 'AVAILABLE'):
+                result["status"] = "in_stock"
+                result["detail"] = f"retailer JSON: {status_match.group(1)}"
+                print(f"   📦 Stock status: IN STOCK ({result['detail']})")
+                return result
+
+    # ── Layer 4: CSS class signals (structural, moderately reliable) ──────
+    if html:
+        if re.search(r'(?i)class="[^"]*(?:outOfStock|out-of-stock|soldOut|sold-out)[^"]*"', html):
+            result["status"] = "out_of_stock"
+            result["detail"] = "CSS class: out-of-stock"
+            print(f"   📦 Stock status: OUT OF STOCK ({result['detail']})")
             return result
 
-    # ── In-stock signals ──────────────────────────────────────────────────────
-    in_stock_patterns = [
-        # JSON-LD availability
-        (r'"availability"\s*:\s*"https?://schema\.org/InStock"', 'schema.org InStock'),
-        (r'"availability"\s*:\s*"https?://schema\.org/LimitedAvailability"', 'schema.org LimitedAvailability'),
-        (r'"availability"\s*:\s*"https?://schema\.org/PreOrder"', 'schema.org PreOrder'),
-        # Amazon
-        (r'id="add-to-cart-button"', 'Amazon Add to Cart button'),
-        (r'id="buy-now-button"', 'Amazon Buy Now button'),
-        (r'id="availability"[^>]*>\s*In Stock', 'Amazon In Stock'),
-        # Generic "Add to Cart" / "Buy Now" buttons
-        (r'(?i)\b(?:add\s+to\s+cart|buy\s+now|add\s+to\s+bag)\b', 'text: Add to Cart / Buy Now'),
-        (r'(?i)"availabilityStatus"\s*:\s*"(?:IN_STOCK|AVAILABLE)"', 'retailer JSON: in stock'),
-        # Generic "In Stock" text
-        (r'(?i)\bIn\s+Stock\b', 'text: In Stock'),
-    ]
-
-    for pattern, detail in in_stock_patterns:
-        if re.search(pattern, combined):
+    # ── Layer 5: Generic text patterns (last resort) ─────────────────────
+    # Only use these if NO higher-confidence signal was found.
+    # For Amazon, skip generic text entirely — the structural checks above
+    # are sufficient and generic text causes too many false positives.
+    if not is_amazon:
+        combined = (html or '') + '\n' + (markdown or '')
+        # Check in-stock text first (Add to Cart is a strong positive signal)
+        if re.search(r'(?i)\b(?:add\s+to\s+cart|buy\s+now|add\s+to\s+bag)\b', combined):
             result["status"] = "in_stock"
-            result["detail"] = detail
-            print(f"   📦 Stock status: IN STOCK ({detail})")
+            result["detail"] = "text: Add to Cart / Buy Now"
+            print(f"   📦 Stock status: IN STOCK ({result['detail']})")
+            return result
+        if re.search(r'(?i)\bIn\s+Stock\b', combined):
+            result["status"] = "in_stock"
+            result["detail"] = "text: In Stock"
+            print(f"   📦 Stock status: IN STOCK ({result['detail']})")
+            return result
+        # Out-of-stock text (only if no in-stock signal found above)
+        if re.search(r'(?i)\b(?:out\s+of\s+stock|sold\s+out|currently\s+unavailable|not\s+available|no\s+longer\s+available)\b', combined):
+            result["status"] = "out_of_stock"
+            result["detail"] = "text: out of stock"
+            print(f"   📦 Stock status: OUT OF STOCK ({result['detail']})")
             return result
 
     print("   📦 Stock status: UNKNOWN (no signals matched)")
