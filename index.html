@@ -1031,8 +1031,9 @@
         <a href="#features" class="nav-mobile-link" onclick="toggleMobileNav()">Features</a>
         <a href="#pricing" class="nav-mobile-link" onclick="toggleMobileNav()">Pricing</a>
         <a href="/blog" class="nav-mobile-link" onclick="toggleMobileNav()">Blog</a>
-        <a href="#" class="nav-mobile-link" onclick="openModal('login'); toggleMobileNav(); return false;">Log in</a>
-        <a href="#" class="nav-mobile-link nav-mobile-cta" onclick="openModal('signup'); toggleMobileNav(); return false;">Start Free →</a>
+        <a href="#" id="mobile-nav-login-btn" class="nav-mobile-link" onclick="openModal('login'); toggleMobileNav(); return false;">Log in</a>
+        <a href="#" id="mobile-nav-start-btn" class="nav-mobile-link nav-mobile-cta" onclick="openModal('signup'); toggleMobileNav(); return false;">Start Free →</a>
+        <a href="#" id="mobile-nav-dashboard-btn" style="display:none;" class="nav-mobile-link nav-mobile-cta" onclick="toggleMobileNav();">My Dashboard →</a>
     </div>
 </header>
 
@@ -1868,6 +1869,14 @@ window.addEventListener('DOMContentLoaded', () => {
                     }
                     if (startBtn) startBtn.style.display = 'none';
                     if (loginBtn) loginBtn.style.display = 'none';
+
+                    // Also update mobile nav
+                    const mDashBtn = document.getElementById('mobile-nav-dashboard-btn');
+                    const mStartBtn = document.getElementById('mobile-nav-start-btn');
+                    const mLoginBtn = document.getElementById('mobile-nav-login-btn');
+                    if (mDashBtn) { mDashBtn.href = `/dashboard?token=${savedToken}`; mDashBtn.style.display = ''; }
+                    if (mStartBtn) mStartBtn.style.display = 'none';
+                    if (mLoginBtn) mLoginBtn.style.display = 'none';
                 }
             })
             .catch(() => {}); // silently ignore if token is expired/invalid

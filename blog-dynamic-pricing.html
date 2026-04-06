@@ -506,16 +506,55 @@
 </head>
 <body>
 
+<!-- Nav styles -->
+<style>
+  .blog-nav { background:#fff; border-bottom:1px solid #e5e7eb; padding:0 32px; height:66px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100; }
+  .blog-nav .logo { font-size:22px; font-weight:800; color:#5b67f8; letter-spacing:-0.5px; text-decoration:none; display:flex; align-items:center; gap:6px; }
+  .blog-nav .logo-icon { font-size:26px; }
+  .blog-nav-links { display:flex; gap:28px; list-style:none; align-items:center; }
+  .blog-nav-links a { text-decoration:none; color:#6b7280; font-size:14px; font-weight:500; transition:color 0.2s; }
+  .blog-nav-links a:hover { color:#5b67f8; }
+  .blog-nav-links .nav-active { color:#5b67f8; }
+  .blog-nav-links .nav-login { color:#5b67f8 !important; font-weight:600; }
+  .blog-nav-links .nav-cta { background:linear-gradient(135deg,#5b67f8,#818cf8); color:#fff !important; padding:8px 20px; border-radius:50px; font-weight:700; }
+  /* Hamburger */
+  .bn-hamburger { display:none; flex-direction:column; gap:5px; cursor:pointer; background:none; border:none; padding:4px; }
+  .bn-hamburger span { display:block; width:22px; height:2px; background:#1a1a2e; border-radius:2px; }
+  .bn-mobile { display:none; background:#fff; border-bottom:1px solid #e5e7eb; padding:16px 24px; flex-direction:column; gap:4px; position:sticky; top:57px; z-index:99; }
+  .bn-mobile.open { display:flex; }
+  .bn-mobile a { text-decoration:none; color:#374151; font-size:15px; font-weight:500; padding:10px 0; border-bottom:1px solid #f3f4f6; display:block; }
+  .bn-mobile .m-login { color:#5b67f8 !important; font-weight:600; }
+  .bn-mobile .m-cta { background:linear-gradient(135deg,#5b67f8,#818cf8); color:#fff !important; padding:10px 20px; border-radius:50px; text-align:center; font-weight:700; margin-top:6px; }
+  @media (max-width:768px) {
+    .blog-nav-links { display:none; }
+    .bn-hamburger { display:flex; }
+  }
+</style>
+
 <!-- Nav -->
-<nav style="background:#fff; border-bottom:1px solid #e5e7eb; padding:16px 32px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100;">
-  <a href="/" style="font-size:20px; font-weight:800; color:#1a1a2e; text-decoration:none;">🔔 DealNotify</a>
-  <ul style="display:flex; gap:28px; list-style:none; align-items:center;">
-    <li><a href="/" style="text-decoration:none; color:#6b7280; font-size:14px; font-weight:500;">Home</a></li>
-    <li><a href="/blog" style="text-decoration:none; color:#5b67f8; font-size:14px; font-weight:500;">Blog</a></li>
-    <li><a href="/contact.html" style="text-decoration:none; color:#6b7280; font-size:14px; font-weight:500;">Contact</a></li>
-    <li><a href="/" style="text-decoration:none; background:linear-gradient(135deg,#5b67f8,#818cf8); color:#fff; padding:8px 20px; border-radius:50px; font-weight:700; font-size:14px;">Start Free →</a></li>
+<nav class="blog-nav">
+  <a href="/" class="logo"><span class="logo-icon">🔔</span> DealNotify</a>
+  <ul class="blog-nav-links">
+    <li><a href="/">Home</a></li>
+    <li><a href="/blog" class="nav-active">Blog</a></li>
+    <li><a href="/contact.html">Contact</a></li>
+    <li><a href="/dashboard" class="nav-login">Login</a></li>
+    <li><a href="/" class="nav-cta">Start Free →</a></li>
   </ul>
+  <button class="bn-hamburger" onclick="toggleBlogNav()" aria-label="Open menu">
+    <span></span><span></span><span></span>
+  </button>
 </nav>
+<div class="bn-mobile" id="blogMobileNav">
+  <a href="/">Home</a>
+  <a href="/blog">Blog</a>
+  <a href="/contact.html">Contact</a>
+  <a href="/dashboard" class="m-login">Login</a>
+  <a href="/" class="m-cta">Start Free →</a>
+</div>
+<script>
+  function toggleBlogNav() { document.getElementById('blogMobileNav').classList.toggle('open'); }
+</script>
 
 <!-- Hero -->
 <div class="hero">

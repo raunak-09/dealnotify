@@ -38,13 +38,24 @@
     nav {
       background: #fff;
       border-bottom: 1px solid #e5e7eb;
-      padding: 16px 32px;
+      padding: 0 32px;
+      height: 66px;
       display: flex;
       align-items: center;
       justify-content: space-between;
       position: sticky; top: 0; z-index: 100;
     }
-    .logo { font-size: 20px; font-weight: 800; color: #1a1a2e; text-decoration: none; }
+    .logo {
+      font-size: 22px;
+      font-weight: 800;
+      color: #5b67f8;
+      letter-spacing: -0.5px;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .logo-icon { font-size: 26px; }
     .nav-links { display: flex; gap: 28px; list-style: none; align-items: center; }
     .nav-links a { text-decoration: none; color: #6b7280; font-size: 14px; font-weight: 500; transition: color 0.2s; }
     .nav-links a:hover, .nav-links a.active { color: #5b67f8; }
@@ -158,6 +169,67 @@
     .coming-soon h3 { font-size: 16px; font-weight: 700; color: #6b7280; margin-bottom: 8px; }
     .coming-soon p { font-size: 13px; }
 
+    /* Nav login link */
+    .nav-login { color: #5b67f8 !important; font-weight: 600 !important; }
+
+    /* Hamburger button */
+    .hamburger {
+      display: none;
+      flex-direction: column;
+      gap: 5px;
+      cursor: pointer;
+      background: none;
+      border: none;
+      padding: 4px;
+    }
+    .hamburger span {
+      display: block;
+      width: 22px;
+      height: 2px;
+      background: #1a1a2e;
+      border-radius: 2px;
+      transition: all 0.3s;
+    }
+
+    /* Mobile nav dropdown */
+    .mobile-nav {
+      display: none;
+      background: #fff;
+      border-bottom: 1px solid #e5e7eb;
+      padding: 16px 24px;
+      flex-direction: column;
+      gap: 4px;
+      position: sticky;
+      top: 57px;
+      z-index: 99;
+    }
+    .mobile-nav.open { display: flex; }
+    .mobile-nav a {
+      text-decoration: none;
+      color: #374151;
+      font-size: 15px;
+      font-weight: 500;
+      padding: 10px 0;
+      border-bottom: 1px solid #f3f4f6;
+      display: block;
+    }
+    .mobile-nav .m-cta {
+      background: linear-gradient(135deg, #5b67f8, #818cf8);
+      color: #fff !important;
+      padding: 10px 20px;
+      border-radius: 50px;
+      text-align: center;
+      font-weight: 700;
+      border: none;
+      margin-top: 6px;
+    }
+    .mobile-nav .m-login { color: #5b67f8 !important; font-weight: 600; }
+
+    @media (max-width: 768px) {
+      .nav-links { display: none; }
+      .hamburger { display: flex; }
+    }
+
     /* Footer */
     footer {
       background: #1a1a2e;
@@ -172,14 +244,31 @@
 <body>
 
 <nav>
-  <a href="/" class="logo">🔔 DealNotify</a>
+  <a href="/" class="logo"><span class="logo-icon">🔔</span> DealNotify</a>
   <ul class="nav-links">
     <li><a href="/">Home</a></li>
     <li><a href="/blog" class="active">Blog</a></li>
     <li><a href="/contact.html">Contact</a></li>
+    <li><a href="/dashboard" class="nav-login">Login</a></li>
     <li><a href="/" class="nav-cta">Start Free →</a></li>
   </ul>
+  <button class="hamburger" onclick="toggleBlogNav()" aria-label="Open menu">
+    <span></span><span></span><span></span>
+  </button>
 </nav>
+<div class="mobile-nav" id="blogMobileNav">
+  <a href="/">Home</a>
+  <a href="/blog">Blog</a>
+  <a href="/contact.html">Contact</a>
+  <a href="/dashboard" class="m-login">Login</a>
+  <a href="/" class="m-cta">Start Free →</a>
+</div>
+
+<script>
+  function toggleBlogNav() {
+    document.getElementById('blogMobileNav').classList.toggle('open');
+  }
+</script>
 
 <div class="blog-hero">
   <div class="tag">📝 DealNotify Blog</div>
