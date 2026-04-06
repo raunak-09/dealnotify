@@ -1478,6 +1478,11 @@ def test_scrape():
         final_price = scrape_price(url)
         result['final_scrape_price'] = final_price
 
+        # Stock status detection
+        stock_result = extract_stock_status(html, markdown, url=cleaned)
+        result['stock_status'] = stock_result['status']
+        result['stock_detail'] = stock_result['detail']
+
     except Exception as e:
         result['error'] = str(e)
     finally:
