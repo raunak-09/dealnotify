@@ -626,6 +626,10 @@
         .footer-bottom a:hover { color: white; }
 
         /* Account dropdown */
+        .nav-center-links { display: flex; align-items: center; gap: 20px; margin-left: auto; margin-right: 20px; }
+        .nav-link-dash { color: rgba(255,255,255,0.85); font-size: 14px; font-weight: 500; text-decoration: none; transition: color 0.2s; }
+        .nav-link-dash:hover { color: white; text-decoration: none; }
+
         .account-btn {
             display: flex; align-items: center; gap: 10px;
             cursor: pointer; position: relative;
@@ -785,8 +789,9 @@
             .main { padding: 82px 16px 30px; }
             .footer-top { flex-direction: column; gap: 24px; }
             .footer-bottom { flex-direction: column; text-align: center; }
-            /* Show hamburger, hide account dropdown trigger text */
+            /* Show hamburger, hide desktop nav elements */
             .hamburger { display: flex; }
+            .nav-center-links { display: none; }
             .account-btn .user-name,
             .account-btn .user-email,
             .account-btn span { display: none; }
@@ -820,6 +825,10 @@
     <header>
         <nav>
             <a href="/" class="logo"><span class="logo-icon">🔔</span> DealNotify</a>
+
+            <div class="nav-center-links">
+                <a href="/contact.html" class="nav-link-dash">Contact</a>
+            </div>
 
             <!-- Desktop: Account dropdown trigger -->
             <div class="account-btn" id="accountBtn" onclick="toggleDropdown()">
@@ -863,6 +872,7 @@
             </div>
             <button class="mobile-menu-item" onclick="openAccountModal(); toggleMobileMenu();">👤 My Account</button>
             <button class="mobile-menu-item" id="mobileUpgradeBtn" onclick="openUpgradeFromDropdown(); toggleMobileMenu();">⭐ Upgrade to Pro</button>
+            <a href="/contact.html" class="mobile-menu-item" style="text-decoration:none; text-align:left;">📧 Contact Us</a>
             <div class="mobile-menu-divider"></div>
             <button class="mobile-menu-item danger" onclick="signOut();">🚪 Sign Out</button>
         </div>
