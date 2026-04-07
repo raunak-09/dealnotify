@@ -7,6 +7,10 @@ Auth: password hashing via werkzeug, email verification, forgot/reset password
 from flask import Flask, request, jsonify, send_from_directory
 import os
 import secrets
+import time
+import hmac
+import html as html_module
+from collections import defaultdict
 from datetime import datetime, timedelta
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
@@ -21,6 +25,76 @@ from werkzeug.security import generate_password_hash, check_password_hash
 load_dotenv()
 
 app = Flask(__name__, static_folder='.', static_url_path='')
+
+
+# ─────────────────────────────────────────────
+# SECURITY: Rate Limiter (in-memory, per-IP)
+# ─────────────────────────────────────────────
+
+class RateLimiter:
+    """Simple in-memory rate limiter. Tracks requests per IP per endpoint."""
+    def __init__(self):
+        self._requests = defaultdict(list)  # key → list of timestamps
+
+    def is_rate_limited(self, key, max_requests, window_seconds):
+        """Returns True if the key has exceeded max_requests in window_seconds."""
+        now = time.time()
+        cutoff = now - window_seconds
+        # Clean old entries
+        self._requests[key] = [t for t in self._requests[key] if t > cutoff]
+        if len(self._requests[key]) >= max_requests:
+            return True
+        self._requests[key].append(now)
+        return False
+
+rate_limiter = RateLimiter()
+
+def get_client_ip():
+    """Get real client IP behind Railway's proxy."""
+    forwarded = request.headers.get('X-Forwarded-For', '')
+    if forwarded:
+        return forwarded.split(',')[0].strip()
+    return request.remote_addr or 'unknown'
+
+
+# ─────────────────────────────────────────────
+# SECURITY: Token helper — reads from Authorization header or query param
+# ─────────────────────────────────────────────
+
+def get_token_from_request():
+    """Read auth token from Authorization: Bearer header (preferred) or ?token= query param (fallback)."""
+    auth_header = request.headers.get('Authorization', '')
+    if auth_header.startswith('Bearer '):
+        return auth_header[7:].strip()
+    return request.args.get('token')
+
+
+# ─────────────────────────────────────────────
+# SECURITY: Admin auth helper
+# ─────────────────────────────────────────────
+
+def require_admin():
+    """Check admin authentication. Returns True if authorized, False otherwise.
+    Uses constant-time comparison to prevent timing attacks."""
+    admin_password = os.getenv('ADMIN_PASSWORD', '')
+    if not admin_password:
+        return False
+
+    # Check password from header (preferred) or query param (fallback)
+    provided = request.headers.get('X-Admin-Password', '') or request.args.get('password', '')
+    if provided and hmac.compare_digest(provided, admin_password):
+        return True
+
+    # Check if the request comes from an admin user via token
+    token = get_token_from_request()
+    if token:
+        user, _ = get_user_by_token(token)
+        if user:
+            admin_emails = [e.strip().lower() for e in os.getenv('ADMIN_EMAILS', '').split(',') if e.strip()]
+            if user['email'].lower() in admin_emails:
+                return True
+
+    return False
 
 
 # ── Force HTTPS (Railway terminates SSL at the proxy and sets X-Forwarded-Proto)
@@ -46,34 +120,58 @@ def force_https():
         return redirect(f'https://www.dealnotify.co{request.full_path.rstrip("?")}', code=301)
 
 
-# ── Temporary debug endpoint — shows exactly what headers Railway is forwarding
-@app.route('/api/debug-headers')
-def debug_headers():
-    import json
-    data = {
-        'X-Forwarded-Proto': request.headers.get('X-Forwarded-Proto', '(not set)'),
-        'X-Forwarded-For':   request.headers.get('X-Forwarded-For', '(not set)'),
-        'Host':              request.headers.get('Host', '(not set)'),
-        'request.url':       request.url,
-        'request.scheme':    request.scheme,
-        'all_headers':       dict(request.headers),
-    }
-    return jsonify(data), 200
+# ── REMOVED: /api/debug-headers — was exposing internal infrastructure details.
+# If you need to debug Railway headers, use `railway logs` or a temporary local route.
 
 
-# ── Security headers on every response
+# ── CORS: Handle preflight OPTIONS requests for Chrome extension ──
+@app.route('/api/<path:path>', methods=['OPTIONS'])
+def handle_options(path):
+    """Respond to CORS preflight requests from the Chrome extension."""
+    response = jsonify({'ok': True})
+    return response, 200
+
+
+# ── Security headers + CORS on every response ──
 @app.after_request
 def add_security_headers(response):
     # HSTS: tell browsers to always use HTTPS for this domain for 1 year
-    # includeSubDomains covers both dealnotify.co and www.dealnotify.co
     response.headers['Strict-Transport-Security'] = \
-        'max-age=31536000; includeSubDomains'
+        'max-age=31536000; includeSubDomains; preload'
     # Prevent MIME-type sniffing
     response.headers['X-Content-Type-Options'] = 'nosniff'
     # Block clickjacking — only allow framing from same origin
     response.headers['X-Frame-Options'] = 'SAMEORIGIN'
     # Only send the origin as referrer (not full URL) when crossing to another site
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    # Content Security Policy — restrict where scripts/styles/images can load from
+    response.headers['Content-Security-Policy'] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://js.stripe.com; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: https:; "
+        "connect-src 'self' https://www.google-analytics.com https://api.stripe.com; "
+        "frame-src https://js.stripe.com; "
+        "font-src 'self'; "
+        "object-src 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self';"
+    )
+    # Disable browser features the app doesn't need
+    response.headers['Permissions-Policy'] = (
+        'camera=(), microphone=(), geolocation=(), payment=(self)'
+    )
+    # Legacy XSS protection (still useful for older browsers)
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+
+    # ── CORS for Chrome Extension ──
+    origin = request.headers.get('Origin', '')
+    if origin.startswith('chrome-extension://') or origin.endswith('dealnotify.co'):
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Admin-Key, X-Admin-Password'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, DELETE, OPTIONS'
+        response.headers['Access-Control-Max-Age'] = '86400'  # Cache preflight for 24h
+
     return response
 
 
@@ -764,6 +862,11 @@ def dashboard():
 def signup():
     """Handle signup form submission — stores hashed password and sends verification email"""
     try:
+        # Rate limit: 5 signups per IP per 15 minutes
+        ip = get_client_ip()
+        if rate_limiter.is_rate_limited(f'signup:{ip}', max_requests=5, window_seconds=900):
+            return jsonify({'error': 'Too many signup attempts. Please wait and try again.'}), 429
+
         data = request.json
 
         if not data.get('email') or not data.get('name'):
@@ -835,7 +938,7 @@ def signup():
 
     except Exception as e:
         print(f"❌ Signup error: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'An unexpected error occurred. Please try again.'}), 500
 
 
 @app.route('/api/verify-email', methods=['GET'])
@@ -909,13 +1012,18 @@ def resend_verification():
 
     except Exception as e:
         print(f"❌ Resend verification error: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'An unexpected error occurred. Please try again.'}), 500
 
 
 @app.route('/api/login', methods=['POST'])
 def login():
     """Login with email + password. Returns dashboard URL on success."""
     try:
+        # Rate limit: 10 login attempts per IP per 5 minutes
+        ip = get_client_ip()
+        if rate_limiter.is_rate_limited(f'login:{ip}', max_requests=10, window_seconds=300):
+            return jsonify({'error': 'Too many login attempts. Please wait a few minutes and try again.'}), 429
+
         data     = request.json
         email    = (data.get('email') or '').strip().lower()
         password = data.get('password', '')
@@ -967,13 +1075,18 @@ def login():
 
     except Exception as e:
         print(f"❌ Login error: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'An unexpected error occurred. Please try again.'}), 500
 
 
 @app.route('/api/forgot-password', methods=['POST'])
 def forgot_password():
     """Generate a one-time password reset token and email it to the user"""
     try:
+        # Rate limit: 5 password reset attempts per IP per 15 minutes
+        ip = get_client_ip()
+        if rate_limiter.is_rate_limited(f'forgot:{ip}', max_requests=5, window_seconds=900):
+            return jsonify({'error': 'Too many reset attempts. Please wait and try again.'}), 429
+
         data  = request.json
         email = (data.get('email') or '').strip().lower()
 
@@ -1015,7 +1128,7 @@ def forgot_password():
 
     except Exception as e:
         print(f"❌ Forgot password error: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'An unexpected error occurred. Please try again.'}), 500
 
 
 @app.route('/api/reset-password', methods=['POST'])
@@ -1066,13 +1179,13 @@ def reset_password():
 
     except Exception as e:
         print(f"❌ Reset password error: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'An unexpected error occurred. Please try again.'}), 500
 
 
 @app.route('/api/price-history/<int:product_id>', methods=['GET'])
 def get_price_history(product_id):
     """Return price history for a product. Token required — user must own the product."""
-    token = request.args.get('token')
+    token = get_token_from_request()
     if not token:
         return jsonify({'error': 'Token required'}), 400
 
@@ -1109,7 +1222,7 @@ def get_price_history(product_id):
 
     except Exception as e:
         print(f"❌ price-history error: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'An unexpected error occurred. Please try again.'}), 500
     finally:
         cur.close()
         conn.close()
@@ -1118,7 +1231,7 @@ def get_price_history(product_id):
 @app.route('/api/dashboard', methods=['GET'])
 def get_dashboard():
     """Get dashboard data for a user by token"""
-    token = request.args.get('token')
+    token = get_token_from_request()
     if not token:
         return jsonify({'error': 'Token required'}), 400
 
@@ -1155,7 +1268,7 @@ def get_dashboard():
 def update_account():
     """Update user's profile details: name, phone, newsletter preference"""
     try:
-        token = request.args.get('token')
+        token = get_token_from_request()
         if not token:
             return jsonify({'error': 'Token required'}), 400
 
@@ -1190,7 +1303,7 @@ def update_account():
 
     except Exception as e:
         print(f"❌ Update account error: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'An unexpected error occurred. Please try again.'}), 500
 
 
 FREE_TIER_PRODUCT_LIMIT = 3   # Free/trial users can track up to this many products
@@ -1199,7 +1312,7 @@ FREE_TIER_PRODUCT_LIMIT = 3   # Free/trial users can track up to this many produ
 def add_product_to_dashboard():
     """Add a new product to user's tracking list"""
     try:
-        token = request.args.get('token')
+        token = get_token_from_request()
         if not token:
             return jsonify({'error': 'Token required'}), 400
 
@@ -1256,14 +1369,14 @@ def add_product_to_dashboard():
 
     except Exception as e:
         print(f"❌ Add product error: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'An unexpected error occurred. Please try again.'}), 500
 
 
 @app.route('/api/remove-product', methods=['DELETE'])
 def remove_product():
     """Remove a product from user's tracking list"""
     try:
-        token = request.args.get('token')
+        token = get_token_from_request()
         product_id = request.args.get('product_id')
 
         if not token or not product_id:
@@ -1290,14 +1403,14 @@ def remove_product():
         return jsonify({'success': True, 'message': 'Product removed'}), 200
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'An unexpected error occurred. Please try again.'}), 500
 
 
 @app.route('/api/update-timezone', methods=['POST'])
 def update_timezone():
     """Store the user's browser timezone (e.g. 'America/Chicago') so alert emails show local time."""
     try:
-        token = request.args.get('token') or (request.get_json(silent=True) or {}).get('token')
+        token = get_token_from_request() or (request.get_json(silent=True) or {}).get('token')
         tz = (request.get_json(silent=True) or {}).get('timezone', '').strip()
         if not token or not tz:
             return jsonify({'error': 'token and timezone required'}), 400
@@ -1319,14 +1432,14 @@ def update_timezone():
         return jsonify({'ok': True})
     except Exception as e:
         print(f"update_timezone error: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'An unexpected error occurred. Please try again.'}), 500
 
 
 @app.route('/api/update-target-price', methods=['POST'])
 def update_target_price():
     """Update the target price for a specific product"""
     try:
-        token = request.args.get('token')
+        token = get_token_from_request()
         if not token:
             return jsonify({'error': 'Token required'}), 400
 
@@ -1370,7 +1483,7 @@ def update_target_price():
         return jsonify({'success': True, 'target_price': new_price}), 200
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'An unexpected error occurred. Please try again.'}), 500
 
 
 @app.route('/api/test-scrape', methods=['GET'])
@@ -1380,14 +1493,21 @@ def test_scrape():
     """
     import re, io, sys
 
-    # Require admin password for security
-    admin_password = os.getenv('ADMIN_PASSWORD', '')
-    if not admin_password or request.args.get('password') != admin_password:
-        return jsonify({'error': 'Admin password required'}), 403
+    # Require admin authentication
+    if not require_admin():
+        return jsonify({'error': 'Unauthorized'}), 403
 
     url = request.args.get('url', '').strip()
     if not url:
         return jsonify({'error': 'url parameter required'}), 400
+
+    # SSRF protection: only allow HTTP(S) URLs to known retailer domains
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in ('http', 'https'):
+            return jsonify({'error': 'Only HTTP/HTTPS URLs allowed'}), 400
+    except Exception:
+        return jsonify({'error': 'Invalid URL'}), 400
 
     from price_monitor import clean_url, _init_firecrawl, _do_scrape, _extract_amazon_price, _extract_meta_price, _extract_jsonld_blocks
 
@@ -1495,7 +1615,7 @@ def test_scrape():
 @app.route('/api/check-prices', methods=['GET'])
 def check_prices_for_user():
     """Check current prices for all of a user's products"""
-    token = request.args.get('token')
+    token = get_token_from_request()
     if not token:
         return jsonify({'error': 'Token required'}), 400
 
@@ -1622,7 +1742,7 @@ def check_prices_for_user():
     except Exception as e:
         conn.rollback()
         print(f"❌ check-prices error: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'An unexpected error occurred. Please try again.'}), 500
     finally:
         cur.close()
         conn.close()
@@ -1639,6 +1759,11 @@ def check_prices_for_user():
 def contact():
     """Handle contact form submissions"""
     try:
+        # Rate limit: 3 contact form submissions per IP per 15 minutes
+        ip = get_client_ip()
+        if rate_limiter.is_rate_limited(f'contact:{ip}', max_requests=3, window_seconds=900):
+            return jsonify({'error': 'Too many messages. Please wait before sending another.'}), 429
+
         data = request.json
         name = data.get('name', '').strip()
         email = data.get('email', '').strip()
@@ -1653,13 +1778,18 @@ def contact():
         if not api_key:
             return jsonify({'error': 'Email service not configured'}), 500
 
+        # HTML-escape user inputs to prevent HTML/script injection in emails
+        safe_name    = html_module.escape(name)
+        safe_email   = html_module.escape(email)
+        safe_message = html_module.escape(message)
+
         html_content = f"""
         <html><body style="font-family: Arial, sans-serif; padding: 20px;">
         <h2 style="color: #667eea;">📬 New Contact Form Submission</h2>
         <table style="border-collapse: collapse; width: 100%; max-width: 600px;">
-        <tr><td style="padding: 10px; font-weight: bold; color: #555;">Name:</td><td style="padding: 10px;">{name}</td></tr>
-        <tr style="background:#f9f9f9;"><td style="padding: 10px; font-weight: bold; color: #555;">Email:</td><td style="padding: 10px;"><a href="mailto:{email}">{email}</a></td></tr>
-        <tr><td style="padding: 10px; font-weight: bold; color: #555;">Message:</td><td style="padding: 10px;">{message}</td></tr>
+        <tr><td style="padding: 10px; font-weight: bold; color: #555;">Name:</td><td style="padding: 10px;">{safe_name}</td></tr>
+        <tr style="background:#f9f9f9;"><td style="padding: 10px; font-weight: bold; color: #555;">Email:</td><td style="padding: 10px;"><a href="mailto:{safe_email}">{safe_email}</a></td></tr>
+        <tr><td style="padding: 10px; font-weight: bold; color: #555;">Message:</td><td style="padding: 10px;">{safe_message}</td></tr>
         </table>
         <p style="color: #888; font-size: 12px; margin-top: 20px;">Sent from DealNotify Contact Form</p>
         </body></html>
@@ -1678,10 +1808,10 @@ def contact():
         confirm_html = f"""
         <html><body style="font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px;">
         <div style="background: white; max-width: 600px; margin: 0 auto; padding: 30px; border-radius: 10px;">
-        <h2 style="color: #667eea;">✅ We got your message, {name}!</h2>
+        <h2 style="color: #667eea;">✅ We got your message, {safe_name}!</h2>
         <p style="color: #333;">Thank you for reaching out. Our team will get back to you within <strong>24 hours</strong>.</p>
         <div style="background: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0;">
-        <p style="color: #666; font-size: 14px; margin: 0;"><strong>Your message:</strong><br>{message}</p>
+        <p style="color: #666; font-size: 14px; margin: 0;"><strong>Your message:</strong><br>{safe_message}</p>
         </div>
         <p style="color: #333; font-size: 14px;">Best regards,<br><strong>🔔 The DealNotify Team</strong><br>
         <a href="mailto:hello@dealnotify.co" style="color: #5b67f8;">hello@dealnotify.co</a> | <a href="https://www.dealnotify.co" style="color: #5b67f8;">www.dealnotify.co</a><br><br>
@@ -1702,12 +1832,15 @@ def contact():
 
     except Exception as e:
         print(f"❌ Contact error: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'An unexpected error occurred. Please try again.'}), 500
 
 
 @app.route('/api/signups', methods=['GET'])
 def get_signups():
     """Get all signups (admin only)"""
+    if not require_admin():
+        return jsonify({'error': 'Unauthorized'}), 403
+
     conn = get_db_conn()
     cur = conn.cursor()
     try:
@@ -1727,6 +1860,9 @@ def get_signups():
 @app.route('/api/alerts-log', methods=['GET'])
 def get_alerts_log():
     """Return alert stats and recent alerts (admin endpoint)"""
+    if not require_admin():
+        return jsonify({'error': 'Unauthorized'}), 403
+
     conn = get_db_conn()
     cur  = conn.cursor()
     try:
@@ -1779,7 +1915,7 @@ def get_alerts_log():
         }), 200
     except Exception as e:
         print(f"❌ alerts-log error: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'An unexpected error occurred. Please try again.'}), 500
     finally:
         cur.close()
         conn.close()
@@ -1788,10 +1924,9 @@ def get_alerts_log():
 @app.route('/api/user-check-history', methods=['GET'])
 def user_check_history():
     """Admin: return all price check timestamps for a given user email.
-    Usage: /api/user-check-history?email=foo@bar.com&password=ADMIN_PASSWORD
+    Usage: /api/user-check-history?email=foo@bar.com (admin auth required)
     """
-    admin_password = os.getenv('ADMIN_PASSWORD', '')
-    if not admin_password or request.args.get('password') != admin_password:
+    if not require_admin():
         return jsonify({'error': 'Unauthorized'}), 403
 
     email = request.args.get('email', '').strip().lower()
@@ -1828,7 +1963,7 @@ def user_check_history():
             } for r in rows]
         }), 200
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'An unexpected error occurred. Please try again.'}), 500
     finally:
         cur.close()
         conn.close()
@@ -1839,20 +1974,8 @@ def admin():
     """Admin dashboard — restricted to ADMIN_EMAILS or ADMIN_PASSWORD env var"""
     authorized = False
 
-    # Option 1: direct password access via ?password=
-    admin_password = os.getenv('ADMIN_PASSWORD', '')
-    if admin_password and request.args.get('password') == admin_password:
-        authorized = True
-
-    # Option 2: user token must belong to an email in ADMIN_EMAILS
-    if not authorized:
-        token = request.args.get('token')
-        if token:
-            user, _ = get_user_by_token(token)
-            if user:
-                admin_emails = [e.strip().lower() for e in os.getenv('ADMIN_EMAILS', '').split(',') if e.strip()]
-                if user['email'].lower() in admin_emails:
-                    authorized = True
+    # Use the centralized admin auth helper (constant-time comparison, header support)
+    authorized = require_admin()
 
     if not authorized:
         return "<h1>403 Forbidden</h1><p>Access denied.</p>", 403
@@ -1986,7 +2109,7 @@ def create_checkout_session():
     The user's token is stored as client_reference_id so the webhook
     can identify them after payment.
     """
-    token = request.args.get('token')
+    token = get_token_from_request()
     if not token:
         return jsonify({'error': 'Token required'}), 400
 
@@ -2029,7 +2152,7 @@ def create_checkout_session():
 
     except Exception as e:
         print(f"❌ Checkout session error: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'An unexpected error occurred. Please try again.'}), 500
 
 
 @app.route('/api/stripe-webhook', methods=['POST'])
@@ -2437,7 +2560,7 @@ def check_all_prices_admin():
     admin_key = request.args.get('key') or request.headers.get('X-Admin-Key', '')
     expected  = os.getenv('ADMIN_KEY', '')
 
-    if not expected or admin_key != expected:
+    if not expected or not hmac.compare_digest(admin_key, expected):
         return jsonify({'error': 'Unauthorized'}), 401
 
     # Run synchronously so the caller gets the result

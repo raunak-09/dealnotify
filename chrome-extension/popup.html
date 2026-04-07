@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=400">
+  <title>DealNotify</title>
+  <style>
+    /* ── Reset & Base (matches dealnotify.co) ── */
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --primary: #5b67f8;
+      --primary-dark: #4351d8;
+      --accent: #ff6b6b;
+      --text: #1a1a2e;
+      --text-light: #5c5c7a;
+      --bg-light: #f7f8ff;
+      --white: #ffffff;
+      --green: #22c55e;
+      --border: #e5e7eb;
+      --shadow: 0 4px 24px rgba(91,103,248,0.10);
+      --shadow-btn: 0 4px 16px rgba(91,103,248,0.35);
+      --radius: 14px;
+      --radius-sm: 8px;
+    }
+
+    body {
+      width: 380px;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      line-height: 1.65;
+      color: var(--text);
+      background: var(--white);
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    a { color: inherit; text-decoration: none; }
+
+    /* ── Header ── */
+    .header {
+      background: linear-gradient(135deg, #5b67f8 0%, #6c4fcf 100%);
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 2px 20px rgba(0,0,0,0.15);
+    }
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .logo-icon { font-size: 22px; }
+    .brand {
+      font-size: 20px;
+      font-weight: 800;
+      color: var(--white);
+      letter-spacing: -0.5px;
+    }
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn-dashboard {
+      font-size: 12px;
+      color: var(--white);
+      text-decoration: none;
+      padding: 5px 14px;
+      border: 1.5px solid rgba(255,255,255,0.4);
+      border-radius: 50px;
+      cursor: pointer;
+      background: rgba(255,255,255,0.15);
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+    .btn-dashboard:hover {
+      background: rgba(255,255,255,0.25);
+    }
+    .btn-logout {
+      font-size: 14px;
+      color: rgba(255,255,255,0.7);
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 4px 6px;
+      transition: color 0.2s;
+    }
+    .btn-logout:hover { color: var(--white); }
+
+    /* ── Views ── */
+    .view { display: none; }
+    .view.active { display: block; }
+
+    /* ── Auth View ── */
+    .auth-container { padding: 28px 24px 20px; }
+    .auth-header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .auth-header .auth-icon { font-size: 28px; margin-bottom: 6px; }
+    .auth-header h2 {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+    .auth-header p {
+      font-size: 14px;
+      color: var(--text-light);
+    }
+
+    .auth-tabs {
+      display: flex;
+      gap: 0;
+      margin-bottom: 22px;
+      border-radius: 50px;
+      overflow: hidden;
+      border: 2px solid var(--border);
+      background: var(--bg-light);
+    }
+    .auth-tab {
+      flex: 1;
+      padding: 10px;
+      text-align: center;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      background: transparent;
+      color: var(--text-light);
+      border: none;
+      transition: all 0.2s;
+      border-radius: 50px;
+    }
+    .auth-tab.active {
+      background: var(--primary);
+      color: var(--white);
+      box-shadow: 0 2px 8px rgba(91,103,248,0.3);
+    }
+    .auth-form { display: none; }
+    .auth-form.active { display: block; }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+    .form-group input {
+      width: 100%;
+      padding: 12px 14px;
+      border: 2px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--white);
+      color: var(--text);
+      font-size: 15px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .form-group input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(91,103,248,0.12);
+    }
+    .form-group input::placeholder { color: #aaa; }
+
+    /* Newsletter checkbox — matches website */
+    .newsletter-group {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      cursor: pointer;
+      margin-bottom: 8px;
+      margin-top: 2px;
+    }
+    .newsletter-group input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      margin-top: 2px;
+      accent-color: var(--primary);
+      flex-shrink: 0;
+      cursor: pointer;
+    }
+    .newsletter-group span {
+      font-size: 13px;
+      color: var(--text-light);
+      line-height: 1.5;
+    }
+
+    .btn-primary {
+      width: 100%;
+      padding: 14px;
+      background: var(--primary);
+      color: var(--white);
+      border: none;
+      border-radius: 50px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      margin-top: 8px;
+      transition: background 0.2s, transform 0.2s, box-shadow 0.2s;
+      box-shadow: var(--shadow-btn);
+    }
+    .btn-primary:hover {
+      background: var(--primary-dark);
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(91,103,248,0.45);
+    }
+    .btn-primary:disabled { opacity: 0.65; cursor: not-allowed; transform: none; }
+
+    .auth-switch {
+      text-align: center;
+      font-size: 13px;
+      color: var(--text-light);
+      margin-top: 16px;
+    }
+    .auth-switch a {
+      color: var(--primary);
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .auth-switch a:hover { text-decoration: underline; }
+
+    .terms-note {
+      text-align: center;
+      font-size: 12px;
+      color: #aaa;
+      margin-top: 12px;
+      line-height: 1.5;
+    }
+    .terms-note a {
+      color: var(--primary);
+    }
+
+    /* ── Tracking View ── */
+    .track-container { padding: 20px 24px; }
+
+    .store-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 14px;
+      border-radius: 50px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 14px;
+    }
+    .store-badge.supported {
+      background: #f0fdf4;
+      color: #166534;
+      border: 1px solid #bbf7d0;
+    }
+    .store-badge .dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+    }
+    .store-badge.supported .dot { background: var(--green); }
+
+    .product-card {
+      background: var(--bg-light);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-bottom: 16px;
+      transition: box-shadow 0.2s;
+    }
+    .product-card:hover { box-shadow: var(--shadow); }
+    .product-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      line-height: 1.4;
+      margin-bottom: 6px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .product-url {
+      font-size: 11px;
+      color: #999;
+      word-break: break-all;
+      display: -webkit-box;
+      -webkit-line-clamp: 1;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .product-price {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--primary);
+      margin: 8px 0 0;
+      letter-spacing: -0.5px;
+    }
+
+    .track-type-selector {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .track-type-btn {
+      flex: 1;
+      padding: 12px 10px;
+      border: 2px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--white);
+      color: var(--text-light);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.2s;
+    }
+    .track-type-btn:hover {
+      border-color: #d8dcff;
+      background: var(--bg-light);
+    }
+    .track-type-btn.active {
+      border-color: var(--primary);
+      background: #eef0ff;
+      color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(91,103,248,0.08);
+    }
+    .track-type-btn .icon { font-size: 20px; display: block; margin-bottom: 4px; }
+
+    .target-price-group {
+      margin-bottom: 16px;
+    }
+    .target-price-group label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 6px;
+      display: block;
+    }
+    .price-input-wrap {
+      position: relative;
+    }
+    .price-input-wrap .currency {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-light);
+      font-size: 16px;
+      font-weight: 700;
+    }
+    .price-input-wrap input {
+      width: 100%;
+      padding: 12px 14px 12px 30px;
+      border: 2px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--white);
+      color: var(--text);
+      font-size: 16px;
+      font-weight: 700;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .price-input-wrap input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(91,103,248,0.12);
+    }
+
+    .btn-track {
+      width: 100%;
+      padding: 14px;
+      background: var(--primary);
+      color: var(--white);
+      border: none;
+      border-radius: 50px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: var(--shadow-btn);
+    }
+    .btn-track:hover {
+      background: var(--primary-dark);
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(91,103,248,0.45);
+    }
+    .btn-track:disabled { opacity: 0.65; cursor: not-allowed; transform: none; }
+
+    /* ── Unsupported View ── */
+    .unsupported-container {
+      padding: 32px 24px;
+      text-align: center;
+    }
+    .unsupported-icon { font-size: 40px; margin-bottom: 12px; }
+    .unsupported-title {
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--text);
+      margin-bottom: 8px;
+      letter-spacing: -0.3px;
+    }
+    .unsupported-text {
+      font-size: 14px;
+      color: var(--text-light);
+      line-height: 1.5;
+      margin-bottom: 18px;
+    }
+    .supported-stores {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 6px;
+      margin-bottom: 20px;
+    }
+    .supported-stores .chip {
+      padding: 5px 12px;
+      background: #eef0ff;
+      border: 1px solid #d8dcff;
+      border-radius: 50px;
+      font-size: 12px;
+      color: var(--primary);
+      font-weight: 600;
+    }
+    .btn-request {
+      padding: 10px 24px;
+      background: var(--white);
+      border: 2px solid var(--primary);
+      border-radius: 50px;
+      color: var(--primary);
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-request:hover {
+      background: var(--primary);
+      color: var(--white);
+      transform: translateY(-1px);
+    }
+
+    /* ── Success State ── */
+    .success-container {
+      padding: 36px 24px;
+      text-align: center;
+    }
+    .success-icon { font-size: 48px; margin-bottom: 12px; }
+    .success-title {
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--green);
+      margin-bottom: 8px;
+      letter-spacing: -0.3px;
+    }
+    .success-text {
+      font-size: 14px;
+      color: var(--text-light);
+      line-height: 1.6;
+    }
+
+    /* ── Messages (matches website .alert-box) ── */
+    .message {
+      padding: 12px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 14px;
+      margin-bottom: 16px;
+      display: none;
+    }
+    .message.error {
+      display: block;
+      background: #fef2f2;
+      color: #991b1b;
+      border: 1px solid #fecaca;
+    }
+    .message.success {
+      display: block;
+      background: #f0fdf4;
+      color: #166534;
+      border: 1px solid #bbf7d0;
+    }
+
+    /* ── User Info Bar ── */
+    .user-bar {
+      padding: 8px 20px;
+      background: var(--bg-light);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .user-bar .user-email {
+      font-size: 13px;
+      color: var(--text-light);
+    }
+    .user-bar .user-plan {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 10px;
+      border-radius: 50px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .user-plan.pro {
+      background: #eef0ff;
+      color: var(--primary);
+      border: 1px solid #d8dcff;
+    }
+    .user-plan.free {
+      background: #f3f4f6;
+      color: #888;
+      border: 1px solid var(--border);
+    }
+
+    /* ── Loading Spinner ── */
+    .spinner {
+      width: 16px; height: 16px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: var(--white);
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      display: inline-block;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Footer ── */
+    .footer {
+      padding: 12px 20px;
+      text-align: center;
+      border-top: 1px solid var(--border);
+      background: var(--bg-light);
+    }
+    .footer a {
+      font-size: 12px;
+      color: var(--text-light);
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .footer a:hover { color: var(--primary); }
+  </style>
+</head>
+<body>
+
+  <!-- ═══ HEADER (matches dashboard gradient) ═══ -->
+  <div class="header">
+    <div class="header-left">
+      <span class="logo-icon">🔔</span>
+      <div class="brand">DealNotify</div>
+    </div>
+    <div class="header-actions" id="headerActions" style="display:none;">
+      <button class="btn-dashboard" id="btnDashboard">Dashboard</button>
+      <button class="btn-logout" id="btnLogout" title="Log out">&#x2715;</button>
+    </div>
+  </div>
+
+  <!-- ═══ USER BAR (shown when logged in) ═══ -->
+  <div class="user-bar" id="userBar" style="display:none;">
+    <span class="user-email" id="userEmail"></span>
+    <span class="user-plan" id="userPlan"></span>
+  </div>
+
+  <!-- ═══ AUTH VIEW ═══ -->
+  <div class="view active" id="viewAuth">
+    <div class="auth-container">
+      <div class="auth-header" id="authHeader">
+        <div class="auth-icon">🔔</div>
+        <h2 id="authTitle">Welcome back</h2>
+        <p id="authSubtitle">Log in to your DealNotify account</p>
+      </div>
+
+      <div class="auth-tabs">
+        <button class="auth-tab active" data-tab="login">Log In</button>
+        <button class="auth-tab" data-tab="signup">Sign Up</button>
+      </div>
+
+      <div id="authMessage" class="message"></div>
+
+      <!-- Login Form -->
+      <form class="auth-form active" id="formLogin">
+        <div class="form-group">
+          <label for="loginEmail">Email Address</label>
+          <input type="email" id="loginEmail" placeholder="you@example.com" autocomplete="email" required>
+        </div>
+        <div class="form-group">
+          <label for="loginPassword">Password</label>
+          <input type="password" id="loginPassword" placeholder="Your password" autocomplete="current-password" required>
+        </div>
+        <button type="submit" class="btn-primary" id="btnLogin">Log In</button>
+        <div class="auth-switch">
+          Don't have an account? <a data-tab="signup">Sign up free</a>
+        </div>
+      </form>
+
+      <!-- Signup Form -->
+      <form class="auth-form" id="formSignup">
+        <div class="form-group">
+          <label for="signupName">Full Name</label>
+          <input type="text" id="signupName" placeholder="Jane Smith" autocomplete="name" required>
+        </div>
+        <div class="form-group">
+          <label for="signupEmail">Email Address</label>
+          <input type="email" id="signupEmail" placeholder="you@example.com" autocomplete="email" required>
+        </div>
+        <div class="form-group">
+          <label for="signupPassword">Password</label>
+          <input type="password" id="signupPassword" placeholder="At least 8 characters" autocomplete="new-password" required minlength="8">
+        </div>
+        <label class="newsletter-group">
+          <input type="checkbox" id="signupNewsletter" checked>
+          <span>Send me the DealNotify newsletter — weekly deal tips, money-saving guides, and product updates. Unsubscribe anytime.</span>
+        </label>
+        <button type="submit" class="btn-primary" id="btnSignup">Create Free Account</button>
+        <p class="terms-note">
+          By signing up you agree to our <a href="https://www.dealnotify.co/terms.html" target="_blank">Terms of Service</a>.
+        </p>
+        <div class="auth-switch">
+          Already have an account? <a data-tab="login">Log in</a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ═══ TRACKING VIEW (supported store) ═══ -->
+  <div class="view" id="viewTrack">
+    <div class="track-container">
+      <div class="store-badge supported" id="storeBadge">
+        <span class="dot"></span>
+        <span id="storeName">Amazon</span>
+      </div>
+
+      <div class="product-card">
+        <div class="product-title" id="productTitle">Detecting product...</div>
+        <div class="product-url" id="productUrl"></div>
+        <div class="product-price" id="productPrice"></div>
+      </div>
+
+      <div id="trackMessage" class="message"></div>
+
+      <div class="track-type-selector">
+        <button class="track-type-btn active" data-type="price">
+          <span class="icon">💰</span>
+          Price Drop
+        </button>
+        <button class="track-type-btn" data-type="restock">
+          <span class="icon">📦</span>
+          Restock
+        </button>
+      </div>
+
+      <div class="target-price-group" id="targetPriceGroup">
+        <label>Alert me when price drops to</label>
+        <div class="price-input-wrap">
+          <span class="currency">$</span>
+          <input type="number" id="targetPrice" placeholder="0.00" step="0.01" min="0">
+        </div>
+      </div>
+
+      <button class="btn-track" id="btnTrack">
+        <span>🔔</span> Start Tracking
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══ UNSUPPORTED STORE VIEW ═══ -->
+  <div class="view" id="viewUnsupported">
+    <div class="unsupported-container">
+      <div class="unsupported-icon">🏪</div>
+      <div class="unsupported-title">Store Not Supported Yet</div>
+      <div class="unsupported-text">
+        We don't support this store yet, but we're always adding new ones!
+      </div>
+      <div class="supported-stores">
+        <span class="chip">Amazon</span>
+        <span class="chip">Walmart</span>
+        <span class="chip">Best Buy</span>
+        <span class="chip">Target</span>
+        <span class="chip">eBay</span>
+        <span class="chip">Costco</span>
+      </div>
+      <button class="btn-request" id="btnRequestStore">Request This Store</button>
+      <div id="requestMessage" class="message" style="margin-top: 12px;"></div>
+    </div>
+  </div>
+
+  <!-- ═══ SUCCESS VIEW ═══ -->
+  <div class="view" id="viewSuccess">
+    <div class="success-container">
+      <div class="success-icon">🎉</div>
+      <div class="success-title">Tracking Started!</div>
+      <div class="success-text" id="successText">
+        We'll email you when the price drops to your target. You can manage all your alerts on the dashboard.
+      </div>
+      <button class="btn-primary" id="btnTrackAnother" style="margin-top: 16px;">
+        Track Another Product
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══ FOOTER ═══ -->
+  <div class="footer">
+    <a href="https://www.dealnotify.co" target="_blank">dealnotify.co</a>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
