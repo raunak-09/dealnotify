@@ -104,8 +104,8 @@ async function apiCall(endpoint, options = {}) {
 
     // Handle expired / revoked sessions globally
     if ((res.status === 401 || res.status === 403) && currentUser) {
-      // If it's specifically an unverified email issue, don't force logout
-      if (data?.unverified) {
+      // Do NOT logout for known non-auth 403s — let the caller handle them
+      if (data?.unverified || data?.error === 'free_limit_reached') {
         return { ok: false, status: res.status, data };
       }
       // Token is no longer valid — force clean logout

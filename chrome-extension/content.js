@@ -170,4 +170,149 @@
     return true; // keep the message channel open for async response
   });
 
+
+  // ── Auto-inject floating widget when a trackable product is detected ──
+
+  const WIDGET_ID = 'dn-floating-widget';
+
+  function injectWidget(info) {
+    // Don't inject twice
+    if (document.getElementById(WIDGET_ID)) return;
+
+    const isRestock = info.outOfStock;
+    const priceText = info.price ? info.price : '';
+    const shortTitle = info.title.length > 48
+      ? info.title.substring(0, 45) + '…'
+      : info.title;
+
+    const label = isRestock
+      ? '📦 Get restock alert'
+      : '🔔 Track price drop';
+
+    const subText = isRestock
+      ? 'Item is out of stock'
+      : (priceText ? `Current price: ${priceText}` : 'Price tracking available');
+
+    // Use Shadow DOM to isolate styles from the host page
+    const host = document.createElement('div');
+    host.id = WIDGET_ID;
+    host.style.cssText = [
+      'position: fixed',
+      'bottom: 24px',
+      'right: 24px',
+      'z-index: 2147483647',
+      'font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+    ].join(';');
+
+    const shadow = host.attachShadow({ mode: 'closed' });
+
+    shadow.innerHTML = `
+      <style>
+        .dn-widget {
+          background: #1a1a2e;
+          border: 1px solid rgba(91,103,248,0.5);
+          border-radius: 14px;
+          padding: 12px 14px;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          box-shadow: 0 4px 24px rgba(0,0,0,0.35);
+          cursor: pointer;
+          max-width: 280px;
+          transition: transform 0.15s ease, box-shadow 0.15s ease;
+          text-decoration: none;
+          user-select: none;
+        }
+        .dn-widget:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 6px 28px rgba(91,103,248,0.4);
+        }
+        .dn-bell {
+          font-size: 22px;
+          flex-shrink: 0;
+          line-height: 1;
+        }
+        .dn-text {
+          display: flex;
+          flex-direction: column;
+          gap: 1px;
+          min-width: 0;
+        }
+        .dn-label {
+          color: #ffffff;
+          font-size: 13px;
+          font-weight: 600;
+          white-space: nowrap;
+        }
+        .dn-sub {
+          color: rgba(255,255,255,0.55);
+          font-size: 11px;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .dn-close {
+          margin-left: auto;
+          color: rgba(255,255,255,0.35);
+          font-size: 16px;
+          padding: 2px 4px;
+          cursor: pointer;
+          flex-shrink: 0;
+          border-radius: 4px;
+          line-height: 1;
+        }
+        .dn-close:hover { color: rgba(255,255,255,0.7); }
+      </style>
+      <div class="dn-widget" id="dn-btn">
+        <div class="dn-bell">${isRestock ? '📦' : '🔔'}</div>
+        <div class="dn-text">
+          <div class="dn-label">${label}</div>
+          <div class="dn-sub" title="${shortTitle}">${subText}</div>
+        </div>
+        <div class="dn-close" id="dn-close" title="Dismiss">✕</div>
+      </div>
+    `;
+
+    // Clicking the widget opens the extension popup
+    shadow.getElementById('dn-btn').addEventListener('click', (e) => {
+      if (e.target.id === 'dn-close') return;
+      chrome.runtime.sendMessage({ action: 'openPopup' });
+    });
+
+    // Dismiss button removes the widget
+    shadow.getElementById('dn-close').addEventListener('click', (e) => {
+      e.stopPropagation();
+      host.remove();
+    });
+
+    document.body.appendChild(host);
+  }
+
+  function tryDetectAndInject() {
+    const domain = getStoreDomain();
+    if (!domain || !extractors[domain]) return;
+
+    try {
+      const info = extractors[domain]();
+      const title = sanitizeText(info.title || document.title, MAX_TITLE_LENGTH);
+      const price = cleanPrice(info.price);
+      const outOfStock = !!info.outOfStock;
+
+      // Only show widget if we have at minimum a title + (price OR out-of-stock signal)
+      if (title && (price || outOfStock)) {
+        injectWidget({ title, price, outOfStock });
+      }
+    } catch (e) {
+      // Silently ignore extraction errors
+    }
+  }
+
+  // Run after page is fully loaded (content scripts run at document_idle)
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', tryDetectAndInject);
+  } else {
+    // Small delay to let JS-rendered prices load (e.g. Amazon dynamic content)
+    setTimeout(tryDetectAndInject, 800);
+  }
+
 })();

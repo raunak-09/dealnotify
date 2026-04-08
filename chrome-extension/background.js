@@ -58,6 +58,19 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 });
 
 
+// ── Open popup when widget button is clicked on a product page ──
+
+chrome.runtime.onMessage.addListener((message, sender) => {
+  if (message.action === 'openPopup') {
+    // Called from content script when user clicks the floating DealNotify widget.
+    // chrome.action.openPopup() requires a user gesture — clicking the widget qualifies.
+    chrome.action.openPopup().catch(() => {
+      // openPopup may fail if the tab is not active — silently ignore
+    });
+  }
+});
+
+
 // ── Auth State Sync ──
 
 // Listen for storage changes (e.g., login/logout in popup)
