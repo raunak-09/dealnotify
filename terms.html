@@ -25,7 +25,8 @@
         /* NAV */
         header { background: rgba(255,255,255,0.97); backdrop-filter: blur(10px); position: fixed; width: 100%; top: 0; z-index: 200; border-bottom: 1px solid var(--border); }
         nav { max-width: 1160px; margin: 0 auto; padding: 0 24px; height: 64px; display: flex; align-items: center; justify-content: space-between; }
-        .logo { font-size: 20px; font-weight: 800; color: var(--primary); letter-spacing: -0.5px; }
+        .logo { font-size: 22px; font-weight: 800; color: var(--primary); letter-spacing: -0.5px; text-decoration: none; display: flex; align-items: center; gap: 8px; }
+        .logo-icon { font-size: 26px; }
         .nav-links { display: flex; gap: 24px; align-items: center; }
         .nav-links a { font-size: 14px; color: var(--text-light); font-weight: 500; }
         .nav-links a:hover { color: var(--primary); text-decoration: none; }
@@ -72,7 +73,7 @@
 
 <header>
     <nav>
-        <a href="/" class="logo">🔔 DealNotify</a>
+        <a href="/" class="logo"><span class="logo-icon">🔔</span> DealNotify</a>
         <div class="nav-links">
             <a href="/#pricing" class="hide-mobile">Pricing</a>
             <a href="/contact.html" class="hide-mobile">Contact</a>
