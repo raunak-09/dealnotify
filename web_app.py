@@ -1486,6 +1486,104 @@ def update_target_price():
         return jsonify({'error': 'An unexpected error occurred. Please try again.'}), 500
 
 
+@app.route('/api/send-test-alert', methods=['POST', 'GET'])
+def send_test_alert():
+    """Send a real demo alert email to the authenticated user's inbox.
+    Useful for recording demo videos and testing email appearance.
+
+    Usage:
+        GET/POST /api/send-test-alert?token=USER_TOKEN&type=price_drop
+        GET/POST /api/send-test-alert?token=USER_TOKEN&type=restock
+
+    Optional query params to customise demo data:
+        product_url  — URL shown in the email (default: Amazon Sony headphones)
+        store        — Store name shown (default: Amazon)
+        current_price — Detected price shown (price_drop only, default: 63.99)
+        target_price  — User's target price shown (price_drop only, default: 89.00)
+    """
+    token = get_token_from_request()
+    if not token:
+        return jsonify({'error': 'Token required'}), 400
+
+    user, _ = get_user_by_token(token)
+    if not user:
+        return jsonify({'error': 'Invalid token'}), 404
+
+    alert_type = request.args.get('type', 'price_drop').strip().lower()
+    if alert_type not in ('price_drop', 'restock'):
+        return jsonify({'error': 'type must be "price_drop" or "restock"'}), 400
+
+    base_url = get_base_url()
+    dashboard_url = f"{base_url}/dashboard?token={token}"
+
+    # Demo product data — override via query params if desired
+    product_url   = request.args.get('product_url',   'https://www.amazon.com/dp/B0CH7GXKLT')
+    store         = request.args.get('store',          'Amazon')
+    current_price = request.args.get('current_price',  '63.99')
+    target_price  = request.args.get('target_price',   '89.00')
+
+    try:
+        if alert_type == 'price_drop':
+            sent = send_price_drop_alert(
+                name=user['name'],
+                email=user['email'],
+                product_url=product_url,
+                current_price=float(current_price),
+                target_price=float(target_price),
+                store=store,
+                dashboard_url=dashboard_url,
+                user_timezone=user.get('timezone')
+            )
+            if sent:
+                print(f"🧪 Test price-drop alert sent to {user['email']}")
+                return jsonify({
+                    'success': True,
+                    'message': f'Price drop test email sent to {user["email"]}',
+                    'details': {
+                        'type': 'price_drop',
+                        'store': store,
+                        'current_price': current_price,
+                        'target_price': target_price,
+                        'product_url': product_url
+                    }
+                }), 200
+            else:
+                return jsonify({'error': 'Failed to send email — check SendGrid config'}), 500
+
+        elif alert_type == 'restock':
+            # Default to Walmart PS5 controller for restock demo
+            if 'product_url' not in request.args:
+                product_url = 'https://www.walmart.com/ip/Sony-PlayStation-5-DualSense-Wireless-Controller/493789019'
+            if 'store' not in request.args:
+                store = 'Walmart'
+
+            sent = send_restock_alert(
+                name=user['name'],
+                email=user['email'],
+                product_url=product_url,
+                store=store,
+                dashboard_url=dashboard_url,
+                user_timezone=user.get('timezone')
+            )
+            if sent:
+                print(f"🧪 Test restock alert sent to {user['email']}")
+                return jsonify({
+                    'success': True,
+                    'message': f'Restock test email sent to {user["email"]}',
+                    'details': {
+                        'type': 'restock',
+                        'store': store,
+                        'product_url': product_url
+                    }
+                }), 200
+            else:
+                return jsonify({'error': 'Failed to send email — check SendGrid config'}), 500
+
+    except Exception as e:
+        print(f"❌ send-test-alert error: {e}")
+        return jsonify({'error': 'An unexpected error occurred'}), 500
+
+
 @app.route('/api/test-scrape', methods=['GET'])
 def test_scrape():
     """Debug endpoint — scrape a single URL and return every price signal found.
