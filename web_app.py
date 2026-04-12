@@ -661,6 +661,61 @@ def send_password_reset_email(name, email, reset_url):
         return False
 
 
+def add_affiliate_tag(product_url):
+    """Add Amazon affiliate tag to Amazon product URLs for commission revenue"""
+    affiliate_tag = os.getenv('AMAZON_AFFILIATE_TAG', '')
+    if not affiliate_tag:
+        return product_url
+    try:
+        from urllib.parse import urlparse, urlencode, parse_qs, urlunparse
+        parsed = urlparse(product_url)
+        # Check if it's an Amazon domain
+        if 'amazon.' not in parsed.netloc.lower():
+            return product_url
+        # Parse existing query params and add/replace tag
+        params = parse_qs(parsed.query)
+        params['tag'] = [affiliate_tag]
+        new_query = urlencode(params, doseq=True)
+        return urlunparse(parsed._replace(query=new_query))
+    except Exception as e:
+        print(f"⚠️ Affiliate tag error (non-fatal): {e}")
+        return product_url
+
+
+def get_share_buttons_html(product_url, store, alert_type='price_drop'):
+    """Generate viral share / referral buttons HTML for alert emails"""
+    import urllib.parse
+    if alert_type == 'price_drop':
+        share_text = urllib.parse.quote(f"Just got a price drop alert on {store} from DealNotify! 🎉 Check it out:")
+        email_subject = urllib.parse.quote(f"Check out this deal on {store}!")
+        email_body = urllib.parse.quote(f"Hey! I just got a price drop alert from DealNotify for this product:\n{product_url}\n\nYou can set your own price alerts at https://www.dealnotify.co — it's free to try!")
+    else:
+        share_text = urllib.parse.quote(f"An item I was waiting for is back in stock on {store}! 📦 DealNotify alerted me:")
+        email_subject = urllib.parse.quote(f"This item is back in stock on {store}!")
+        email_body = urllib.parse.quote(f"Hey! I just got a restock alert from DealNotify for this product:\n{product_url}\n\nYou can set your own restock alerts at https://www.dealnotify.co — it's free to try!")
+
+    tweet_url = f"https://twitter.com/intent/tweet?text={share_text}&url={urllib.parse.quote(product_url)}"
+    email_share_url = f"mailto:?subject={email_subject}&body={email_body}"
+    signup_url = "https://www.dealnotify.co"
+
+    return f"""
+        <div style="background: #f8f9ff; border-radius: 10px; padding: 20px; margin: 25px 0; text-align: center;">
+        <p style="color: #333; font-size: 15px; font-weight: bold; margin-bottom: 15px;">🔥 Share this deal with friends</p>
+        <div style="display: inline-block;">
+        <a href="{tweet_url}" style="display: inline-block; background: #1DA1F2; color: white; padding: 10px 20px; text-decoration: none; border-radius: 50px; font-size: 13px; font-weight: bold; margin: 4px;">
+        🐦 Tweet this deal
+        </a>
+        <a href="{email_share_url}" style="display: inline-block; background: #5b67f8; color: white; padding: 10px 20px; text-decoration: none; border-radius: 50px; font-size: 13px; font-weight: bold; margin: 4px;">
+        ✉️ Email a friend
+        </a>
+        </div>
+        <p style="color: #888; font-size: 12px; margin-top: 12px; margin-bottom: 0;">
+        Know someone who'd love this? <a href="{signup_url}" style="color: #5b67f8; font-weight: bold;">Invite them to DealNotify</a> — it's free to try!
+        </p>
+        </div>
+    """
+
+
 def send_price_drop_alert(name, email, product_url, current_price, target_price, store, dashboard_url, user_timezone=None):
     """Send price drop alert email via SendGrid"""
     try:
@@ -671,6 +726,12 @@ def send_price_drop_alert(name, email, product_url, current_price, target_price,
             return False
 
         savings = float(target_price) - float(current_price)
+
+        # Apply affiliate tag for Amazon links
+        buy_url = add_affiliate_tag(product_url)
+
+        # Generate share buttons
+        share_buttons = get_share_buttons_html(product_url, store, alert_type='price_drop')
 
         # Format alert timestamp in the user's local timezone if known, else UTC
         from datetime import timezone as _tz
@@ -721,7 +782,7 @@ def send_price_drop_alert(name, email, product_url, current_price, target_price,
         </div>
 
         <div style="text-align: center; margin: 25px 0;">
-        <a href="{product_url}" style="display: inline-block; background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%); color: white; padding: 15px 40px; text-decoration: none; border-radius: 50px; font-weight: bold; font-size: 16px;">
+        <a href="{buy_url}" style="display: inline-block; background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%); color: white; padding: 15px 40px; text-decoration: none; border-radius: 50px; font-weight: bold; font-size: 16px;">
         🛒 Buy Now on {store}
         </a>
         </div>
@@ -729,6 +790,8 @@ def send_price_drop_alert(name, email, product_url, current_price, target_price,
         <div style="text-align: center; margin: 15px 0;">
         <a href="{dashboard_url}" style="color: #667eea; font-size: 14px;">View your full dashboard →</a>
         </div>
+
+        {share_buttons}
 
         <hr style="border: none; border-top: 2px solid #eee; margin: 30px 0;">
         <p style="color: #333; font-size: 14px;">Best regards,<br>
@@ -769,6 +832,12 @@ def send_restock_alert(name, email, product_url, store, dashboard_url, user_time
         if not api_key:
             return False
 
+        # Apply affiliate tag for Amazon links
+        buy_url = add_affiliate_tag(product_url)
+
+        # Generate share buttons
+        share_buttons = get_share_buttons_html(product_url, store, alert_type='restock')
+
         from datetime import timezone as _tz
         now_utc = datetime.now(_tz.utc)
         try:
@@ -805,7 +874,7 @@ def send_restock_alert(name, email, product_url, store, dashboard_url, user_time
         </div>
 
         <div style="text-align: center; margin: 25px 0;">
-        <a href="{product_url}" style="display: inline-block; background: linear-gradient(135deg, #5b67f8 0%, #818cf8 100%); color: white; padding: 15px 40px; text-decoration: none; border-radius: 50px; font-weight: bold; font-size: 16px;">
+        <a href="{buy_url}" style="display: inline-block; background: linear-gradient(135deg, #5b67f8 0%, #818cf8 100%); color: white; padding: 15px 40px; text-decoration: none; border-radius: 50px; font-weight: bold; font-size: 16px;">
         🛒 Buy Now on {store}
         </a>
         </div>
@@ -813,6 +882,8 @@ def send_restock_alert(name, email, product_url, store, dashboard_url, user_time
         <div style="text-align: center; margin: 15px 0;">
         <a href="{dashboard_url}" style="color: #667eea; font-size: 14px;">View your full dashboard →</a>
         </div>
+
+        {share_buttons}
 
         <hr style="border: none; border-top: 2px solid #eee; margin: 30px 0;">
         <p style="color: #333; font-size: 14px;">Best regards,<br>
