@@ -2422,6 +2422,10 @@ def blog_post_1():
 def blog_post_2():
     return send_from_directory('.', 'blog-restock-alerts.html')
 
+@app.route('/blog/free-price-tracker-chrome-extension')
+def blog_post_3():
+    return send_from_directory('.', 'blog-free-price-tracker-chrome-extension.html')
+
 
 @app.route('/sitemap.xml')
 def sitemap():
@@ -2449,6 +2453,12 @@ def sitemap():
   <url>
     <loc>https://www.dealnotify.co/blog/restock-alerts-back-in-stock-notifications</loc>
     <lastmod>2026-04-06</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.dealnotify.co/blog/free-price-tracker-chrome-extension</loc>
+    <lastmod>2026-04-14</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
