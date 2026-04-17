@@ -2997,10 +2997,18 @@ def admin_clear_compare_cache():
     try:
         if asin:
             cur.execute(
+                """DELETE FROM comparison_clicks
+                   WHERE comparison_id IN (
+                       SELECT id FROM product_comparisons WHERE source_identifier = %s
+                   )""",
+                (asin,)
+            )
+            cur.execute(
                 "DELETE FROM product_comparisons WHERE source_identifier = %s",
                 (asin,)
             )
         else:
+            cur.execute("DELETE FROM comparison_clicks")
             cur.execute("DELETE FROM product_comparisons")
         deleted = cur.rowcount
         conn.commit()
