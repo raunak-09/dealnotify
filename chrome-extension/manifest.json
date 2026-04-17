@@ -8,7 +8,8 @@
     "storage"
   ],
   "host_permissions": [
-    "https://www.dealnotify.co/*"
+    "https://www.dealnotify.co/*",
+    "https://*.amazon.com/*"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -36,6 +37,12 @@
         "*://*.costco.com/*"
       ],
       "js": ["content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://*.amazon.com/*"],
+      "js": ["comparison-panel.js"],
+      "css": ["comparison-panel.css"],
       "run_at": "document_idle"
     }
   ],

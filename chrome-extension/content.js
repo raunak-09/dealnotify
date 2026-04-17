@@ -315,4 +315,44 @@
     setTimeout(tryDetectAndInject, 800);
   }
 
+  // ── Amazon PDP Compare Detection ──
+
+  let _compareDispatched = false;
+
+  function detectAndCompareAmazonPDP() {
+    if (_compareDispatched) return;
+    const hostname = window.location.hostname;
+    if (!hostname.includes('amazon.com')) return;
+
+    const asinMatch = window.location.pathname.match(/\/(?:dp|gp\/product)\/([A-Z0-9]{10})(?:[/?]|$)/);
+    if (!asinMatch) return;
+    const asin = asinMatch[1];
+
+    const title = sanitizeText(
+      document.getElementById('productTitle')?.textContent || document.title,
+      MAX_TITLE_LENGTH
+    );
+    const priceRaw = document.querySelector('.a-price .a-offscreen')?.textContent
+      || document.querySelector('#priceblock_ourprice')?.textContent
+      || '';
+    const price = cleanPrice(priceRaw) || null;
+
+    _compareDispatched = true;
+    chrome.runtime.sendMessage({
+      action: 'COMPARE_PRODUCT',
+      source_url: window.location.href,
+      asin,
+      title,
+      price,
+    });
+  }
+
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message.action === 'COMPARE_RESULT') {
+      renderComparisonPanel(message.data);
+    }
+  });
+
+  setTimeout(detectAndCompareAmazonPDP, 1200);
+
 })();

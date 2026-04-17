@@ -60,13 +60,43 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 
 // ── Open popup when widget button is clicked on a product page ──
 
-chrome.runtime.onMessage.addListener((message, sender) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'openPopup') {
-    // Called from content script when user clicks the floating DealNotify widget.
-    // chrome.action.openPopup() requires a user gesture — clicking the widget qualifies.
-    chrome.action.openPopup().catch(() => {
-      // openPopup may fail if the tab is not active — silently ignore
+    chrome.action.openPopup().catch(() => {});
+    return;
+  }
+
+  if (message.action === 'COMPARE_PRODUCT') {
+    const tabId = sender.tab?.id;
+    if (!tabId) return;
+
+    chrome.storage.local.get(['dn_token'], async (stored) => {
+      const token = stored.dn_token;
+      if (!token) return;
+
+      try {
+        const res = await fetch(`${API_BASE}/api/compare`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            source_url: message.source_url,
+            asin: message.asin,
+            title: message.title,
+            price: message.price,
+            target_retailers: ['walmart'],
+          }),
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        chrome.tabs.sendMessage(tabId, { action: 'COMPARE_RESULT', data }).catch(() => {});
+      } catch (e) {
+        // Fail silently — never block the user
+      }
     });
+    return true;
   }
 });
 
