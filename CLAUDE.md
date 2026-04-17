@@ -22,8 +22,15 @@ The Compare feature lets users see if an Amazon product they are viewing is avai
 - `chrome-extension/comparison-panel.js` — renders price comparison panel (only for exact/likely confidence); DOM-only, no innerHTML
 - `chrome-extension/comparison-panel.css` — styles scoped under `.dealnotify-compare-panel`
 
+### QA bugs fixed (DEA-18, 2026-04-17)
+- `FIRECRAWL_API_KEY` and `GEMINI_API_KEY` had trailing `\n` in Railway env vars → added `.strip()` to both
+- `gemini-2.5-flash` thinking model consumed `maxOutputTokens: 200` budget before emitting any JSON → switched to `gemini-2.0-flash-lite` (no thinking), bumped to `maxOutputTokens: 512`, added JSON extraction regex for prose-wrapped responses
+- Added keyword-based fallback scorer (`_score_with_keywords`) that activates when Gemini API is rate-limited or quota-exhausted — uses recall-based token overlap (≥55% → likely, ≥35% → possible)
+- `get_user_by_token()` returns tuple `(user, products)` — both compare endpoints had `user, _ =` unpacking added
+
 ### v2 queue
 - Target and Best Buy retailer integration (stubs exist in `RETAILER_SEARCHERS`)
 - `TARGET_AFFILIATE_ID` and `BESTBUY_AFFILIATE_ID` env vars (leave blank for now)
 - Rate limit increase based on usage data
 - Push notifications for price improvements on tracked products
+- Upgrade Gemini API to paid tier to avoid daily quota exhaustion
