@@ -2902,8 +2902,23 @@ def compare_product():
             comparisons.append(hit)
             continue
 
+        # Pass caller-provided identity so the extension can skip the Firecrawl
+        # Amazon scrape when it already has ASIN+title from the PDP DOM.
+        caller_identity = None
+        if asin or source_title:
+            caller_identity = {
+                'asin': asin,
+                'title': source_title,
+                'brand': None,
+                'model': None,
+                'upc': None,
+                'price': float(source_price) if source_price else None,
+                'image_url': None,
+                'search_query': source_title or asin or '',
+            }
+
         try:
-            match = find_comparable_product(source_url, 'amazon', retailer)
+            match = find_comparable_product(source_url, 'amazon', retailer, identity=caller_identity)
         except Exception as e:
             print(f"❌ /api/compare error: {e}")
             match = None
