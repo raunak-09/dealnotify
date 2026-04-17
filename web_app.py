@@ -2971,9 +2971,9 @@ def debug_gemini():
     prompt = f"SOURCE: {source}\n\nCANDIDATES:\n{candidate_lines}\n\nRespond with ONLY valid JSON:\n{{\"best_index\": <int or null>, \"confidence\": \"<exact|likely|possible|none>\", \"reasoning\": \"<one sentence>\"}}"
     payload = json.dumps({
         "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"responseMimeType": "application/json", "temperature": 0, "maxOutputTokens": 200},
+        "generationConfig": {"responseMimeType": "application/json", "temperature": 0, "maxOutputTokens": 512},
     }).encode()
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
     try:
         req = urllib.request.Request(url, data=payload, method="POST", headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=20) as r:
