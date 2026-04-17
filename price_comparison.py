@@ -236,11 +236,17 @@ def _search_walmart(identity: dict) -> list:
         logging.warning("Firecrawl Walmart search failed: %s", exc)
         return []
 
+    print(f"🔍 Walmart scrape for '{search_query}': markdown={len(markdown)}ch html={len(html)}ch")
+    if markdown:
+        print(f"🔍 Markdown snippet: {markdown[:500]}")
+
     if not markdown and not html:
         return []
 
     try:
-        return _parse_walmart_search_results(markdown, html)
+        candidates = _parse_walmart_search_results(markdown, html)
+        print(f"🔍 Parsed {len(candidates)} candidates: {[c.get('title','')[:40] for c in candidates]}")
+        return candidates
     except Exception as exc:
         logging.warning("Failed to parse Walmart search results: %s", exc)
         return []
