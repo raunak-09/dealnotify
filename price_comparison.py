@@ -311,15 +311,14 @@ def _score_with_gemini(source_identity: dict, candidates: list[dict]) -> dict:
         "generationConfig": {
             "responseMimeType": "application/json",
             "temperature": 0,
-            "maxOutputTokens": 1024,
+            "maxOutputTokens": 512,
         },
-        # Disable thinking for this simple matching task — thinking tokens consumed the budget
-        "thinkingConfig": {"thinkingBudget": 0},
     }).encode()
 
+    # Use gemini-1.5-flash — reliable JSON mode, no thinking-token overhead
     url = (
         "https://generativelanguage.googleapis.com/v1beta/models/"
-        f"gemini-2.5-flash:generateContent?key={api_key}"
+        f"gemini-1.5-flash:generateContent?key={api_key}"
     )
 
     try:
