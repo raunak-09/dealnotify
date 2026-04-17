@@ -290,7 +290,7 @@ def _score_with_gemini(source_identity: dict, candidates: list[dict]) -> dict:
     import json
     import urllib.request
 
-    api_key = os.getenv("GEMINI_API_KEY")
+    api_key = (os.getenv("GEMINI_API_KEY") or "").strip()
     if not api_key:
         logging.warning("GEMINI_API_KEY not set — returning no-match")
         return {"confidence": "none", "best_index": None, "reasoning": "No API key configured"}
