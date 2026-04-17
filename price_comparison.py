@@ -292,7 +292,9 @@ def _score_with_keywords(source_identity: dict, candidates: list[dict]) -> dict:
         if not cand_words:
             continue
         overlap = len(source_words & cand_words)
-        score = overlap / max(len(source_words), len(cand_words))
+        # Score by recall (how many source terms appear in candidate) since
+        # candidate titles contain extra marketing text that inflates denominators
+        score = overlap / len(source_words) if source_words else 0.0
         if score > best_score:
             best_score = score
             best_idx = i
