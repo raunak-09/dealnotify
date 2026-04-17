@@ -2953,6 +2953,39 @@ def compare_product():
     }), 200
 
 
+@app.route('/api/compare/debug-search', methods=['POST'])
+def debug_compare_search():
+    """Temporary QA debug endpoint — calls _search_walmart directly, returns raw candidates."""
+    token = get_token_from_request()
+    user, _ = get_user_by_token(token) if token else (None, None)
+    if not user:
+        return jsonify({'error': 'Token required'}), 401
+    data = request.get_json() or {}
+    query = data.get('query', '')
+    if not query:
+        return jsonify({'error': 'query required'}), 400
+    from price_comparison import _search_walmart, _init_firecrawl, _do_scrape
+    import os
+    api_key = (os.getenv('FIRECRAWL_API_KEY') or '').strip()
+    from urllib.parse import quote_plus
+    url = f"https://www.walmart.com/search?q={quote_plus(query)}"
+    try:
+        fc, ver = _init_firecrawl(api_key)
+        markdown, html = _do_scrape(fc, ver, url)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    identity = {'search_query': query}
+    candidates = _search_walmart(identity)
+    return jsonify({
+        'query': query,
+        'walmart_url': url,
+        'markdown_len': len(markdown),
+        'html_len': len(html),
+        'markdown_snippet': markdown[:1000],
+        'candidates': candidates,
+    }), 200
+
+
 @app.route('/api/compare/click', methods=['POST'])
 def track_comparison_click():
     token = get_token_from_request()
