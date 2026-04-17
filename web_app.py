@@ -16,6 +16,7 @@ from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 from dotenv import load_dotenv
 from price_monitor import scrape_price, scrape_stock_status, extract_stock_status
+from price_comparison import find_comparable_product
 import pg8000.dbapi as pg8000
 from urllib.parse import urlparse
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -319,6 +320,38 @@ def init_db():
         cur.execute("""
             CREATE INDEX IF NOT EXISTS idx_stock_history_product
             ON stock_history(product_id, checked_at DESC);
+        """)
+        # Compare feature — product comparison cache
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS product_comparisons (
+                id SERIAL PRIMARY KEY,
+                source_retailer TEXT NOT NULL,
+                source_identifier TEXT NOT NULL,
+                source_url TEXT NOT NULL,
+                source_title TEXT,
+                source_price NUMERIC(10,2),
+                target_retailer TEXT NOT NULL,
+                target_url TEXT,
+                target_title TEXT,
+                target_price NUMERIC(10,2),
+                confidence TEXT,
+                match_reasoning TEXT,
+                cached_at TIMESTAMP DEFAULT NOW(),
+                expires_at TIMESTAMP DEFAULT (NOW() + INTERVAL '48 hours')
+            );
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_comparisons_lookup
+            ON product_comparisons(source_retailer, source_identifier, target_retailer, expires_at);
+        """)
+        # Compare feature — affiliate click tracking
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS comparison_clicks (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id),
+                comparison_id INTEGER REFERENCES product_comparisons(id),
+                clicked_at TIMESTAMP DEFAULT NOW()
+            );
         """)
         conn.commit()
         print("✅ Database tables ready")
@@ -2745,6 +2778,230 @@ def check_all_prices_admin():
     # Run synchronously so the caller gets the result
     result = check_all_prices_job()
     return jsonify({'success': True, **result, 'triggered_at': datetime.now().isoformat()}), 200
+
+
+# ─────────────────────────────────────────────
+# Compare Feature
+# ─────────────────────────────────────────────
+
+def wrap_affiliate_link(retailer: str, url: str | None) -> str | None:
+    if not url:
+        return None
+    affiliate_ids = {
+        "walmart": os.environ.get("WALMART_AFFILIATE_ID"),
+        "target": os.environ.get("TARGET_AFFILIATE_ID"),
+        "bestbuy": os.environ.get("BESTBUY_AFFILIATE_ID"),
+    }
+    affiliate_id = affiliate_ids.get(retailer)
+    if not affiliate_id:
+        print(f"⚠️ No affiliate ID configured for {retailer} (non-fatal) — returning unwrapped URL")
+        return url
+    separator = "&" if "?" in url else "?"
+    return f"{url}{separator}affid={affiliate_id}"
+
+
+def _extract_asin_from_url(url: str) -> str | None:
+    import re
+    m = re.search(r'/(?:dp|gp/product)/([A-Z0-9]{10})(?:[/?]|$)', url)
+    return m.group(1) if m else None
+
+
+def _get_cached_comparison(source_retailer, source_identifier, target_retailer):
+    try:
+        conn = get_db_conn()
+        cur = conn.cursor()
+        try:
+            cur.execute(
+                """SELECT * FROM product_comparisons
+                   WHERE source_retailer = %s AND source_identifier = %s
+                     AND target_retailer = %s AND expires_at > NOW()
+                   ORDER BY cached_at DESC LIMIT 1""",
+                (source_retailer, source_identifier, target_retailer),
+            )
+            return _fetchone(cur)
+        finally:
+            cur.close()
+            conn.close()
+    except Exception as e:
+        print(f"⚠️ Cache lookup failed (non-fatal): {e}")
+        return None
+
+
+def _save_comparison(source_retailer, source_identifier, source_url, source_title,
+                     source_price, target_retailer, match):
+    try:
+        conn = get_db_conn()
+        cur = conn.cursor()
+        try:
+            hit = match.get("match") if match else None
+            cur.execute(
+                """INSERT INTO product_comparisons
+                   (source_retailer, source_identifier, source_url, source_title, source_price,
+                    target_retailer, target_url, target_title, target_price, confidence, match_reasoning)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+                (
+                    source_retailer, source_identifier, source_url, source_title, source_price,
+                    target_retailer,
+                    hit.get("url") if hit else None,
+                    hit.get("title") if hit else None,
+                    hit.get("price") if hit else None,
+                    hit.get("confidence") if hit else "none",
+                    hit.get("reasoning") if hit else match.get("reason") if match else None,
+                ),
+            )
+            row = cur.fetchone()
+            conn.commit()
+            return row[0] if row else None
+        finally:
+            cur.close()
+            conn.close()
+    except Exception as e:
+        print(f"⚠️ Failed to save comparison (non-fatal): {e}")
+        return None
+
+
+@app.route('/api/compare', methods=['POST'])
+def compare_product():
+    token = get_token_from_request()
+    user = get_user_by_token(token) if token else None
+    if not user:
+        return jsonify({'error': 'Token required'}), 401
+
+    ip = request.remote_addr or 'unknown'
+    if rate_limiter.is_rate_limited(f'compare:{user["id"]}', max_requests=30, window_seconds=3600):
+        return jsonify({'error': 'Rate limit exceeded — 30 requests per hour'}), 429
+
+    data = request.get_json() or {}
+    source_url = data.get('source_url', '')
+    if not source_url or 'amazon.com' not in source_url:
+        return jsonify({'error': 'source_url must be an amazon.com URL'}), 400
+
+    asin = data.get('asin') or _extract_asin_from_url(source_url)
+    source_title = data.get('title')
+    source_price = data.get('price')
+    target_retailers = data.get('target_retailers', ['walmart'])
+
+    source_identifier = asin or source_url
+    comparisons = []
+
+    for retailer in target_retailers:
+        cached = _get_cached_comparison('amazon', source_identifier, retailer)
+        if cached:
+            hit = {
+                'retailer': retailer,
+                'url': cached['target_url'],
+                'title': cached['target_title'],
+                'price': float(cached['target_price']) if cached['target_price'] else None,
+                'savings': None,
+                'confidence': cached['confidence'],
+                'comparison_id': cached['id'],
+                'cached': True,
+            }
+            if source_price and cached['target_price']:
+                hit['savings'] = round(float(source_price) - float(cached['target_price']), 2)
+            comparisons.append(hit)
+            continue
+
+        try:
+            match = find_comparable_product(source_url, 'amazon', retailer)
+        except Exception as e:
+            print(f"❌ /api/compare error: {e}")
+            match = None
+
+        comparison_id = _save_comparison(
+            'amazon', source_identifier, source_url, source_title, source_price,
+            retailer, match,
+        )
+
+        hit_data = match.get('match') if match else None
+        if hit_data and hit_data.get('confidence') in ('exact', 'likely'):
+            hit_data['url'] = wrap_affiliate_link(retailer, hit_data.get('url'))
+
+        entry = {
+            'retailer': retailer,
+            'url': hit_data.get('url') if hit_data else None,
+            'title': hit_data.get('title') if hit_data else None,
+            'price': float(hit_data['price']) if hit_data and hit_data.get('price') else None,
+            'savings': None,
+            'confidence': hit_data.get('confidence') if hit_data else 'none',
+            'comparison_id': comparison_id,
+            'cached': False,
+        }
+        if source_price and entry['price']:
+            entry['savings'] = round(float(source_price) - entry['price'], 2)
+        comparisons.append(entry)
+
+    return jsonify({
+        'source': {'asin': asin, 'url': source_url, 'title': source_title, 'price': source_price},
+        'comparisons': comparisons,
+    }), 200
+
+
+@app.route('/api/compare/click', methods=['POST'])
+def track_comparison_click():
+    token = get_token_from_request()
+    user = get_user_by_token(token) if token else None
+    if not user:
+        return '', 204
+
+    data = request.get_json() or {}
+    comparison_id = data.get('comparison_id')
+
+    if comparison_id:
+        try:
+            conn = get_db_conn()
+            cur = conn.cursor()
+            try:
+                cur.execute(
+                    'INSERT INTO comparison_clicks (user_id, comparison_id) VALUES (%s, %s)',
+                    (user['id'], comparison_id),
+                )
+                conn.commit()
+            finally:
+                cur.close()
+                conn.close()
+        except Exception as e:
+            print(f"⚠️ Failed to log comparison click (non-fatal): {e}")
+
+    return '', 204
+
+
+@app.route('/api/admin/compare-stats', methods=['GET'])
+def admin_compare_stats():
+    admin_key = request.headers.get('X-Admin-Key')
+    if admin_key != os.environ.get('ADMIN_KEY'):
+        return jsonify({'error': 'unauthorized'}), 401
+
+    conn = get_db_conn()
+    cur = conn.cursor()
+    try:
+        cur.execute('SELECT COUNT(*) as count FROM product_comparisons')
+        total_comparisons = _fetchone(cur)['count']
+        cur.execute('SELECT COUNT(*) as count FROM comparison_clicks')
+        total_clicks = _fetchone(cur)['count']
+        cur.execute("""
+            SELECT confidence, COUNT(*) as count
+            FROM product_comparisons GROUP BY confidence
+        """)
+        by_confidence = {row['confidence']: row['count'] for row in _fetchall(cur)}
+        cur.execute("""
+            SELECT source_title, COUNT(*) as lookups
+            FROM product_comparisons
+            WHERE source_title IS NOT NULL
+            GROUP BY source_title ORDER BY lookups DESC LIMIT 10
+        """)
+        top_products = _fetchall(cur)
+        ctr = round(total_clicks / total_comparisons, 4) if total_comparisons > 0 else 0
+        return jsonify({
+            'total_comparisons': total_comparisons,
+            'total_clicks': total_clicks,
+            'click_through_rate': ctr,
+            'matches_by_confidence': by_confidence,
+            'top_source_products': top_products,
+        }), 200
+    finally:
+        cur.close()
+        conn.close()
 
 
 if __name__ == '__main__':
