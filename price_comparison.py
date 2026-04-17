@@ -315,10 +315,10 @@ def _score_with_gemini(source_identity: dict, candidates: list[dict]) -> dict:
         },
     }).encode()
 
-    # Use gemini-1.5-flash — reliable JSON mode, no thinking-token overhead
+    # Use gemini-2.0-flash-lite — reliable JSON mode, no thinking-token overhead
     url = (
         "https://generativelanguage.googleapis.com/v1beta/models/"
-        f"gemini-1.5-flash:generateContent?key={api_key}"
+        f"gemini-2.0-flash-lite:generateContent?key={api_key}"
     )
 
     try:

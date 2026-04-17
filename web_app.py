@@ -2973,7 +2973,7 @@ def debug_gemini():
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {"responseMimeType": "application/json", "temperature": 0, "maxOutputTokens": 512},
     }).encode()
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key={api_key}"
     try:
         req = urllib.request.Request(url, data=payload, method="POST", headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=20) as r:
