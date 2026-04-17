@@ -2902,10 +2902,11 @@ def compare_product():
             comparisons.append(hit)
             continue
 
-        # Pass caller-provided identity so the extension can skip the Firecrawl
-        # Amazon scrape when it already has ASIN+title from the PDP DOM.
+        # Pass caller-provided identity only when title is available so the
+        # extension can skip the Firecrawl Amazon scrape when it has PDP data.
+        # Without a title, fall back to None so Firecrawl extracts full identity.
         caller_identity = None
-        if asin or source_title:
+        if source_title:
             caller_identity = {
                 'asin': asin,
                 'title': source_title,
@@ -2914,7 +2915,7 @@ def compare_product():
                 'upc': None,
                 'price': float(source_price) if source_price else None,
                 'image_url': None,
-                'search_query': source_title or asin or '',
+                'search_query': source_title,
             }
 
         try:
