@@ -2997,14 +2997,17 @@ def admin_clear_compare_cache():
     try:
         if asin:
             cur.execute(
-                "DELETE FROM product_comparisons WHERE source_identifier = %s RETURNING id",
+                "DELETE FROM product_comparisons WHERE source_identifier = %s",
                 (asin,)
             )
         else:
-            cur.execute("DELETE FROM product_comparisons RETURNING id")
-        deleted = len(cur.fetchall())
+            cur.execute("DELETE FROM product_comparisons")
+        deleted = cur.rowcount
         conn.commit()
         return jsonify({'deleted': deleted, 'asin': asin or 'all'})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'error': str(e)}), 500
     finally:
         cur.close()
         conn.close()
