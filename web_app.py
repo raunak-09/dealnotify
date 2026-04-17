@@ -2953,6 +2953,36 @@ def compare_product():
     }), 200
 
 
+@app.route('/api/compare/debug-gemini', methods=['POST'])
+def debug_gemini():
+    """Temporary QA debug — test Gemini scoring directly, returns response."""
+    token = get_token_from_request()
+    user, _ = get_user_by_token(token) if token else (None, None)
+    if not user:
+        return jsonify({'error': 'Token required'}), 401
+    import os, json, urllib.request
+    api_key = (os.getenv('GEMINI_API_KEY') or '').strip()
+    if not api_key:
+        return jsonify({'error': 'GEMINI_API_KEY not set', 'key_len': 0}), 500
+    data = request.get_json() or {}
+    source = data.get('source', 'Tide PODS Laundry Detergent 96 Count')
+    candidates = data.get('candidates', ['Tide Pods Ultra Oxi 96ct', 'Bounty Paper Towels'])
+    candidate_lines = "\n".join(f"{i}. {c}" for i, c in enumerate(candidates))
+    prompt = f"SOURCE: {source}\n\nCANDIDATES:\n{candidate_lines}\n\nRespond with ONLY valid JSON:\n{{\"best_index\": <int or null>, \"confidence\": \"<exact|likely|possible|none>\", \"reasoning\": \"<one sentence>\"}}"
+    payload = json.dumps({
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"responseMimeType": "application/json", "temperature": 0, "maxOutputTokens": 200},
+    }).encode()
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+    try:
+        req = urllib.request.Request(url, data=payload, method="POST", headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            body = json.loads(r.read())
+        return jsonify({'success': True, 'key_prefix': api_key[:8], 'response': body}), 200
+    except Exception as e:
+        return jsonify({'error': str(e), 'key_prefix': api_key[:8], 'key_len': len(api_key)}), 500
+
+
 @app.route('/api/compare/debug-search', methods=['POST'])
 def debug_compare_search():
     """Temporary QA debug endpoint — calls _search_walmart directly, returns raw candidates."""
