@@ -2880,12 +2880,13 @@ def compare_product():
     source_title = data.get('title')
     source_price = data.get('price')
     target_retailers = data.get('target_retailers', ['walmart'])
+    force_refresh = data.get('force_refresh', False)
 
     source_identifier = asin or source_url
     comparisons = []
 
     for retailer in target_retailers:
-        cached = _get_cached_comparison('amazon', source_identifier, retailer)
+        cached = None if force_refresh else _get_cached_comparison('amazon', source_identifier, retailer)
         if cached:
             hit = {
                 'retailer': retailer,
@@ -2980,6 +2981,33 @@ def track_comparison_click():
             print(f"⚠️ Failed to log comparison click (non-fatal): {e}")
 
     return '', 204
+
+
+@app.route('/api/admin/compare-cache/clear', methods=['POST'])
+def admin_clear_compare_cache():
+    admin_key = request.headers.get('X-Admin-Key')
+    if admin_key != os.environ.get('ADMIN_KEY'):
+        return jsonify({'error': 'unauthorized'}), 401
+
+    data = request.get_json() or {}
+    asin = data.get('asin')
+
+    conn = get_db_conn()
+    cur = conn.cursor()
+    try:
+        if asin:
+            cur.execute(
+                "DELETE FROM product_comparisons WHERE source_identifier = %s RETURNING id",
+                (asin,)
+            )
+        else:
+            cur.execute("DELETE FROM product_comparisons RETURNING id")
+        deleted = len(cur.fetchall())
+        conn.commit()
+        return jsonify({'deleted': deleted, 'asin': asin or 'all'})
+    finally:
+        cur.close()
+        conn.close()
 
 
 @app.route('/api/admin/compare-stats', methods=['GET'])
