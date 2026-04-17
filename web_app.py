@@ -2986,10 +2986,12 @@ def debug_gemini():
         except Exception:
             err_body = body_bytes.decode('utf-8', errors='replace')
         return jsonify({'http_error': e.code, 'error_body': err_body, 'key_prefix': api_key[:8], 'key_len': len(api_key),
-                        'anthropic_key_set': bool((os.getenv('ANTHROPIC_API_KEY') or '').strip())}), 500
+                        'anthropic_key_set': bool((os.getenv('ANTHROPIC_API_KEY') or '').strip()),
+                        'admin_key_prefix': (os.getenv('ADMIN_KEY') or '')[:6]}), 500
     except Exception as e:
         return jsonify({'error': str(e), 'key_prefix': api_key[:8], 'key_len': len(api_key),
-                        'anthropic_key_set': bool((os.getenv('ANTHROPIC_API_KEY') or '').strip())}), 500
+                        'anthropic_key_set': bool((os.getenv('ANTHROPIC_API_KEY') or '').strip()),
+                        'admin_key_prefix': (os.getenv('ADMIN_KEY') or '')[:6]}), 500
 
 
 @app.route('/api/compare/debug-search', methods=['POST'])
