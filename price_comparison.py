@@ -311,8 +311,10 @@ def _score_with_gemini(source_identity: dict, candidates: list[dict]) -> dict:
         "generationConfig": {
             "responseMimeType": "application/json",
             "temperature": 0,
-            "maxOutputTokens": 200,
+            "maxOutputTokens": 1024,
         },
+        # Disable thinking for this simple matching task — thinking tokens consumed the budget
+        "thinkingConfig": {"thinkingBudget": 0},
     }).encode()
 
     url = (
@@ -328,7 +330,12 @@ def _score_with_gemini(source_identity: dict, candidates: list[dict]) -> dict:
 
         text = body["candidates"][0]["content"]["parts"][0]["text"]
         print(f"🤖 Gemini raw response: {text[:300]}")
-        result = json.loads(text)
+        # Extract JSON even when Gemini adds prose preamble
+        json_match = re.search(r'\{[^{}]*"confidence"[^{}]*\}', text, re.DOTALL)
+        if json_match:
+            result = json.loads(json_match.group(0))
+        else:
+            result = json.loads(text)
     except Exception as exc:
         print(f"❌ Gemini scoring exception: {exc}")
         logging.warning("Gemini scoring failed: %s", exc)
