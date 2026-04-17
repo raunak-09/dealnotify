@@ -327,11 +327,14 @@ def _score_with_gemini(source_identity: dict, candidates: list[dict]) -> dict:
             body = json.loads(resp.read())
 
         text = body["candidates"][0]["content"]["parts"][0]["text"]
+        print(f"🤖 Gemini raw response: {text[:300]}")
         result = json.loads(text)
     except Exception as exc:
+        print(f"❌ Gemini scoring exception: {exc}")
         logging.warning("Gemini scoring failed: %s", exc)
         return {"confidence": "none", "best_index": None, "reasoning": "Scoring error"}
 
+    print(f"🤖 Gemini parsed result: {result}")
     if result.get("confidence") not in _VALID_CONFIDENCES:
         result["confidence"] = "none"
     if "best_index" not in result:
