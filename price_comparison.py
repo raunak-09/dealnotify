@@ -273,17 +273,62 @@ Respond with ONLY valid JSON, no prose:
 """
 
 
+def _score_with_keywords(source_identity: dict, candidates: list[dict]) -> dict:
+    """Fallback scorer using token-overlap when LLM APIs are unavailable."""
+    _stopwords = {'the', 'a', 'an', 'and', 'or', 'with', 'for', 'in', 'on', 'at', 'of',
+                  'to', 'by', 'from', 'is', 'it', 'as', 'pack', 'count', 'oz'}
+    source_title = (source_identity.get('title') or '').lower()
+    source_words = set(re.findall(r'\b[a-z0-9]+\b', source_title)) - _stopwords
+    if not source_words:
+        return {"confidence": "none", "best_index": None, "reasoning": "No source words to match"}
+
+    best_score = 0.0
+    best_idx = None
+    for i, c in enumerate(candidates):
+        cand_raw = (c.get('title') or '').lower()
+        # Strip markdown bold markers that Walmart markdown contains
+        cand_raw = re.sub(r'\*+', '', cand_raw)
+        cand_words = set(re.findall(r'\b[a-z0-9]+\b', cand_raw)) - _stopwords
+        if not cand_words:
+            continue
+        overlap = len(source_words & cand_words)
+        score = overlap / max(len(source_words), len(cand_words))
+        if score > best_score:
+            best_score = score
+            best_idx = i
+
+    if best_score >= 0.55:
+        confidence = "likely"
+    elif best_score >= 0.35:
+        confidence = "possible"
+    else:
+        return {"confidence": "none", "best_index": None, "reasoning": "Low keyword overlap"}
+
+    return {
+        "confidence": confidence,
+        "best_index": best_idx,
+        "reasoning": f"Keyword overlap {best_score:.0%} (LLM unavailable)"
+    }
+
+
 def _score_matches(source_identity: dict, candidates: list[dict]) -> dict:
     provider = os.environ.get("MATCHING_LLM_PROVIDER", "gemini").lower()
     if provider == "gemini":
-        return _score_with_gemini(source_identity, candidates)
+        result = _score_with_gemini(source_identity, candidates)
     elif provider == "anthropic":
-        return _score_with_haiku(source_identity, candidates)
+        result = _score_with_haiku(source_identity, candidates)
     elif provider == "groq":
-        return _score_with_groq(source_identity, candidates)
+        result = _score_with_groq(source_identity, candidates)
     else:
         print(f"⚠️ Unknown MATCHING_LLM_PROVIDER={provider} (non-fatal), falling back to gemini")
-        return _score_with_gemini(source_identity, candidates)
+        result = _score_with_gemini(source_identity, candidates)
+
+    # If LLM returned a scoring error (rate limit, quota exhausted, etc.), use keyword fallback
+    if result.get("reasoning") in ("Scoring error", "No API key configured"):
+        print("⚠️ LLM scoring unavailable — using keyword fallback")
+        result = _score_with_keywords(source_identity, candidates)
+
+    return result
 
 
 def _score_with_gemini(source_identity: dict, candidates: list[dict]) -> dict:
