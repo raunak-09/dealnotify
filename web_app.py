@@ -2979,8 +2979,17 @@ def debug_gemini():
         with urllib.request.urlopen(req, timeout=20) as r:
             body = json.loads(r.read())
         return jsonify({'success': True, 'key_prefix': api_key[:8], 'response': body}), 200
+    except urllib.error.HTTPError as e:
+        body_bytes = e.read()
+        try:
+            err_body = json.loads(body_bytes)
+        except Exception:
+            err_body = body_bytes.decode('utf-8', errors='replace')
+        return jsonify({'http_error': e.code, 'error_body': err_body, 'key_prefix': api_key[:8], 'key_len': len(api_key),
+                        'anthropic_key_set': bool((os.getenv('ANTHROPIC_API_KEY') or '').strip())}), 500
     except Exception as e:
-        return jsonify({'error': str(e), 'key_prefix': api_key[:8], 'key_len': len(api_key)}), 500
+        return jsonify({'error': str(e), 'key_prefix': api_key[:8], 'key_len': len(api_key),
+                        'anthropic_key_set': bool((os.getenv('ANTHROPIC_API_KEY') or '').strip())}), 500
 
 
 @app.route('/api/compare/debug-search', methods=['POST'])
