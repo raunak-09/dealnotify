@@ -151,7 +151,7 @@ def _extract_amazon_identity(source_url: str) -> dict:
     identity = _empty_identity(slug_query)
     identity["asin"] = asin
 
-    api_key = os.getenv("FIRECRAWL_API_KEY")
+    api_key = (os.getenv("FIRECRAWL_API_KEY") or "").strip()
     if not api_key:
         logging.warning("FIRECRAWL_API_KEY not set — returning partial identity")
         identity["search_query"] = _build_search_query(identity)
