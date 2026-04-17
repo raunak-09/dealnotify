@@ -2863,7 +2863,7 @@ def _save_comparison(source_retailer, source_identifier, source_url, source_titl
 @app.route('/api/compare', methods=['POST'])
 def compare_product():
     token = get_token_from_request()
-    user = get_user_by_token(token) if token else None
+    user, _ = get_user_by_token(token) if token else (None, None)
     if not user:
         return jsonify({'error': 'Token required'}), 401
 
@@ -2940,7 +2940,7 @@ def compare_product():
 @app.route('/api/compare/click', methods=['POST'])
 def track_comparison_click():
     token = get_token_from_request()
-    user = get_user_by_token(token) if token else None
+    user, _ = get_user_by_token(token) if token else (None, None)
     if not user:
         return '', 204
 
