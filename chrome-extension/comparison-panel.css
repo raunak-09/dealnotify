@@ -79,11 +79,30 @@
   margin-bottom: 8px;
 }
 
+.dealnotify-compare-panel__price-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.dealnotify-compare-panel__price-source {
+  font-size: 14px;
+  font-weight: 500;
+  color: #888;
+  text-decoration: line-through;
+}
+
+.dealnotify-compare-panel__price-arrow {
+  font-size: 13px;
+  color: #aaa;
+}
+
 .dealnotify-compare-panel__price {
   font-size: 20px;
   font-weight: 700;
   color: #1a1a2e;
-  margin-bottom: 4px;
 }
 
 .dealnotify-compare-panel__savings {

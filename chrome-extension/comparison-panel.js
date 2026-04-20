@@ -62,14 +62,30 @@ function renderComparisonPanel(response) {
   confidenceBadge.className = 'dealnotify-compare-panel__confidence';
   confidenceBadge.textContent = match.confidence === 'exact' ? 'Exact match' : 'Likely match';
 
-  const priceEl = document.createElement('div');
-  priceEl.className = 'dealnotify-compare-panel__price';
-  priceEl.textContent = match.price != null ? `$${match.price.toFixed(2)}` : '';
+  const priceRow = document.createElement('div');
+  priceRow.className = 'dealnotify-compare-panel__price-row';
+
+  if (sourcePrice != null) {
+    const amazonEl = document.createElement('span');
+    amazonEl.className = 'dealnotify-compare-panel__price-source';
+    amazonEl.textContent = `Amazon $${sourcePrice.toFixed(2)}`;
+    priceRow.appendChild(amazonEl);
+
+    const arrowEl = document.createElement('span');
+    arrowEl.className = 'dealnotify-compare-panel__price-arrow';
+    arrowEl.textContent = '→';
+    priceRow.appendChild(arrowEl);
+  }
+
+  const walmartEl = document.createElement('span');
+  walmartEl.className = 'dealnotify-compare-panel__price';
+  walmartEl.textContent = match.price != null ? `${retailerLabel} $${match.price.toFixed(2)}` : '';
+  priceRow.appendChild(walmartEl);
 
   body.appendChild(retailerEl);
   body.appendChild(titleEl);
   body.appendChild(confidenceBadge);
-  body.appendChild(priceEl);
+  body.appendChild(priceRow);
 
   if (savingsAmt != null && savingsAmt > 0) {
     const savingsBadge = document.createElement('span');
