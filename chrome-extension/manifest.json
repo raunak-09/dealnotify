@@ -26,8 +26,13 @@
   },
   "content_scripts": [
     {
+      "matches": ["*://*.amazon.com/*"],
+      "js": ["comparison-panel.js", "content.js"],
+      "css": ["comparison-panel.css"],
+      "run_at": "document_idle"
+    },
+    {
       "matches": [
-        "*://*.amazon.com/*",
         "*://*.amazon.co.uk/*",
         "*://*.amazon.ca/*",
         "*://*.walmart.com/*",
@@ -37,12 +42,6 @@
         "*://*.costco.com/*"
       ],
       "js": ["content.js"],
-      "run_at": "document_idle"
-    },
-    {
-      "matches": ["*://*.amazon.com/*"],
-      "js": ["comparison-panel.js"],
-      "css": ["comparison-panel.css"],
       "run_at": "document_idle"
     }
   ],
