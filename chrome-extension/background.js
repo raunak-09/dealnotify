@@ -83,7 +83,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             asin: message.asin,
             title: message.title,
             price: message.price,
-            target_retailers: ['walmart'],
+            target_retailers: ['walmart', 'target', 'bestbuy', 'costco'],
           }),
         });
         if (!res.ok) { sendResponse(null); return; }
