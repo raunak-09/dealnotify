@@ -2912,12 +2912,12 @@ def compare_product():
             caller_identity = {
                 'asin': asin,
                 'title': source_title,
-                'brand': None,
+                'brand': source_title.split()[0] if source_title else None,
                 'model': None,
                 'upc': None,
                 'price': source_price,
                 'image_url': None,
-                'search_query': source_title,
+                'search_query': ' '.join(w.strip(',') for w in source_title.split()[:5]) if source_title else None,
             }
 
         try:
