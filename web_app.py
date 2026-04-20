@@ -2943,6 +2943,7 @@ def compare_product():
             'confidence': hit_data.get('confidence') if hit_data else 'none',
             'comparison_id': comparison_id,
             'cached': False,
+            'debug_reasoning': (hit_data.get('llm_error') or hit_data.get('reasoning')) if hit_data else None,
         }
         if source_price and entry['price']:
             entry['savings'] = round(float(source_price) - entry['price'], 2)

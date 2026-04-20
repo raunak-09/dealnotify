@@ -328,9 +328,12 @@ def _score_matches(source_identity: dict, candidates: list[dict]) -> dict:
         result = _score_with_gemini(source_identity, candidates)
 
     # If LLM returned a scoring error (rate limit, quota exhausted, etc.), use keyword fallback
-    if result.get("reasoning") in ("Scoring error", "No API key configured"):
-        print("⚠️ LLM scoring unavailable — using keyword fallback")
+    if result.get("reasoning") in ("No API key configured",) or \
+            str(result.get("reasoning", "")).startswith("Gemini error:"):
+        print(f"⚠️ LLM scoring unavailable ({result.get('reasoning')}) — using keyword fallback")
+        llm_error = result.get("reasoning")
         result = _score_with_keywords(source_identity, candidates)
+        result["llm_error"] = llm_error
 
     return result
 
@@ -385,7 +388,7 @@ def _score_with_gemini(source_identity: dict, candidates: list[dict]) -> dict:
             result = json.loads(text)
     except Exception as exc:
         logging.warning("Gemini scoring failed: %s", exc)
-        return {"confidence": "none", "best_index": None, "reasoning": "Scoring error"}
+        return {"confidence": "none", "best_index": None, "reasoning": f"Gemini error: {exc}"}
 
     if result.get("confidence") not in _VALID_CONFIDENCES:
         result["confidence"] = "none"
@@ -443,4 +446,5 @@ def find_comparable_product(
     match = dict(candidates[idx])
     match["confidence"] = result["confidence"]
     match["reasoning"] = result.get("reasoning", "")
+    match["llm_error"] = result.get("llm_error")
     return {"match": match, "reason": None}
