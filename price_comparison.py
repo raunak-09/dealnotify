@@ -281,6 +281,10 @@ def _score_with_keywords(source_identity: dict, candidates: list[dict]) -> dict:
                   'to', 'by', 'from', 'is', 'it', 'as', 'pack', 'count', 'oz'}
     source_title = (source_identity.get('title') or '').lower()
     source_words = set(re.findall(r'\b[a-z0-9]+\b', source_title)) - _stopwords
+    # Alphanumeric model tokens (e.g. "1000xm5", "b09xs7jwhh") are strong identity signals
+    source_model_tokens = {w for w in source_words if re.search(r'[0-9]', w) and len(w) >= 4}
+    source_brand = (source_identity.get('brand') or '').lower().strip()
+
     if not source_words:
         return {"confidence": "none", "best_index": None, "reasoning": "No source words to match"}
 
@@ -297,6 +301,11 @@ def _score_with_keywords(source_identity: dict, candidates: list[dict]) -> dict:
         # Score by recall (how many source terms appear in candidate) since
         # candidate titles contain extra marketing text that inflates denominators
         score = overlap / len(source_words) if source_words else 0.0
+        # Boost: if brand + at least one model token both appear in candidate,
+        # that's a strong signal — treat as likely regardless of raw recall score
+        model_hit = source_model_tokens & cand_words
+        if source_brand and source_brand in cand_raw and model_hit:
+            score = max(score, 0.6)
         if score > best_score:
             best_score = score
             best_idx = i
