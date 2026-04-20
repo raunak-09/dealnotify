@@ -7,7 +7,7 @@ Extend the DealNotify Compare feature from Walmart-only to four retailers: Walma
 
 ## Decisions Made
 
-- **Search strategy:** Sequential (Option A) — extend the current per-retailer loop in `web_app.py`
+- **Search strategy:** Parallel — use `concurrent.futures.ThreadPoolExecutor` to search all retailers concurrently (~1.5s vs ~5–8s sequential)
 - **Panel display:** Show ALL matching retailers as a list (not just the cheapest)
 - **Costco:** Include with direct links; no affiliate wrapping (no public program)
 - **Affiliate programs:** Target (Impact Radius via `TARGET_AFFILIATE_ID`), Best Buy (CJ Affiliate via `BESTBUY_AFFILIATE_ID`)
@@ -77,9 +77,31 @@ def wrap_affiliate_link(retailer: str, url: str) -> str:
 
 The exact affiliate URL format will depend on the respective programs; use placeholder format above until affiliate accounts are created.
 
-### `compare_product` endpoint — no change needed
+### `compare_product` endpoint — parallel search
 
-The existing for-loop over `target_retailers` already handles multiple retailers. The extension will now pass all four in the request.
+Replace the sequential for-loop over `target_retailers` with a parallel dispatch using `concurrent.futures.ThreadPoolExecutor`:
+
+```python
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+def _search_all_retailers(identity, retailers):
+    results = {}
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = {
+            pool.submit(RETAILER_SEARCHERS[r], identity): r
+            for r in retailers if RETAILER_SEARCHERS.get(r)
+        }
+        for future in as_completed(futures):
+            r = futures[future]
+            try:
+                results[r] = future.result()
+            except Exception as e:
+                logging.warning("Retailer search failed for %s: %s", r, e)
+                results[r] = []
+    return results
+```
+
+The scoring, caching, and response-building loop continues to run per-retailer after all searches complete. Each `(source_identifier, retailer)` pair is still cached independently — cache lookup happens before the parallel dispatch, so cached retailers are skipped entirely.
 
 ### Railway env vars to add (when affiliate accounts are ready)
 
@@ -171,7 +193,7 @@ Remove the single-price styles that are replaced by the list layout.
 
 ## Out of Scope
 
-- Parallel search (can be added later as a performance optimization)
+- Streaming/SSE (parallel is sufficient for v1)
 - Best Buy / Target searcher fine-tuning (URL patterns and price parsing may need iteration after testing)
 - Costco affiliate program (no public program available)
 - Other retailers (eBay, Newegg, etc.)
