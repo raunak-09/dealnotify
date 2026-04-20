@@ -51,8 +51,8 @@ def _asin_from_url(url: str) -> str | None:
 
 
 def _build_search_query(identity: dict) -> str:
-    if identity.get("upc"):
-        return identity["upc"]
+    # UPC is useful for matching/verification but Walmart text search returns
+    # no results for bare UPC strings — use brand+model or title instead.
     brand = identity.get("brand") or ""
     model = identity.get("model") or ""
     if brand and model:
