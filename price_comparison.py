@@ -68,10 +68,17 @@ def _parse_amazon_markdown(markdown: str, html: str) -> dict:
     """Extract product fields from Firecrawl markdown/html of an Amazon PDP."""
     result: dict = {k: None for k in ("title", "brand", "model", "upc", "price", "image_url")}
 
-    # Title: first level-1 or level-2 heading
-    m = re.search(r'^#{1,2}\s+(.+)', markdown, re.MULTILINE)
-    if m:
-        result["title"] = m.group(1).strip()
+    # Title: prefer <span id="productTitle"> from HTML (markdown headings are Amazon UI chrome)
+    pt = re.search(r'id=["\']productTitle["\'][^>]*>\s*([^<]+)', html)
+    if pt:
+        result["title"] = pt.group(1).strip()
+    else:
+        # Fallback: first heading that doesn't look like Amazon accessibility chrome
+        for m in re.finditer(r'^#{1,2}\s+(.+)', markdown, re.MULTILINE):
+            candidate = m.group(1).strip()
+            if 'keyboard shortcut' not in candidate.lower() and 'product summary' not in candidate.lower():
+                result["title"] = candidate
+                break
 
     # Price: look for $ amounts
     price_m = re.search(r'\$\s*([\d,]+\.\d{2})', markdown)
