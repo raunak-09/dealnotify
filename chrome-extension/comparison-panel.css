@@ -3,7 +3,7 @@
   bottom: 100px;
   right: 20px;
   z-index: 2147483647;
-  width: 300px;
+  width: 320px;
   max-width: calc(100vw - 40px);
   background: #ffffff;
   border-radius: 10px;
@@ -14,6 +14,7 @@
   overflow: hidden;
 }
 
+/* ── Header ── */
 .dealnotify-compare-panel__header {
   display: flex;
   align-items: center;
@@ -44,92 +45,93 @@
   color: #ffffff;
 }
 
-.dealnotify-compare-panel__body {
-  padding: 12px 14px 8px;
-}
-
-.dealnotify-compare-panel__retailer {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
-  color: #888;
-  margin-bottom: 4px;
-}
-
-.dealnotify-compare-panel__title {
-  font-size: 13px;
-  font-weight: 500;
-  color: #1a1a2e;
-  line-height: 1.4;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  margin-bottom: 5px;
-}
-
-.dealnotify-compare-panel__confidence {
-  display: inline-block;
-  font-size: 11px;
-  color: #5b67f8;
-  background: rgba(91, 103, 248, 0.1);
-  border-radius: 4px;
-  padding: 2px 6px;
-  margin-bottom: 8px;
-}
-
-.dealnotify-compare-panel__price-row {
+/* ── Amazon source price row ── */
+.dealnotify-compare-panel__source-row {
   display: flex;
-  align-items: baseline;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-bottom: 4px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  background: #f8f8fb;
+  border-bottom: 1px solid #eee;
 }
 
-.dealnotify-compare-panel__price-source {
+.dealnotify-compare-panel__source-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.dealnotify-compare-panel__source-price {
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   color: #888;
   text-decoration: line-through;
 }
 
-.dealnotify-compare-panel__price-arrow {
-  font-size: 13px;
-  color: #aaa;
+/* ── Retailer rows ── */
+.dealnotify-compare-panel__retailer-row {
+  padding: 10px 14px 0;
 }
 
-.dealnotify-compare-panel__price {
-  font-size: 20px;
+.dealnotify-compare-panel__row-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.dealnotify-compare-panel__retailer-name {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #555;
+  min-width: 60px;
+}
+
+.dealnotify-compare-panel__retailer-price {
+  font-size: 18px;
   font-weight: 700;
   color: #1a1a2e;
 }
 
 .dealnotify-compare-panel__savings {
   display: inline-block;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: #ffffff;
   background: #27ae60;
   border-radius: 4px;
-  padding: 2px 7px;
-  margin-bottom: 2px;
+  padding: 2px 6px;
 }
 
+/* ── CTA button ── */
 .dealnotify-compare-panel__cta {
   display: block;
   width: 100%;
-  padding: 10px;
-  margin-top: 10px;
+  padding: 8px 10px;
+  margin-top: 0;
+  margin-bottom: 10px;
   background: #5b67f8;
   color: #ffffff;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   text-align: center;
   border: none;
+  border-radius: 6px;
   cursor: pointer;
 }
 
 .dealnotify-compare-panel__cta:hover {
   background: #4a56e8;
+}
+
+/* ── Divider between retailer rows ── */
+.dealnotify-compare-panel__divider {
+  height: 1px;
+  background: #eee;
+  margin: 0 14px;
 }
