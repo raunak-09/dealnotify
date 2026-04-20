@@ -2878,7 +2878,8 @@ def compare_product():
 
     asin = data.get('asin') or _extract_asin_from_url(source_url)
     source_title = data.get('title')
-    source_price = data.get('price')
+    _raw_price = data.get('price')
+    source_price = float(_raw_price.strip().lstrip('$').replace(',', '')) if _raw_price else None
     target_retailers = data.get('target_retailers', ['walmart'])
     force_refresh = data.get('force_refresh', False)
 
@@ -2914,7 +2915,7 @@ def compare_product():
                 'brand': None,
                 'model': None,
                 'upc': None,
-                'price': float(source_price.strip().lstrip('$').replace(',', '')) if source_price else None,
+                'price': source_price,
                 'image_url': None,
                 'search_query': source_title,
             }
