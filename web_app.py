@@ -2914,7 +2914,7 @@ def compare_product():
                 'brand': None,
                 'model': None,
                 'upc': None,
-                'price': float(re.sub(r'[^0-9.]', '', source_price)) if source_price else None,
+                'price': float(source_price.strip().lstrip('$').replace(',', '')) if source_price else None,
                 'image_url': None,
                 'search_query': source_title,
             }
