@@ -345,7 +345,6 @@
       title,
       price,
     }, (response) => {
-      console.log('[DealNotify] compare callback fired, lastError:', chrome.runtime.lastError, 'response:', JSON.stringify(response));
       if (chrome.runtime.lastError) return;
       if (response) renderComparisonPanel(response);
     });
