@@ -1,6 +1,6 @@
 /**
  * DealNotify Chrome Extension — Comparison Panel
- * Renders a floating panel when a Walmart price match is found on Amazon PDPs.
+ * Renders a floating panel listing all retailer price matches found on Amazon PDPs.
  */
 
 const DN_COMPARE_API_BASE = 'https://www.dealnotify.co';
@@ -9,21 +9,18 @@ function renderComparisonPanel(response) {
   const comparisons = response && response.comparisons;
   if (!Array.isArray(comparisons)) return;
 
-  const match = comparisons.find(c => c.confidence === 'exact' || c.confidence === 'likely');
-  if (!match || !match.url) return;
+  // Collect all exact/likely matches with valid URLs, sorted cheapest first
+  const matches = comparisons
+    .filter(c => (c.confidence === 'exact' || c.confidence === 'likely') && c.url)
+    .sort((a, b) => (a.price != null ? a.price : Infinity) - (b.price != null ? b.price : Infinity));
+
+  if (!matches.length) return;
 
   // Remove any existing panel
   const existing = document.querySelector('.dealnotify-compare-panel');
   if (existing) existing.remove();
 
   const sourcePrice = response.source && response.source.price;
-  const savingsAmt = match.savings;
-  const savingsPct = (sourcePrice && match.price != null && sourcePrice > match.price)
-    ? Math.round(((sourcePrice - match.price) / sourcePrice) * 100)
-    : null;
-  const retailerLabel = match.retailer
-    ? match.retailer.charAt(0).toUpperCase() + match.retailer.slice(1)
-    : 'Walmart';
 
   // ── Panel container ──
   const panel = document.createElement('div');
@@ -45,84 +42,99 @@ function renderComparisonPanel(response) {
 
   header.appendChild(logo);
   header.appendChild(closeBtn);
+  panel.appendChild(header);
 
-  // ── Body ──
-  const body = document.createElement('div');
-  body.className = 'dealnotify-compare-panel__body';
-
-  const retailerEl = document.createElement('div');
-  retailerEl.className = 'dealnotify-compare-panel__retailer';
-  retailerEl.textContent = retailerLabel;
-
-  const titleEl = document.createElement('div');
-  titleEl.className = 'dealnotify-compare-panel__title';
-  titleEl.textContent = match.title || '';
-
-  const confidenceBadge = document.createElement('span');
-  confidenceBadge.className = 'dealnotify-compare-panel__confidence';
-  confidenceBadge.textContent = match.confidence === 'exact' ? 'Exact match' : 'Likely match';
-
-  const priceRow = document.createElement('div');
-  priceRow.className = 'dealnotify-compare-panel__price-row';
-
+  // ── Amazon source price row ──
   if (sourcePrice != null) {
-    const amazonEl = document.createElement('span');
-    amazonEl.className = 'dealnotify-compare-panel__price-source';
-    amazonEl.textContent = `Amazon $${sourcePrice.toFixed(2)}`;
-    priceRow.appendChild(amazonEl);
+    const sourceRow = document.createElement('div');
+    sourceRow.className = 'dealnotify-compare-panel__source-row';
 
-    const arrowEl = document.createElement('span');
-    arrowEl.className = 'dealnotify-compare-panel__price-arrow';
-    arrowEl.textContent = '→';
-    priceRow.appendChild(arrowEl);
+    const sourceLabel = document.createElement('span');
+    sourceLabel.className = 'dealnotify-compare-panel__source-label';
+    sourceLabel.textContent = 'Amazon';
+
+    const sourceAmt = document.createElement('span');
+    sourceAmt.className = 'dealnotify-compare-panel__source-price';
+    sourceAmt.textContent = `$${sourcePrice.toFixed(2)}`;
+
+    sourceRow.appendChild(sourceLabel);
+    sourceRow.appendChild(sourceAmt);
+    panel.appendChild(sourceRow);
   }
 
-  const walmartEl = document.createElement('span');
-  walmartEl.className = 'dealnotify-compare-panel__price';
-  walmartEl.textContent = match.price != null ? `${retailerLabel} $${match.price.toFixed(2)}` : '';
-  priceRow.appendChild(walmartEl);
+  // ── One row per matching retailer ──
+  matches.forEach((match, idx) => {
+    if (idx > 0) {
+      const divider = document.createElement('div');
+      divider.className = 'dealnotify-compare-panel__divider';
+      panel.appendChild(divider);
+    }
 
-  body.appendChild(retailerEl);
-  body.appendChild(titleEl);
-  body.appendChild(confidenceBadge);
-  body.appendChild(priceRow);
+    const retailerLabel = match.retailer
+      ? match.retailer.charAt(0).toUpperCase() + match.retailer.slice(1)
+      : 'Retailer';
 
-  if (savingsAmt != null && savingsAmt > 0) {
-    const savingsBadge = document.createElement('span');
-    savingsBadge.className = 'dealnotify-compare-panel__savings';
-    savingsBadge.textContent = savingsPct
-      ? `Save $${savingsAmt.toFixed(2)} (${savingsPct}%)`
-      : `Save $${savingsAmt.toFixed(2)}`;
-    body.appendChild(savingsBadge);
-  }
+    const savingsAmt = match.savings;
+    const savingsPct = (sourcePrice && match.price != null && sourcePrice > match.price)
+      ? Math.round(((sourcePrice - match.price) / sourcePrice) * 100)
+      : null;
 
-  // ── CTA ──
-  const cta = document.createElement('button');
-  cta.className = 'dealnotify-compare-panel__cta';
-  cta.textContent = `View at ${retailerLabel} →`;
-  cta.addEventListener('click', async () => {
-    try {
-      const stored = await new Promise(resolve =>
-        chrome.storage.local.get(['dn_token'], resolve)
-      );
-      const token = stored.dn_token;
-      if (token && match.comparison_id) {
-        fetch(`${DN_COMPARE_API_BASE}/api/compare/click`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-          body: JSON.stringify({ comparison_id: match.comparison_id }),
-        }).catch(() => {});
-      }
-    } catch (_) {}
-    window.open(match.url, '_blank', 'noopener');
+    const row = document.createElement('div');
+    row.className = 'dealnotify-compare-panel__retailer-row';
+
+    // Top line: name + price + savings badge
+    const topLine = document.createElement('div');
+    topLine.className = 'dealnotify-compare-panel__row-top';
+
+    const nameEl = document.createElement('span');
+    nameEl.className = 'dealnotify-compare-panel__retailer-name';
+    nameEl.textContent = retailerLabel;
+
+    const priceEl = document.createElement('span');
+    priceEl.className = 'dealnotify-compare-panel__retailer-price';
+    priceEl.textContent = match.price != null ? `$${match.price.toFixed(2)}` : '';
+
+    topLine.appendChild(nameEl);
+    topLine.appendChild(priceEl);
+
+    if (savingsAmt != null && savingsAmt > 0) {
+      const savingsBadge = document.createElement('span');
+      savingsBadge.className = 'dealnotify-compare-panel__savings';
+      savingsBadge.textContent = savingsPct
+        ? `Save $${savingsAmt.toFixed(2)} (${savingsPct}%)`
+        : `Save $${savingsAmt.toFixed(2)}`;
+      topLine.appendChild(savingsBadge);
+    }
+
+    row.appendChild(topLine);
+
+    // CTA button
+    const cta = document.createElement('button');
+    cta.className = 'dealnotify-compare-panel__cta';
+    cta.textContent = `View at ${retailerLabel} →`;
+    cta.addEventListener('click', async () => {
+      try {
+        const stored = await new Promise(resolve =>
+          chrome.storage.local.get(['dn_token'], resolve)
+        );
+        const token = stored.dn_token;
+        if (token && match.comparison_id) {
+          fetch(`${DN_COMPARE_API_BASE}/api/compare/click`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({ comparison_id: match.comparison_id }),
+          }).catch(() => {});
+        }
+      } catch (_) {}
+      window.open(match.url, '_blank', 'noopener');
+    });
+
+    row.appendChild(cta);
+    panel.appendChild(row);
   });
 
-  // ── Assemble ──
-  panel.appendChild(header);
-  panel.appendChild(body);
-  panel.appendChild(cta);
   document.body.appendChild(panel);
 }
