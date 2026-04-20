@@ -54,7 +54,7 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
 
 // Clear badge when tab is removed
 chrome.tabs.onRemoved.addListener((tabId) => {
-  chrome.action.setBadgeText({ text: '', tabId });
+  chrome.action.setBadgeText({ text: '', tabId }).catch(() => {});
 });
 
 
