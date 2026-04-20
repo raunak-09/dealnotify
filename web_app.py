@@ -11,6 +11,7 @@ import time
 import hmac
 import html as html_module
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
@@ -2886,6 +2887,21 @@ def compare_product():
     source_identifier = asin or source_url
     comparisons = []
 
+    caller_identity = None
+    if source_title:
+        caller_identity = {
+            'asin': asin,
+            'title': source_title,
+            'brand': source_title.split()[0] if source_title else None,
+            'model': None,
+            'upc': None,
+            'price': source_price,
+            'image_url': None,
+            'search_query': ' '.join(w.strip(',') for w in source_title.split()[:5]) if source_title else None,
+        }
+
+    # Separate cached vs uncached retailers
+    uncached_retailers = []
     for retailer in target_retailers:
         cached = None if force_refresh else _get_cached_comparison('amazon', source_identifier, retailer)
         if cached:
@@ -2902,30 +2918,27 @@ def compare_product():
             if source_price and cached['target_price']:
                 hit['savings'] = round(float(source_price) - float(cached['target_price']), 2)
             comparisons.append(hit)
-            continue
+        else:
+            uncached_retailers.append(retailer)
 
-        # Pass caller-provided identity only when title is available so the
-        # extension can skip the Firecrawl Amazon scrape when it has PDP data.
-        # Without a title, fall back to None so Firecrawl extracts full identity.
-        caller_identity = None
-        if source_title:
-            caller_identity = {
-                'asin': asin,
-                'title': source_title,
-                'brand': source_title.split()[0] if source_title else None,
-                'model': None,
-                'upc': None,
-                'price': source_price,
-                'image_url': None,
-                'search_query': ' '.join(w.strip(',') for w in source_title.split()[:5]) if source_title else None,
-            }
-
+    # Search uncached retailers in parallel
+    def _search_retailer(retailer):
         try:
-            match = find_comparable_product(source_url, 'amazon', retailer, identity=caller_identity)
+            return retailer, find_comparable_product(source_url, 'amazon', retailer, identity=caller_identity)
         except Exception as e:
-            print(f"❌ /api/compare error: {e}")
-            match = None
+            print(f"❌ /api/compare error for {retailer}: {e}")
+            return retailer, None
 
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = {pool.submit(_search_retailer, r): r for r in uncached_retailers}
+        retailer_matches = {}
+        for future in as_completed(futures):
+            retailer, match = future.result()
+            retailer_matches[retailer] = match
+
+    # Score, save and build response entries in original order
+    for retailer in uncached_retailers:
+        match = retailer_matches.get(retailer)
         comparison_id = _save_comparison(
             'amazon', source_identifier, source_url, source_title, source_price,
             retailer, match,
