@@ -6,6 +6,7 @@
 const DN_COMPARE_API_BASE = 'https://www.dealnotify.co';
 
 function renderComparisonPanel(response) {
+  console.log('[DealNotify] renderComparisonPanel called:', JSON.stringify(response));
   const comparisons = response && response.comparisons;
   if (!Array.isArray(comparisons)) return;
 
