@@ -344,14 +344,11 @@
       asin,
       title,
       price,
+    }, (response) => {
+      if (chrome.runtime.lastError) return; // extension context invalidated
+      if (response) renderComparisonPanel(response);
     });
   }
-
-  chrome.runtime.onMessage.addListener((message) => {
-    if (message.action === 'COMPARE_RESULT') {
-      renderComparisonPanel(message.data);
-    }
-  });
 
   setTimeout(detectAndCompareAmazonPDP, 1200);
 

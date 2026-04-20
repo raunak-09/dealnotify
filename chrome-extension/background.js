@@ -67,12 +67,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === 'COMPARE_PRODUCT') {
-    const tabId = sender.tab?.id;
-    if (!tabId) return;
-
     chrome.storage.local.get(['dn_token'], async (stored) => {
       const token = stored.dn_token;
-      if (!token) return;
+      if (!token) { sendResponse(null); return; }
 
       try {
         const res = await fetch(`${API_BASE}/api/compare`, {
@@ -89,14 +86,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             target_retailers: ['walmart'],
           }),
         });
-        if (!res.ok) return;
+        if (!res.ok) { sendResponse(null); return; }
         const data = await res.json();
-        chrome.tabs.sendMessage(tabId, { action: 'COMPARE_RESULT', data }).catch(() => {});
+        sendResponse(data);
       } catch (e) {
-        // Fail silently — never block the user
+        sendResponse(null);
       }
     });
-    return true;
+    return true; // keep message port open for async sendResponse
   }
 });
 
