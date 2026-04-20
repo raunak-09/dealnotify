@@ -5,6 +5,13 @@
 
 const DN_COMPARE_API_BASE = 'https://www.dealnotify.co';
 
+const DN_RETAILER_LABELS = {
+  walmart: 'Walmart',
+  target: 'Target',
+  bestbuy: 'Best Buy',
+  costco: 'Costco',
+};
+
 function renderComparisonPanel(response) {
   const comparisons = response && response.comparisons;
   if (!Array.isArray(comparisons)) return;
@@ -70,9 +77,10 @@ function renderComparisonPanel(response) {
       panel.appendChild(divider);
     }
 
-    const retailerLabel = match.retailer
+    const retailerLabel = DN_RETAILER_LABELS[match.retailer] || (match.retailer
       ? match.retailer.charAt(0).toUpperCase() + match.retailer.slice(1)
-      : 'Retailer';
+      : 'Retailer');
+    const isCheapest = idx === 0;
 
     const savingsAmt = match.savings;
     const savingsPct = (sourcePrice && match.price != null && sourcePrice > match.price)
@@ -86,15 +94,27 @@ function renderComparisonPanel(response) {
     const topLine = document.createElement('div');
     topLine.className = 'dealnotify-compare-panel__row-top';
 
+    const nameLine = document.createElement('div');
+    nameLine.className = 'dealnotify-compare-panel__name-line';
+
     const nameEl = document.createElement('span');
     nameEl.className = 'dealnotify-compare-panel__retailer-name';
     nameEl.textContent = retailerLabel;
+
+    nameLine.appendChild(nameEl);
+
+    if (isCheapest && matches.length > 1) {
+      const bestBadge = document.createElement('span');
+      bestBadge.className = 'dealnotify-compare-panel__best-badge';
+      bestBadge.textContent = 'Best price';
+      nameLine.appendChild(bestBadge);
+    }
 
     const priceEl = document.createElement('span');
     priceEl.className = 'dealnotify-compare-panel__retailer-price';
     priceEl.textContent = match.price != null ? `$${match.price.toFixed(2)}` : '';
 
-    topLine.appendChild(nameEl);
+    topLine.appendChild(nameLine);
     topLine.appendChild(priceEl);
 
     if (savingsAmt != null && savingsAmt > 0) {

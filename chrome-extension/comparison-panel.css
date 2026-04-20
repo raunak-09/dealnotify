@@ -6,9 +6,9 @@
   width: 320px;
   max-width: calc(100vw - 40px);
   background: #ffffff;
-  border-radius: 10px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.18);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  border-radius: 14px;
+  box-shadow: 0 4px 24px rgba(91, 103, 248, 0.14), 0 2px 8px rgba(0, 0, 0, 0.08);
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
   font-size: 14px;
   color: #1a1a2e;
   overflow: hidden;
@@ -19,13 +19,13 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: #5b67f8;
-  padding: 10px 14px;
+  background: linear-gradient(135deg, #5b67f8 0%, #764ba2 100%);
+  padding: 11px 14px;
 }
 
 .dealnotify-compare-panel__logo {
   color: #ffffff;
-  font-weight: 700;
+  font-weight: 800;
   font-size: 14px;
   letter-spacing: 0.3px;
 }
@@ -51,22 +51,22 @@
   align-items: center;
   justify-content: space-between;
   padding: 8px 14px;
-  background: #f8f8fb;
-  border-bottom: 1px solid #eee;
+  background: #f7f8ff;
+  border-bottom: 1px solid #eaebff;
 }
 
 .dealnotify-compare-panel__source-label {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
   color: #888;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.6px;
 }
 
 .dealnotify-compare-panel__source-price {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
-  color: #888;
+  color: #999;
   text-decoration: line-through;
 }
 
@@ -78,9 +78,17 @@
 .dealnotify-compare-panel__row-top {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
-  flex-wrap: wrap;
   margin-bottom: 6px;
+}
+
+/* Name + "Best price" badge stacked on left */
+.dealnotify-compare-panel__name-line {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
 }
 
 .dealnotify-compare-panel__retailer-name {
@@ -88,14 +96,27 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: #555;
-  min-width: 60px;
+  color: #5c5c7a;
 }
 
-.dealnotify-compare-panel__retailer-price {
-  font-size: 18px;
+.dealnotify-compare-panel__best-badge {
+  display: inline-block;
+  font-size: 10px;
   font-weight: 700;
+  color: #5b67f8;
+  background: rgba(91, 103, 248, 0.1);
+  border-radius: 4px;
+  padding: 1px 5px;
+  letter-spacing: 0.3px;
+  width: fit-content;
+}
+
+/* Price prominent on the right */
+.dealnotify-compare-panel__retailer-price {
+  font-size: 20px;
+  font-weight: 800;
   color: #1a1a2e;
+  white-space: nowrap;
 }
 
 .dealnotify-compare-panel__savings {
@@ -103,17 +124,18 @@
   font-size: 11px;
   font-weight: 600;
   color: #ffffff;
-  background: #27ae60;
-  border-radius: 4px;
-  padding: 2px 6px;
+  background: #22c55e;
+  border-radius: 50px;
+  padding: 2px 8px;
+  white-space: nowrap;
 }
 
-/* ── CTA button ── */
+/* ── CTA button — pill style matching website ── */
 .dealnotify-compare-panel__cta {
   display: block;
   width: 100%;
-  padding: 8px 10px;
-  margin-top: 0;
+  padding: 9px 10px;
+  margin-top: 2px;
   margin-bottom: 10px;
   background: #5b67f8;
   color: #ffffff;
@@ -121,17 +143,20 @@
   font-weight: 600;
   text-align: center;
   border: none;
-  border-radius: 6px;
+  border-radius: 50px;
   cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
 }
 
 .dealnotify-compare-panel__cta:hover {
-  background: #4a56e8;
+  background: #4351d8;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(91, 103, 248, 0.35);
 }
 
 /* ── Divider between retailer rows ── */
 .dealnotify-compare-panel__divider {
   height: 1px;
-  background: #eee;
+  background: #eaebff;
   margin: 0 14px;
 }
