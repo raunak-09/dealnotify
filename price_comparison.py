@@ -325,6 +325,74 @@ def _search_target(identity: dict) -> list:
 RETAILER_SEARCHERS["target"] = _search_target
 
 
+def _parse_bestbuy_results(markdown: str, html: str) -> list:
+    candidates = []
+    seen_urls: set = set()
+
+    link_pattern = re.compile(
+        r'\[([^\]]{10,200})\]\((https://(?:www\.)?bestbuy\.com/site/[^\s\)]+\.p[^\s\)]*)\)'
+    )
+
+    for m in link_pattern.finditer(markdown):
+        if len(candidates) >= 5:
+            break
+
+        title = m.group(1).strip()
+        raw_url = m.group(2).strip()
+        clean_url = re.sub(r'\?.*$', '', raw_url)
+        if clean_url in seen_urls:
+            continue
+        seen_urls.add(clean_url)
+
+        price = None
+        end = min(len(markdown), m.end() + 300)
+        price_m = re.search(r'\$\s*([\d,]+\.\d{2})', markdown[m.end():end])
+        if price_m:
+            try:
+                price = float(price_m.group(1).replace(",", ""))
+            except ValueError:
+                pass
+
+        candidates.append({"title": title, "price": price, "url": clean_url, "image_url": None})
+
+    return candidates
+
+
+def _search_bestbuy(identity: dict) -> list:
+    """Search Best Buy for candidates matching the given product identity."""
+    from urllib.parse import quote_plus
+
+    search_query = identity.get("search_query") or ""
+    if not search_query:
+        return []
+
+    api_key = os.getenv("FIRECRAWL_API_KEY")
+    if not api_key:
+        logging.warning("FIRECRAWL_API_KEY not set — cannot search Best Buy")
+        return []
+
+    url = f"https://www.bestbuy.com/site/searchpage.jsp?st={quote_plus(search_query)}"
+
+    try:
+        fc, api_version = _init_firecrawl(api_key)
+        markdown, html = _do_scrape(fc, api_version, url)
+    except Exception as exc:
+        logging.warning("Firecrawl Best Buy search failed: %s", exc)
+        return []
+
+    if not markdown and not html:
+        return []
+
+    try:
+        return _parse_bestbuy_results(markdown, html)
+    except Exception as exc:
+        logging.warning("Failed to parse Best Buy search results: %s", exc)
+        return []
+
+
+RETAILER_SEARCHERS["bestbuy"] = _search_bestbuy
+
+
 _VALID_CONFIDENCES = {"exact", "likely", "possible", "none"}
 
 _MATCHING_PROMPT = """\
