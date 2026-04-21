@@ -128,17 +128,23 @@ def _init_firecrawl(api_key: str):
     raise ImportError("firecrawl-py is not installed")
 
 
-def _do_scrape(fc, api_version: str, url: str, formats: list | None = None) -> tuple[str, str]:
+def _do_scrape(fc, api_version: str, url: str, formats: list | None = None, wait_for_ms: int = 0) -> tuple[str, str]:
     fmts = formats or ['markdown', 'html']
     if api_version == 'v2':
-        resp = fc.scrape(url, formats=fmts)
+        kwargs = {'formats': fmts}
+        if wait_for_ms:
+            kwargs['waitFor'] = wait_for_ms
+        resp = fc.scrape(url, **kwargs)
         markdown = getattr(resp, 'markdown', None) or ''
         html = getattr(resp, 'html', None) or getattr(resp, 'content', None) or ''
         return markdown, html
+    scrape_opts: dict = {'formats': fmts}
+    if wait_for_ms:
+        scrape_opts['waitFor'] = wait_for_ms
     try:
-        result = fc.scrape_url(url, formats=fmts)
+        result = fc.scrape_url(url, scrape_opts)
     except TypeError:
-        result = fc.scrape_url(url, {'formats': fmts})
+        result = fc.scrape_url(url, fmts)
     if not isinstance(result, dict):
         return '', ''
     return result.get('markdown') or '', result.get('html') or ''
@@ -308,7 +314,7 @@ def _search_target(identity: dict) -> list:
 
     try:
         fc, api_version = _init_firecrawl(api_key)
-        markdown, html = _do_scrape(fc, api_version, url, formats=['markdown'])
+        markdown, html = _do_scrape(fc, api_version, url, formats=['markdown'], wait_for_ms=3000)
     except Exception as exc:
         logging.warning("Firecrawl Target search failed: %s", exc)
         return []
@@ -380,7 +386,7 @@ def _search_bestbuy(identity: dict) -> list:
 
     try:
         fc, api_version = _init_firecrawl(api_key)
-        markdown, html = _do_scrape(fc, api_version, url, formats=['markdown'])
+        markdown, html = _do_scrape(fc, api_version, url, formats=['markdown'], wait_for_ms=3000)
     except Exception as exc:
         logging.warning("Firecrawl Best Buy search failed: %s", exc)
         return []
@@ -452,7 +458,7 @@ def _search_costco(identity: dict) -> list:
 
     try:
         fc, api_version = _init_firecrawl(api_key)
-        markdown, html = _do_scrape(fc, api_version, url, formats=['markdown'])
+        markdown, html = _do_scrape(fc, api_version, url, formats=['markdown'], wait_for_ms=3000)
     except Exception as exc:
         logging.warning("Firecrawl Costco search failed: %s", exc)
         return []
