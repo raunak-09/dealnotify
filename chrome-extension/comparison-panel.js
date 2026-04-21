@@ -1,7 +1,7 @@
 /**
  * DealNotify Chrome Extension — Unified Card
- * Renders a floating tabbed card with Compare + Track tabs on product pages.
- * Also shows a Track-only card on non-PDP retailer pages.
+ * Renders a floating tabbed card with Compare + Price Alert + Restock tabs on product pages.
+ * Also shows a Price Alert-only card on non-PDP retailer pages.
  */
 
 const DN_COMPARE_API_BASE = 'https://www.dealnotify.co';
@@ -73,10 +73,10 @@ function _activateTab(panel, tabId) {
     p.classList.toggle('dealnotify-compare-panel__pane--active', p.dataset.dnPane === tabId));
 }
 
-function _buildTrackPane(outOfStock, bestMatch) {
+function _buildPriceAlertPane(bestMatch) {
   const pane = document.createElement('div');
   pane.className = 'dealnotify-compare-panel__pane';
-  pane.dataset.dnPane = 'track';
+  pane.dataset.dnPane = 'price-alert';
 
   const content = document.createElement('div');
   content.className = 'dealnotify-compare-panel__track-content';
@@ -101,13 +101,45 @@ function _buildTrackPane(outOfStock, bestMatch) {
 
   const msg = document.createElement('p');
   msg.className = 'dealnotify-compare-panel__track-msg';
-  msg.textContent = outOfStock
-    ? 'This item is out of stock. Get notified when it\'s back.'
-    : 'Get notified when the price drops further.';
+  msg.textContent = 'Get notified when the price drops to your target.';
 
   const cta = document.createElement('button');
   cta.className = 'dealnotify-compare-panel__track-cta';
-  cta.textContent = outOfStock ? '📦 Set Restock Alert' : '🔔 Set Price Alert';
+  cta.textContent = '🔔 Set Price Alert';
+  cta.addEventListener('click', () => {
+    chrome.runtime.sendMessage({ action: 'openPopup' });
+  });
+
+  content.appendChild(msg);
+  content.appendChild(cta);
+  pane.appendChild(content);
+  return pane;
+}
+
+function _buildRestockPane(outOfStock) {
+  const pane = document.createElement('div');
+  pane.className = 'dealnotify-compare-panel__pane';
+  pane.dataset.dnPane = 'restock';
+
+  const content = document.createElement('div');
+  content.className = 'dealnotify-compare-panel__track-content';
+
+  if (outOfStock) {
+    const badge = document.createElement('div');
+    badge.className = 'dealnotify-compare-panel__restock-oos-badge';
+    badge.textContent = 'Out of Stock';
+    content.appendChild(badge);
+  }
+
+  const msg = document.createElement('p');
+  msg.className = 'dealnotify-compare-panel__track-msg';
+  msg.textContent = outOfStock
+    ? 'This item is currently out of stock. We\'ll notify you the moment it\'s available again.'
+    : 'Want to be notified if this item goes out of stock and comes back? Set a restock alert.';
+
+  const cta = document.createElement('button');
+  cta.className = 'dealnotify-compare-panel__track-cta';
+  cta.textContent = '📦 Set Restock Alert';
   cta.addEventListener('click', () => {
     chrome.runtime.sendMessage({ action: 'openPopup' });
   });
@@ -125,9 +157,10 @@ function showComparisonLoadingPanel(sourcePrice, sourceRetailer, outOfStock) {
   const panel = _createBaseCard();
 
   _buildTabBar(panel, [
-    { id: 'compare', label: '📊 Compare' },
-    { id: 'track',   label: '🔔 Track'   },
-  ], 'compare');
+    { id: 'compare',     label: '📊 Compare'    },
+    { id: 'price-alert', label: '🔔 Price Alert' },
+    { id: 'restock',     label: '📦 Restock'     },
+  ], outOfStock ? 'restock' : 'compare');
 
   // ── Compare pane ──
   const comparePane = document.createElement('div');
@@ -181,8 +214,13 @@ function showComparisonLoadingPanel(sourcePrice, sourceRetailer, outOfStock) {
 
   panel.appendChild(comparePane);
 
-  // ── Track pane ──
-  panel.appendChild(_buildTrackPane(!!outOfStock));
+  // ── Price Alert pane ──
+  panel.appendChild(_buildPriceAlertPane());
+
+  // ── Restock pane ──
+  const restockPane = _buildRestockPane(!!outOfStock);
+  if (outOfStock) restockPane.classList.add('dealnotify-compare-panel__pane--active');
+  panel.appendChild(restockPane);
 
   panel.dataset.dnOutOfStock = outOfStock ? '1' : '0';
   panel.dataset.dnSourceRetailer = sourceRetailer || '';
@@ -371,9 +409,8 @@ function finalizeComparisonPanel() {
     }
   }
 
-  // Update Track pane with best competitor price (only if cheaper than source)
-  const outOfStock = panel.dataset.dnOutOfStock === '1';
-  const bestForTrack = (bestPrice != null && (sourcePrice == null || bestPrice < sourcePrice))
+  // Update Price Alert pane with best competitor price (only if cheaper than source)
+  const bestForAlert = (bestPrice != null && (sourcePrice == null || bestPrice < sourcePrice))
     ? {
         price: bestPrice,
         retailer: panel.dataset.dnBestRetailer,
@@ -381,13 +418,13 @@ function finalizeComparisonPanel() {
       }
     : null;
 
-  const trackPane = panel.querySelector('[data-dn-pane="track"]');
-  if (trackPane) {
-    const newTrack = _buildTrackPane(outOfStock, bestForTrack);
-    const wasActive = trackPane.classList.contains('dealnotify-compare-panel__pane--active');
-    newTrack.dataset.dnPane = 'track';
-    if (wasActive) newTrack.classList.add('dealnotify-compare-panel__pane--active');
-    trackPane.replaceWith(newTrack);
+  const priceAlertPane = panel.querySelector('[data-dn-pane="price-alert"]');
+  if (priceAlertPane) {
+    const newAlert = _buildPriceAlertPane(bestForAlert);
+    const wasActive = priceAlertPane.classList.contains('dealnotify-compare-panel__pane--active');
+    newAlert.dataset.dnPane = 'price-alert';
+    if (wasActive) newAlert.classList.add('dealnotify-compare-panel__pane--active');
+    priceAlertPane.replaceWith(newAlert);
   }
 }
 
@@ -399,9 +436,18 @@ function showTrackOnlyCard(outOfStock) {
 
   const panel = _createBaseCard();
 
-  const pane = _buildTrackPane(!!outOfStock);
-  pane.classList.add('dealnotify-compare-panel__pane--active');
-  panel.appendChild(pane);
+  _buildTabBar(panel, [
+    { id: 'price-alert', label: '🔔 Price Alert' },
+    { id: 'restock',     label: '📦 Restock'     },
+  ], outOfStock ? 'restock' : 'price-alert');
+
+  const priceAlertPane = _buildPriceAlertPane();
+  if (!outOfStock) priceAlertPane.classList.add('dealnotify-compare-panel__pane--active');
+  panel.appendChild(priceAlertPane);
+
+  const restockPane = _buildRestockPane(!!outOfStock);
+  if (outOfStock) restockPane.classList.add('dealnotify-compare-panel__pane--active');
+  panel.appendChild(restockPane);
 
   document.body.appendChild(panel);
 }
@@ -413,9 +459,10 @@ function renderUnauthPanel(sourcePrice, sourceRetailer, outOfStock) {
   const panel = _createBaseCard();
 
   _buildTabBar(panel, [
-    { id: 'compare', label: '📊 Compare' },
-    { id: 'track',   label: '🔔 Track'   },
-  ], 'compare');
+    { id: 'compare',     label: '📊 Compare'    },
+    { id: 'price-alert', label: '🔔 Price Alert' },
+    { id: 'restock',     label: '📦 Restock'     },
+  ], outOfStock ? 'restock' : 'compare');
 
   // Compare pane — sign-in CTA
   const comparePane = document.createElement('div');
@@ -455,8 +502,15 @@ function renderUnauthPanel(sourcePrice, sourceRetailer, outOfStock) {
   comparePane.appendChild(unauthContent);
   panel.appendChild(comparePane);
 
-  // Track pane — unauthenticated users can still set price/restock alerts
-  panel.appendChild(_buildTrackPane(!!outOfStock));
+  // Price Alert pane — unauthenticated users can still set price alerts
+  const priceAlertPane = _buildPriceAlertPane();
+  if (!outOfStock) priceAlertPane.classList.add('dealnotify-compare-panel__pane--active');
+  panel.appendChild(priceAlertPane);
+
+  // Restock pane — unauthenticated users can set restock alerts
+  const restockPane = _buildRestockPane(!!outOfStock);
+  if (outOfStock) restockPane.classList.add('dealnotify-compare-panel__pane--active');
+  panel.appendChild(restockPane);
 
   document.body.appendChild(panel);
 }
