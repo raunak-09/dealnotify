@@ -6,6 +6,7 @@ Auth: password hashing via werkzeug, email verification, forgot/reset password
 
 from flask import Flask, request, jsonify, send_from_directory
 import os
+import re
 import secrets
 import time
 import hmac
@@ -2971,7 +2972,10 @@ def compare_product():
             'upc': None,
             'price': source_price,
             'image_url': None,
-            'search_query': ' '.join(w.strip(',-–—') for w in source_title.split()[:5]).strip(',-–— ') if source_title else None,
+            'search_query': re.sub(r'\s{2,}', ' ', re.sub(
+                r'\b(renewed|refurbished|restored|certified refurbished|open[- ]?box|used)\b',
+                '', source_title, flags=re.IGNORECASE,
+            )).strip()[:60] if source_title else None,
         }
 
     # Separate cached vs uncached retailers
@@ -3012,7 +3016,7 @@ def compare_product():
     with ThreadPoolExecutor(max_workers=4) as pool:
         futures = {pool.submit(_search_retailer, r): r for r in uncached_retailers}
         retailer_matches = {r: None for r in uncached_retailers}
-        done, timed_out = futures_wait(futures, timeout=11)
+        done, timed_out = futures_wait(futures, timeout=20)
         for future in done:
             try:
                 retailer, match = future.result()

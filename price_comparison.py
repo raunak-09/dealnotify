@@ -50,16 +50,25 @@ def _asin_from_url(url: str) -> str | None:
     return m.group(1) if m else None
 
 
+_CONDITION_LABEL_RE = re.compile(
+    r'\b(renewed|refurbished|restored|certified refurbished|open[- ]?box|used)\b',
+    re.IGNORECASE,
+)
+
+def _strip_condition_labels(text: str) -> str:
+    """Remove Amazon-specific condition markers that confuse searches on other retailers."""
+    return re.sub(r'\s{2,}', ' ', _CONDITION_LABEL_RE.sub('', text)).strip(' ,-–—()')
+
 def _build_search_query(identity: dict) -> str:
     # UPC is useful for matching/verification but Walmart text search returns
     # no results for bare UPC strings — use brand+model or title instead.
     brand = identity.get("brand") or ""
     model = identity.get("model") or ""
     if brand and model:
-        return f"{brand} {model}"
+        return _strip_condition_labels(f"{brand} {model}")
     title = identity.get("title") or ""
     if title:
-        return " ".join(title.split()[:8])
+        return " ".join(_strip_condition_labels(title).split()[:8])
     asin = identity.get("asin") or ""
     return asin
 
