@@ -13,15 +13,29 @@
 
 const API_BASE = 'https://www.dealnotify.co';
 
-// ── Google Analytics 4 ──
-// gtag.js is loaded async from popup.html; dataLayer buffers calls until it's ready.
-window.dataLayer = window.dataLayer || [];
-function gtag() { dataLayer.push(arguments); }
-gtag('js', new Date());
-gtag('config', 'G-3JJNMF7KKJ', { send_page_view: false });
+// ── Google Analytics 4 (Measurement Protocol) ──
+// MV3 blocks external script-src, so we use fetch directly instead of gtag.js.
+// Shares GA_API_SECRET and client_id with background.js.
+// To activate: set GA_API_SECRET from GA4 Admin → Data Streams → Measurement Protocol API secrets.
+const GA_MEASUREMENT_ID = 'G-3JJNMF7KKJ';
+const GA_API_SECRET = ''; // TODO: paste your Measurement Protocol API secret here
 
 function trackEvent(name, params) {
-  try { gtag('event', name, params || {}); } catch (e) {}
+  if (!GA_API_SECRET) return;
+  chrome.storage.local.get(['dn_ga_client_id'], (stored) => {
+    const send = (clientId) => {
+      fetch(
+        `https://www.google-analytics.com/mp/collect?measurement_id=${GA_MEASUREMENT_ID}&api_secret=${GA_API_SECRET}`,
+        { method: 'POST', body: JSON.stringify({ client_id: clientId, events: [{ name, params: params || {} }] }) }
+      ).catch(() => {});
+    };
+    if (stored.dn_ga_client_id) {
+      send(stored.dn_ga_client_id);
+    } else {
+      const clientId = crypto.randomUUID();
+      chrome.storage.local.set({ dn_ga_client_id: clientId }, () => send(clientId));
+    }
+  });
 }
 
 const SUPPORTED_STORES = {
