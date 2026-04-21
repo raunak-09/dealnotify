@@ -400,9 +400,6 @@ function showTrackOnlyCard(outOfStock) {
 // ── Unauthenticated state: Compare tab shows sign-in CTA ──
 
 function renderUnauthPanel(sourcePrice, sourceRetailer, outOfStock) {
-  const existing = document.querySelector('.dealnotify-compare-panel');
-  if (existing) existing.remove();
-
   const panel = _createBaseCard();
 
   _buildTabBar(panel, [

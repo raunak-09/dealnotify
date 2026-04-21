@@ -234,6 +234,7 @@
   };
 
   let _compareDispatched = false;
+  let _compareGeneration = 0;
   let _lastHref = window.location.href;
 
   function _onSpaNavigate() {
@@ -288,6 +289,7 @@
     }
 
     _compareDispatched = true;
+    const generation = ++_compareGeneration;
 
     const priceNum = price ? parseFloat(price.replace(/[^0-9.]/g, '')) : null;
     showComparisonLoadingPanel(isNaN(priceNum) ? null : priceNum, sourceRetailer, outOfStock);
@@ -300,6 +302,7 @@
       title,
       price,
     }, (response) => {
+      if (generation !== _compareGeneration) return; // stale response from previous navigation
       if (chrome.runtime.lastError) {
         const p = document.querySelector('.dealnotify-compare-panel');
         if (p) p.remove();
@@ -325,6 +328,9 @@
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
     if (changes.dn_token && !changes.dn_token.oldValue && changes.dn_token.newValue) {
+      const domain = getStoreDomain();
+      const pdpDetector = domain && PDP_DETECTORS[domain];
+      if (!pdpDetector || !pdpDetector(window.location.pathname)) return;
       _compareDispatched = false;
       const panel = document.querySelector('.dealnotify-compare-panel');
       if (panel) panel.remove();
