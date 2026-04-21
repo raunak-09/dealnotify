@@ -338,6 +338,11 @@
     const price = cleanPrice(priceRaw) || null;
 
     _compareDispatched = true;
+
+    // Show shimmer loading panel immediately while the API runs
+    const priceNum = price ? parseFloat(price.replace(/[^0-9.]/g, '')) : null;
+    showComparisonLoadingPanel(isNaN(priceNum) ? null : priceNum);
+
     chrome.runtime.sendMessage({
       action: 'COMPARE_PRODUCT',
       source_url: window.location.href,
@@ -345,11 +350,20 @@
       title,
       price,
     }, (response) => {
-      if (chrome.runtime.lastError) return;
+      if (chrome.runtime.lastError) {
+        const p = document.querySelector('.dealnotify-compare-panel');
+        if (p) p.remove();
+        return;
+      }
       if (response) renderComparisonPanel(response);
+      else {
+        const p = document.querySelector('.dealnotify-compare-panel');
+        if (p) p.remove();
+      }
     });
   }
 
-  setTimeout(detectAndCompareAmazonPDP, 1200);
+  // Fire at document_idle — no artificial delay for compare (widget uses its own 800ms)
+  detectAndCompareAmazonPDP();
 
 })();

@@ -160,3 +160,52 @@
   background: #eaebff;
   margin: 0 14px;
 }
+
+/* ── Shimmer loading state ── */
+@keyframes dn-shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: calc(400px + 100%) 0; }
+}
+
+.dealnotify-compare-panel__shimmer-row {
+  padding: 10px 14px 10px;
+}
+
+.dealnotify-compare-panel__shimmer-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.dealnotify-compare-panel__shimmer-line {
+  border-radius: 6px;
+  background: linear-gradient(90deg, #eaebff 25%, #f4f5ff 50%, #eaebff 75%);
+  background-size: 800px 100%;
+  animation: dn-shimmer 1.5s infinite linear;
+}
+
+.dealnotify-compare-panel__shimmer-name {
+  height: 12px;
+  width: 70px;
+}
+
+.dealnotify-compare-panel__shimmer-price {
+  height: 20px;
+  width: 72px;
+}
+
+.dealnotify-compare-panel__shimmer-cta {
+  height: 34px;
+  width: 100%;
+  border-radius: 50px;
+}
+
+.dealnotify-compare-panel__loading-hint {
+  text-align: center;
+  font-size: 11px;
+  color: #aaa;
+  padding: 4px 14px 12px;
+  letter-spacing: 0.2px;
+}

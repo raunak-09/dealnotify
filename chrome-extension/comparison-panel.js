@@ -12,6 +12,79 @@ const DN_RETAILER_LABELS = {
   costco: 'Costco',
 };
 
+function showComparisonLoadingPanel(sourcePrice) {
+  const existing = document.querySelector('.dealnotify-compare-panel');
+  if (existing) existing.remove();
+
+  const panel = document.createElement('div');
+  panel.className = 'dealnotify-compare-panel';
+
+  // Header
+  const header = document.createElement('div');
+  header.className = 'dealnotify-compare-panel__header';
+  const logo = document.createElement('span');
+  logo.className = 'dealnotify-compare-panel__logo';
+  logo.textContent = 'DealNotify';
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'dealnotify-compare-panel__close';
+  closeBtn.textContent = '×';
+  closeBtn.setAttribute('aria-label', 'Close');
+  closeBtn.addEventListener('click', () => panel.remove());
+  header.appendChild(logo);
+  header.appendChild(closeBtn);
+  panel.appendChild(header);
+
+  // Amazon source row (real price if available)
+  if (sourcePrice != null) {
+    const sourceRow = document.createElement('div');
+    sourceRow.className = 'dealnotify-compare-panel__source-row';
+    const sourceLabel = document.createElement('span');
+    sourceLabel.className = 'dealnotify-compare-panel__source-label';
+    sourceLabel.textContent = 'Amazon';
+    const sourceAmt = document.createElement('span');
+    sourceAmt.className = 'dealnotify-compare-panel__source-price';
+    sourceAmt.textContent = `$${sourcePrice.toFixed(2)}`;
+    sourceRow.appendChild(sourceLabel);
+    sourceRow.appendChild(sourceAmt);
+    panel.appendChild(sourceRow);
+  }
+
+  // Shimmer rows
+  for (let i = 0; i < 2; i++) {
+    if (i > 0) {
+      const div = document.createElement('div');
+      div.className = 'dealnotify-compare-panel__divider';
+      panel.appendChild(div);
+    }
+    const row = document.createElement('div');
+    row.className = 'dealnotify-compare-panel__shimmer-row';
+
+    const topLine = document.createElement('div');
+    topLine.className = 'dealnotify-compare-panel__shimmer-top';
+    const nameShimmer = document.createElement('div');
+    nameShimmer.className = 'dealnotify-compare-panel__shimmer-line dealnotify-compare-panel__shimmer-name';
+    const priceShimmer = document.createElement('div');
+    priceShimmer.className = 'dealnotify-compare-panel__shimmer-line dealnotify-compare-panel__shimmer-price';
+    topLine.appendChild(nameShimmer);
+    topLine.appendChild(priceShimmer);
+
+    const ctaShimmer = document.createElement('div');
+    ctaShimmer.className = 'dealnotify-compare-panel__shimmer-line dealnotify-compare-panel__shimmer-cta';
+
+    row.appendChild(topLine);
+    row.appendChild(ctaShimmer);
+    panel.appendChild(row);
+  }
+
+  // Hint text
+  const hint = document.createElement('div');
+  hint.className = 'dealnotify-compare-panel__loading-hint';
+  hint.textContent = 'Comparing prices across retailers…';
+  panel.appendChild(hint);
+
+  document.body.appendChild(panel);
+}
+
 function renderComparisonPanel(response) {
   const comparisons = response && response.comparisons;
   if (!Array.isArray(comparisons)) return;
