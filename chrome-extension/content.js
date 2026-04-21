@@ -181,10 +181,17 @@
 
     if (message.action === 'COMPARE_RESULT_PARTIAL') {
       appendComparisonResult(message.match, message.source);
+      _pendingMatches.push({ match: message.match, source: message.source });
     }
 
     if (message.action === 'COMPARE_DONE') {
       finalizeComparisonPanel();
+      // Persist results so the next page load renders instantly from cache
+      if (_compareCacheKey && _pendingMatches.length) {
+        chrome.storage.local.set({
+          [_compareCacheKey]: { matches: _pendingMatches, ts: Date.now() },
+        });
+      }
     }
 
     return true;
@@ -236,6 +243,9 @@
   let _compareDispatched = false;
   let _compareGeneration = 0;
   let _lastHref = window.location.href;
+  let _pendingMatches = [];   // accumulated results from current compare run (for caching)
+  let _compareCacheKey = null;
+  const COMPARE_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 
   function _onSpaNavigate() {
     const href = window.location.href;
@@ -244,6 +254,8 @@
 
     // Reset compare state so it re-runs for the new product page
     _compareDispatched = false;
+    _pendingMatches = [];
+    _compareCacheKey = null;
     const panel = document.querySelector('.dealnotify-compare-panel');
     if (panel) panel.remove();
 
@@ -290,34 +302,55 @@
 
     _compareDispatched = true;
     const generation = ++_compareGeneration;
+    _pendingMatches = [];
 
     const priceNum = price ? parseFloat(price.replace(/[^0-9.]/g, '')) : null;
-    showComparisonLoadingPanel(isNaN(priceNum) ? null : priceNum, sourceRetailer, outOfStock);
+    const sourcePriceNum = isNaN(priceNum) ? null : priceNum;
 
-    chrome.runtime.sendMessage({
-      action: 'COMPARE_PRODUCT',
-      source_url:     window.location.href,
-      source_retailer: sourceRetailer,
-      asin:           asin || null,
-      title,
-      price,
-    }, (response) => {
-      if (generation !== _compareGeneration) return; // stale response from previous navigation
-      if (chrome.runtime.lastError) {
-        const p = document.querySelector('.dealnotify-compare-panel');
-        if (p) p.remove();
+    // Stable cache key: ASIN for Amazon, cleaned URL path for other retailers
+    const cacheKey = 'dn_cmp_' + (asin || window.location.href.split('?')[0].substring(0, 100));
+    _compareCacheKey = cacheKey;
+
+    // Check extension-side cache before hitting the API
+    chrome.storage.local.get([cacheKey], (stored) => {
+      if (generation !== _compareGeneration) return;
+      const entry = stored[cacheKey];
+      if (entry && entry.ts && (Date.now() - entry.ts) < COMPARE_CACHE_TTL &&
+          Array.isArray(entry.matches) && entry.matches.length) {
+        // Render cached results immediately — no API calls needed
+        showComparisonLoadingPanel(sourcePriceNum, sourceRetailer, outOfStock);
+        entry.matches.forEach(({ match, source }) => appendComparisonResult(match, source));
+        finalizeComparisonPanel();
         return;
       }
-      if (!response) {
-        const p = document.querySelector('.dealnotify-compare-panel');
-        if (p) p.remove();
-        return;
-      }
-      if (response.unauthenticated) {
-        renderUnauthPanel(isNaN(priceNum) ? null : priceNum, sourceRetailer, !!outOfStock);
-        return;
-      }
-      // response.streaming === true — results arrive via COMPARE_RESULT_PARTIAL
+
+      showComparisonLoadingPanel(sourcePriceNum, sourceRetailer, outOfStock);
+
+      chrome.runtime.sendMessage({
+        action: 'COMPARE_PRODUCT',
+        source_url:      window.location.href,
+        source_retailer: sourceRetailer,
+        asin:            asin || null,
+        title,
+        price,
+      }, (response) => {
+        if (generation !== _compareGeneration) return; // stale response from previous navigation
+        if (chrome.runtime.lastError) {
+          const p = document.querySelector('.dealnotify-compare-panel');
+          if (p) p.remove();
+          return;
+        }
+        if (!response) {
+          const p = document.querySelector('.dealnotify-compare-panel');
+          if (p) p.remove();
+          return;
+        }
+        if (response.unauthenticated) {
+          renderUnauthPanel(sourcePriceNum, sourceRetailer, !!outOfStock);
+          return;
+        }
+        // response.streaming === true — results arrive via COMPARE_RESULT_PARTIAL
+      });
     });
   }
 
