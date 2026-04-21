@@ -161,7 +161,6 @@
         sendResponse(null);
         return;
       }
-
       try {
         const info = extractors[domain]();
         sendResponse({
@@ -179,7 +178,16 @@
         });
       }
     }
-    return true; // keep the message channel open for async response
+
+    if (message.action === 'COMPARE_RESULT_PARTIAL') {
+      appendComparisonResult(message.match, message.source);
+    }
+
+    if (message.action === 'COMPARE_DONE') {
+      finalizeComparisonPanel();
+    }
+
+    return true;
   });
 
 
@@ -297,11 +305,12 @@
         if (p) p.remove();
         return;
       }
-      if (response) renderComparisonPanel(response);
-      else {
+      if (!response) {
         const p = document.querySelector('.dealnotify-compare-panel');
         if (p) p.remove();
+        return;
       }
+      // response.streaming === true — results arrive via COMPARE_RESULT_PARTIAL
     });
   }
 

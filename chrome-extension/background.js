@@ -67,39 +67,58 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === 'COMPARE_PRODUCT') {
-    chrome.storage.local.get(['dn_token'], async (stored) => {
+    chrome.storage.local.get(['dn_token'], (stored) => {
       const token = stored.dn_token;
       if (!token) { sendResponse(null); return; }
 
-      // Compare against all supported retailers except the one we're currently on
       const ALL_COMPARE_RETAILERS = ['amazon', 'walmart', 'target', 'bestbuy', 'costco'];
       const sourceRetailer = message.source_retailer || 'amazon';
       const targetRetailers = ALL_COMPARE_RETAILERS.filter(r => r !== sourceRetailer);
+      const tabId = sender && sender.tab && sender.tab.id;
+      const basePayload = {
+        source_url:      message.source_url,
+        source_retailer: sourceRetailer,
+        asin:            message.asin,
+        title:           message.title,
+        price:           message.price,
+      };
 
-      try {
-        const res = await fetch(`${API_BASE}/api/compare`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            source_url:      message.source_url,
-            source_retailer: sourceRetailer,
-            asin:            message.asin,
-            title:           message.title,
-            price:           message.price,
-            target_retailers: targetRetailers,
-          }),
-        });
-        if (!res.ok) { sendResponse(null); return; }
-        const data = await res.json();
-        sendResponse(data);
-      } catch (e) {
-        sendResponse(null);
-      }
+      // Acknowledge immediately so the message port can close
+      sendResponse({ streaming: true });
+
+      const promises = targetRetailers.map(async (retailer) => {
+        try {
+          const res = await fetch(`${API_BASE}/api/compare`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({ ...basePayload, target_retailers: [retailer] }),
+          });
+          if (!res.ok) return;
+          const data = await res.json();
+          const match = data.comparisons && data.comparisons.find(c =>
+            (c.confidence === 'exact' || c.confidence === 'likely') &&
+            c.url && c.price != null
+          );
+          if (match && tabId) {
+            chrome.tabs.sendMessage(tabId, {
+              action: 'COMPARE_RESULT_PARTIAL',
+              match,
+              source: data.source,
+            }).catch(() => {});
+          }
+        } catch (e) {}
+      });
+
+      Promise.allSettled(promises).then(() => {
+        if (tabId) {
+          chrome.tabs.sendMessage(tabId, { action: 'COMPARE_DONE' }).catch(() => {});
+        }
+      });
     });
-    return true; // keep message port open for async sendResponse
+    return true; // keep message port open until sendResponse is called
   }
 });
 

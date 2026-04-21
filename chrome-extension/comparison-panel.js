@@ -184,160 +184,207 @@ function showComparisonLoadingPanel(sourcePrice, sourceRetailer, outOfStock) {
   // ── Track pane ──
   panel.appendChild(_buildTrackPane(!!outOfStock));
 
+  panel.dataset.dnOutOfStock = outOfStock ? '1' : '0';
   document.body.appendChild(panel);
 }
 
 
-// ── Render final comparison results ──
+// ── Progressive: add one retailer row as its result arrives ──
 
-function renderComparisonPanel(response) {
-  const comparisons = response && response.comparisons;
-  if (!Array.isArray(comparisons)) return;
-
-  const matches = comparisons
-    .filter(c => (c.confidence === 'exact' || c.confidence === 'likely') && c.url)
-    .sort((a, b) => (a.price != null ? a.price : Infinity) - (b.price != null ? b.price : Infinity));
-
+function appendComparisonResult(match, source) {
   const panel = document.querySelector('.dealnotify-compare-panel');
+  if (!panel) return;
+  const comparePane = panel.querySelector('[data-dn-pane="compare"]');
+  if (!comparePane) return;
 
-  if (!matches.length) {
-    // No results — switch to Track tab, show a note in Compare tab
-    if (panel) {
-      const comparePane = panel.querySelector('[data-dn-pane="compare"]');
-      if (comparePane) {
-        comparePane.innerHTML = '';
-        const noResults = document.createElement('div');
-        noResults.className = 'dealnotify-compare-panel__no-results';
-        noResults.textContent = 'No better prices found at other retailers.';
-        comparePane.appendChild(noResults);
+  const sourcePrice = source && typeof source.price === 'number' ? source.price : null;
+  const retailerLabel = DN_RETAILER_LABELS[match.retailer] || (match.retailer
+    ? match.retailer.charAt(0).toUpperCase() + match.retailer.slice(1)
+    : 'Retailer');
+
+  const savingsAmt = sourcePrice != null && match.price < sourcePrice
+    ? parseFloat((sourcePrice - match.price).toFixed(2))
+    : (match.savings != null ? match.savings : null);
+  const savingsPct = (savingsAmt && sourcePrice)
+    ? Math.round((savingsAmt / sourcePrice) * 100)
+    : null;
+
+  // Build retailer row
+  const row = document.createElement('div');
+  row.className = 'dealnotify-compare-panel__retailer-row';
+
+  const topLine = document.createElement('div');
+  topLine.className = 'dealnotify-compare-panel__row-top';
+
+  const nameLine = document.createElement('div');
+  nameLine.className = 'dealnotify-compare-panel__name-line';
+
+  const nameEl = document.createElement('span');
+  nameEl.className = 'dealnotify-compare-panel__retailer-name';
+  nameEl.textContent = retailerLabel;
+  nameLine.appendChild(nameEl);
+
+  const priceEl = document.createElement('span');
+  priceEl.className = 'dealnotify-compare-panel__retailer-price';
+  priceEl.textContent = `$${match.price.toFixed(2)}`;
+
+  topLine.appendChild(nameLine);
+  topLine.appendChild(priceEl);
+
+  if (savingsAmt != null && savingsAmt > 0) {
+    const savingsBadge = document.createElement('span');
+    savingsBadge.className = 'dealnotify-compare-panel__savings';
+    savingsBadge.textContent = savingsPct
+      ? `Save $${savingsAmt.toFixed(2)} (${savingsPct}%)`
+      : `Save $${savingsAmt.toFixed(2)}`;
+    topLine.appendChild(savingsBadge);
+  }
+
+  row.appendChild(topLine);
+
+  const cta = document.createElement('button');
+  cta.className = 'dealnotify-compare-panel__cta';
+  cta.textContent = `View at ${retailerLabel} →`;
+  cta.addEventListener('click', async () => {
+    try {
+      const stored = await new Promise(resolve =>
+        chrome.storage.local.get(['dn_token'], resolve)
+      );
+      const token = stored.dn_token;
+      if (token && match.comparison_id) {
+        fetch(`${DN_COMPARE_API_BASE}/api/compare/click`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({ comparison_id: match.comparison_id }),
+        }).catch(() => {});
       }
-      _activateTab(panel, 'track');
+    } catch (_) {}
+    window.open(match.url, '_blank', 'noopener');
+  });
+
+  row.appendChild(cta);
+
+  // Place row: replace first shimmer row, or append before loading hint
+  const shimmerRow = comparePane.querySelector('.dealnotify-compare-panel__shimmer-row');
+  const hint = comparePane.querySelector('.dealnotify-compare-panel__loading-hint');
+
+  if (shimmerRow) {
+    // Replace shimmer in-place; the divider before the next shimmer becomes the row separator
+    comparePane.insertBefore(row, shimmerRow);
+    shimmerRow.remove();
+  } else {
+    // All shimmer rows already replaced — insert before hint with a separator
+    const existingRows = comparePane.querySelectorAll('.dealnotify-compare-panel__retailer-row');
+    if (existingRows.length > 0) {
+      const divider = document.createElement('div');
+      divider.className = 'dealnotify-compare-panel__divider';
+      comparePane.insertBefore(divider, hint || null);
     }
+    comparePane.insertBefore(row, hint || null);
+  }
+
+  // Track the best match seen so far on the panel element for use in finalizeComparisonPanel
+  const currentBestPrice = panel.dataset.dnBestPrice ? parseFloat(panel.dataset.dnBestPrice) : Infinity;
+  if (match.price < currentBestPrice) {
+    panel.dataset.dnBestPrice = String(match.price);
+    panel.dataset.dnBestRetailer = match.retailer;
+    panel.dataset.dnBestUrl = match.url || '';
+    panel.dataset.dnBestComparisonId = match.comparison_id || '';
+    panel.dataset.dnSourcePrice = sourcePrice != null ? String(sourcePrice) : '';
+  }
+}
+
+
+// ── Progressive: finalize panel once all retailer calls have settled ──
+
+function finalizeComparisonPanel() {
+  const panel = document.querySelector('.dealnotify-compare-panel');
+  if (!panel) return;
+  const comparePane = panel.querySelector('[data-dn-pane="compare"]');
+  if (!comparePane) return;
+
+  // Remove any remaining shimmer rows and their preceding dividers
+  comparePane.querySelectorAll('.dealnotify-compare-panel__shimmer-row').forEach(shimmer => {
+    const prev = shimmer.previousElementSibling;
+    if (prev && prev.classList.contains('dealnotify-compare-panel__divider')) {
+      prev.remove();
+    }
+    shimmer.remove();
+  });
+
+  // Remove loading hint
+  const hint = comparePane.querySelector('.dealnotify-compare-panel__loading-hint');
+  if (hint) hint.remove();
+
+  const retailerRows = comparePane.querySelectorAll('.dealnotify-compare-panel__retailer-row');
+
+  if (!retailerRows.length) {
+    comparePane.innerHTML = '';
+    const noResults = document.createElement('div');
+    noResults.className = 'dealnotify-compare-panel__no-results';
+    noResults.textContent = 'No better prices found at other retailers.';
+    comparePane.appendChild(noResults);
+    _activateTab(panel, 'track');
     return;
   }
 
-  // Rebuild card with full results
-  if (panel) panel.remove();
+  // Apply "Best price" badge to cheapest row if it beats the source price
+  const sourcePrice = panel.dataset.dnSourcePrice ? parseFloat(panel.dataset.dnSourcePrice) : null;
+  const bestPrice = panel.dataset.dnBestPrice ? parseFloat(panel.dataset.dnBestPrice) : null;
 
-  const sourcePrice = response.source && response.source.price;
-  const sourceRetailer = (response.source && response.source.retailer) || 'amazon';
-  const sourceLabel = DN_RETAILER_LABELS[sourceRetailer] || 'Current price';
-  const outOfStock = response.source && response.source.out_of_stock;
-
-  const newPanel = _createBaseCard();
-
-  _buildTabBar(newPanel, [
-    { id: 'compare', label: '📊 Compare' },
-    { id: 'track',   label: '🔔 Track'   },
-  ], 'compare');
-
-  // ── Compare pane with results ──
-  const comparePane = document.createElement('div');
-  comparePane.className = 'dealnotify-compare-panel__pane dealnotify-compare-panel__pane--active';
-  comparePane.dataset.dnPane = 'compare';
-
-  if (sourcePrice != null) {
-    const sourceRow = document.createElement('div');
-    sourceRow.className = 'dealnotify-compare-panel__source-row';
-    const sourceLabelEl = document.createElement('span');
-    sourceLabelEl.className = 'dealnotify-compare-panel__source-label';
-    sourceLabelEl.textContent = sourceLabel;
-    const sourceAmt = document.createElement('span');
-    sourceAmt.className = 'dealnotify-compare-panel__source-price';
-    sourceAmt.textContent = `$${sourcePrice.toFixed(2)}`;
-    sourceRow.appendChild(sourceLabelEl);
-    sourceRow.appendChild(sourceAmt);
-    comparePane.appendChild(sourceRow);
+  if (bestPrice != null && (sourcePrice == null || bestPrice < sourcePrice)) {
+    // Find the row whose price matches bestPrice and badge it
+    retailerRows.forEach(row => {
+      const priceEl = row.querySelector('.dealnotify-compare-panel__retailer-price');
+      if (!priceEl) return;
+      const p = parseFloat(priceEl.textContent.replace(/[^0-9.]/g, ''));
+      if (Math.abs(p - bestPrice) < 0.01) {
+        const nameLine = row.querySelector('.dealnotify-compare-panel__name-line');
+        if (nameLine && !nameLine.querySelector('.dealnotify-compare-panel__best-badge')) {
+          const badge = document.createElement('span');
+          badge.className = 'dealnotify-compare-panel__best-badge';
+          badge.textContent = 'Best price';
+          nameLine.appendChild(badge);
+        }
+      }
+    });
+  } else if (sourcePrice != null) {
+    // All competitors are more expensive — source is best
+    const sourceRow = comparePane.querySelector('.dealnotify-compare-panel__source-row');
+    const sourceLabel = sourceRow
+      ? (sourceRow.querySelector('.dealnotify-compare-panel__source-label')?.textContent || 'current retailer')
+      : 'current retailer';
+    const note = document.createElement('div');
+    note.className = 'dealnotify-compare-panel__best-note';
+    note.textContent = `You're already at the best price on ${sourceLabel}.`;
+    if (sourceRow && sourceRow.nextElementSibling) {
+      comparePane.insertBefore(note, sourceRow.nextElementSibling);
+    } else {
+      comparePane.prepend(note);
+    }
   }
 
-  matches.forEach((match, idx) => {
-    if (idx > 0) {
-      const divider = document.createElement('div');
-      divider.className = 'dealnotify-compare-panel__divider';
-      comparePane.appendChild(divider);
-    }
+  // Update Track pane with best competitor price (only if cheaper than source)
+  const outOfStock = panel.dataset.dnOutOfStock === '1';
+  const bestForTrack = (bestPrice != null && (sourcePrice == null || bestPrice < sourcePrice))
+    ? {
+        price: bestPrice,
+        retailer: panel.dataset.dnBestRetailer,
+        savings: sourcePrice != null ? parseFloat((sourcePrice - bestPrice).toFixed(2)) : null,
+      }
+    : null;
 
-    const retailerLabel = DN_RETAILER_LABELS[match.retailer] || (match.retailer
-      ? match.retailer.charAt(0).toUpperCase() + match.retailer.slice(1)
-      : 'Retailer');
-    const isCheapest = idx === 0;
-    const savingsAmt = match.savings;
-    const savingsPct = (sourcePrice && match.price != null && sourcePrice > match.price)
-      ? Math.round(((sourcePrice - match.price) / sourcePrice) * 100)
-      : null;
-
-    const row = document.createElement('div');
-    row.className = 'dealnotify-compare-panel__retailer-row';
-
-    const topLine = document.createElement('div');
-    topLine.className = 'dealnotify-compare-panel__row-top';
-
-    const nameLine = document.createElement('div');
-    nameLine.className = 'dealnotify-compare-panel__name-line';
-
-    const nameEl = document.createElement('span');
-    nameEl.className = 'dealnotify-compare-panel__retailer-name';
-    nameEl.textContent = retailerLabel;
-    nameLine.appendChild(nameEl);
-
-    if (isCheapest && matches.length > 1) {
-      const bestBadge = document.createElement('span');
-      bestBadge.className = 'dealnotify-compare-panel__best-badge';
-      bestBadge.textContent = 'Best price';
-      nameLine.appendChild(bestBadge);
-    }
-
-    const priceEl = document.createElement('span');
-    priceEl.className = 'dealnotify-compare-panel__retailer-price';
-    priceEl.textContent = match.price != null ? `$${match.price.toFixed(2)}` : '';
-
-    topLine.appendChild(nameLine);
-    topLine.appendChild(priceEl);
-
-    if (savingsAmt != null && savingsAmt > 0) {
-      const savingsBadge = document.createElement('span');
-      savingsBadge.className = 'dealnotify-compare-panel__savings';
-      savingsBadge.textContent = savingsPct
-        ? `Save $${savingsAmt.toFixed(2)} (${savingsPct}%)`
-        : `Save $${savingsAmt.toFixed(2)}`;
-      topLine.appendChild(savingsBadge);
-    }
-
-    row.appendChild(topLine);
-
-    const cta = document.createElement('button');
-    cta.className = 'dealnotify-compare-panel__cta';
-    cta.textContent = `View at ${retailerLabel} →`;
-    cta.addEventListener('click', async () => {
-      try {
-        const stored = await new Promise(resolve =>
-          chrome.storage.local.get(['dn_token'], resolve)
-        );
-        const token = stored.dn_token;
-        if (token && match.comparison_id) {
-          fetch(`${DN_COMPARE_API_BASE}/api/compare/click`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`,
-            },
-            body: JSON.stringify({ comparison_id: match.comparison_id }),
-          }).catch(() => {});
-        }
-      } catch (_) {}
-      window.open(match.url, '_blank', 'noopener');
-    });
-
-    row.appendChild(cta);
-    comparePane.appendChild(row);
-  });
-
-  newPanel.appendChild(comparePane);
-
-  // ── Track pane — inject best match price so it's visible from the Track tab too ──
-  newPanel.appendChild(_buildTrackPane(!!outOfStock, matches[0]));
-
-  document.body.appendChild(newPanel);
+  const trackPane = panel.querySelector('[data-dn-pane="track"]');
+  if (trackPane) {
+    const newTrack = _buildTrackPane(outOfStock, bestForTrack);
+    const wasActive = trackPane.classList.contains('dealnotify-compare-panel__pane--active');
+    newTrack.dataset.dnPane = 'track';
+    if (wasActive) newTrack.classList.add('dealnotify-compare-panel__pane--active');
+    trackPane.replaceWith(newTrack);
+  }
 }
 
 
