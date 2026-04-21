@@ -100,7 +100,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           const data = await res.json();
           const match = data.comparisons && data.comparisons.find(c =>
             (c.confidence === 'exact' || c.confidence === 'likely') &&
-            c.url && c.price != null
+            c.url
           );
           if (match && tabId) {
             chrome.tabs.sendMessage(tabId, {

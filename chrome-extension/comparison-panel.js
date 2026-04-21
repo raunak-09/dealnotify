@@ -198,13 +198,13 @@ function appendComparisonResult(match, source) {
   if (!comparePane) return;
 
   const sourcePrice = source && typeof source.price === 'number' ? source.price : null;
-  const price = parseFloat(match.price);
-  if (isNaN(price)) return;
+  const price = match.price != null ? parseFloat(match.price) : null;
+  const hasPrice = price != null && !isNaN(price);
   const retailerLabel = DN_RETAILER_LABELS[match.retailer] || (match.retailer
     ? match.retailer.charAt(0).toUpperCase() + match.retailer.slice(1)
     : 'Retailer');
 
-  const savingsAmt = sourcePrice != null && price < sourcePrice
+  const savingsAmt = hasPrice && sourcePrice != null && price < sourcePrice
     ? parseFloat((sourcePrice - price).toFixed(2))
     : (match.savings != null ? match.savings : null);
   const savingsPct = (savingsAmt && sourcePrice)
@@ -228,7 +228,7 @@ function appendComparisonResult(match, source) {
 
   const priceEl = document.createElement('span');
   priceEl.className = 'dealnotify-compare-panel__retailer-price';
-  priceEl.textContent = `$${price.toFixed(2)}`;
+  priceEl.textContent = hasPrice ? `$${price.toFixed(2)}` : 'See price';
 
   topLine.appendChild(nameLine);
   topLine.appendChild(priceEl);
@@ -280,14 +280,16 @@ function appendComparisonResult(match, source) {
     comparePane.insertBefore(row, hint || null);
   }
 
-  // Track the best match seen so far on the panel element for use in finalizeComparisonPanel
-  const currentBestPrice = panel.dataset.dnBestPrice ? parseFloat(panel.dataset.dnBestPrice) : Infinity;
-  if (price < currentBestPrice) {
-    panel.dataset.dnBestPrice = String(price);
-    panel.dataset.dnBestRetailer = match.retailer;
-    panel.dataset.dnBestUrl = match.url || '';
-    panel.dataset.dnBestComparisonId = match.comparison_id || '';
-    panel.dataset.dnSourcePrice = sourcePrice != null ? String(sourcePrice) : '';
+  // Track the best priced match for badge/Track pane (only rows with a known price qualify)
+  if (hasPrice) {
+    const currentBestPrice = panel.dataset.dnBestPrice ? parseFloat(panel.dataset.dnBestPrice) : Infinity;
+    if (price < currentBestPrice) {
+      panel.dataset.dnBestPrice = String(price);
+      panel.dataset.dnBestRetailer = match.retailer;
+      panel.dataset.dnBestUrl = match.url || '';
+      panel.dataset.dnBestComparisonId = match.comparison_id || '';
+      panel.dataset.dnSourcePrice = sourcePrice != null ? String(sourcePrice) : '';
+    }
   }
 }
 
@@ -335,7 +337,7 @@ function finalizeComparisonPanel() {
       const priceEl = row.querySelector('.dealnotify-compare-panel__retailer-price');
       if (!priceEl) return;
       const p = parseFloat(priceEl.textContent.replace(/[^0-9.]/g, ''));
-      if (Math.abs(p - bestPrice) < 0.01) {
+      if (!isNaN(p) && Math.abs(p - bestPrice) < 0.01) {
         const nameLine = row.querySelector('.dealnotify-compare-panel__name-line');
         if (nameLine && !nameLine.querySelector('.dealnotify-compare-panel__best-badge')) {
           const badge = document.createElement('span');
