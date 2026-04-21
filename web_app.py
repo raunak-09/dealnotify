@@ -2945,10 +2945,6 @@ def compare_product():
     if not user:
         return jsonify({'error': 'Token required'}), 401
 
-    ip = request.remote_addr or 'unknown'
-    if rate_limiter.is_rate_limited(f'compare:{user["id"]}', max_requests=30, window_seconds=3600):
-        return jsonify({'error': 'Rate limit exceeded — 30 requests per hour'}), 429
-
     data = request.get_json() or {}
     source_url = data.get('source_url', '')
     if not source_url:
@@ -2998,6 +2994,12 @@ def compare_product():
             comparisons.append(hit)
         else:
             uncached_retailers.append(retailer)
+
+    # Rate-limit only when real API calls are needed; cache hits are always free
+    if uncached_retailers and rate_limiter.is_rate_limited(
+        f'compare:{user["id"]}', max_requests=200, window_seconds=3600
+    ):
+        return jsonify({'error': 'Rate limit exceeded — 200 API requests per hour'}), 429
 
     # Search uncached retailers in parallel
     def _search_retailer(retailer):
