@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "DealNotify - Price Drop & Restock Alerts",
   "version": "1.5.0",
-  "description": "Track prices, get instant alerts when products drop to your target price or come back in stock, and compare prices across Walmart, Target, Best Buy, and Costco.",
+  "description": "Get price drop & restock alerts. Compare prices at Walmart, Target, Best Buy, and Costco from Amazon product pages.",
   "permissions": [
     "activeTab",
     "storage"
