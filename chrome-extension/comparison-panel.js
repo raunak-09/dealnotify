@@ -198,12 +198,14 @@ function appendComparisonResult(match, source) {
   if (!comparePane) return;
 
   const sourcePrice = source && typeof source.price === 'number' ? source.price : null;
+  const price = parseFloat(match.price);
+  if (isNaN(price)) return;
   const retailerLabel = DN_RETAILER_LABELS[match.retailer] || (match.retailer
     ? match.retailer.charAt(0).toUpperCase() + match.retailer.slice(1)
     : 'Retailer');
 
-  const savingsAmt = sourcePrice != null && match.price < sourcePrice
-    ? parseFloat((sourcePrice - match.price).toFixed(2))
+  const savingsAmt = sourcePrice != null && price < sourcePrice
+    ? parseFloat((sourcePrice - price).toFixed(2))
     : (match.savings != null ? match.savings : null);
   const savingsPct = (savingsAmt && sourcePrice)
     ? Math.round((savingsAmt / sourcePrice) * 100)
@@ -226,7 +228,7 @@ function appendComparisonResult(match, source) {
 
   const priceEl = document.createElement('span');
   priceEl.className = 'dealnotify-compare-panel__retailer-price';
-  priceEl.textContent = `$${match.price.toFixed(2)}`;
+  priceEl.textContent = `$${price.toFixed(2)}`;
 
   topLine.appendChild(nameLine);
   topLine.appendChild(priceEl);
@@ -245,24 +247,16 @@ function appendComparisonResult(match, source) {
   const cta = document.createElement('button');
   cta.className = 'dealnotify-compare-panel__cta';
   cta.textContent = `View at ${retailerLabel} →`;
-  cta.addEventListener('click', async () => {
-    try {
-      const stored = await new Promise(resolve =>
-        chrome.storage.local.get(['dn_token'], resolve)
-      );
-      const token = stored.dn_token;
-      if (token && match.comparison_id) {
-        fetch(`${DN_COMPARE_API_BASE}/api/compare/click`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-          body: JSON.stringify({ comparison_id: match.comparison_id }),
-        }).catch(() => {});
-      }
-    } catch (_) {}
+  cta.addEventListener('click', () => {
+    // Open first to preserve user gesture (window.open must be synchronous)
     window.open(match.url, '_blank', 'noopener');
+    // Track click through background worker (keeps token out of content-script memory)
+    if (match.comparison_id) {
+      chrome.runtime.sendMessage({
+        action: 'TRACK_COMPARE_CLICK',
+        comparison_id: match.comparison_id,
+      }).catch(() => {});
+    }
   });
 
   row.appendChild(cta);
@@ -288,8 +282,8 @@ function appendComparisonResult(match, source) {
 
   // Track the best match seen so far on the panel element for use in finalizeComparisonPanel
   const currentBestPrice = panel.dataset.dnBestPrice ? parseFloat(panel.dataset.dnBestPrice) : Infinity;
-  if (match.price < currentBestPrice) {
-    panel.dataset.dnBestPrice = String(match.price);
+  if (price < currentBestPrice) {
+    panel.dataset.dnBestPrice = String(price);
     panel.dataset.dnBestRetailer = match.retailer;
     panel.dataset.dnBestUrl = match.url || '';
     panel.dataset.dnBestComparisonId = match.comparison_id || '';

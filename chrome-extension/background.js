@@ -120,6 +120,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
     return true; // keep message port open until sendResponse is called
   }
+
+  if (message.action === 'TRACK_COMPARE_CLICK') {
+    chrome.storage.local.get(['dn_token'], async (stored) => {
+      const token = stored.dn_token;
+      if (!token || !message.comparison_id) return;
+      try {
+        await fetch(`${API_BASE}/api/compare/click`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({ comparison_id: message.comparison_id }),
+        });
+      } catch (e) {}
+    });
+    return; // no sendResponse needed
+  }
 });
 
 
