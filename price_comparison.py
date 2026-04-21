@@ -314,10 +314,14 @@ def _search_target(identity: dict) -> list:
         return []
 
     if not markdown and not html:
+        logging.warning("Target search: Firecrawl returned empty content (blocked or JS-only page)")
         return []
 
+    logging.warning("Target search: markdown_len=%d preview=%r", len(markdown), markdown[:300])
     try:
-        return _parse_target_results(markdown, html)
+        results = _parse_target_results(markdown, html)
+        logging.warning("Target search: found %d candidates", len(results))
+        return results
     except Exception as exc:
         logging.warning("Failed to parse Target search results: %s", exc)
         return []
@@ -382,10 +386,14 @@ def _search_bestbuy(identity: dict) -> list:
         return []
 
     if not markdown and not html:
+        logging.warning("Best Buy search: Firecrawl returned empty content (blocked or JS-only page)")
         return []
 
+    logging.warning("Best Buy search: markdown_len=%d preview=%r", len(markdown), markdown[:300])
     try:
-        return _parse_bestbuy_results(markdown, html)
+        results = _parse_bestbuy_results(markdown, html)
+        logging.warning("Best Buy search: found %d candidates", len(results))
+        return results
     except Exception as exc:
         logging.warning("Failed to parse Best Buy search results: %s", exc)
         return []
@@ -450,10 +458,14 @@ def _search_costco(identity: dict) -> list:
         return []
 
     if not markdown and not html:
+        logging.warning("Costco search: Firecrawl returned empty content (blocked or JS-only page)")
         return []
 
+    logging.warning("Costco search: markdown_len=%d preview=%r", len(markdown), markdown[:300])
     try:
-        return _parse_costco_results(markdown, html)
+        results = _parse_costco_results(markdown, html)
+        logging.warning("Costco search: found %d candidates", len(results))
+        return results
     except Exception as exc:
         logging.warning("Failed to parse Costco search results: %s", exc)
         return []
