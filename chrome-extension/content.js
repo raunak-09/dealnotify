@@ -171,124 +171,9 @@
   });
 
 
-  // ── Auto-inject floating widget when a trackable product is detected ──
+  // ── Track-only card for non-PDP pages (uses showTrackOnlyCard from comparison-panel.js) ──
 
-  const WIDGET_ID = 'dn-floating-widget';
-
-  function injectWidget(info) {
-    // Don't inject twice
-    if (document.getElementById(WIDGET_ID)) return;
-
-    const isRestock = info.outOfStock;
-    const priceText = info.price ? info.price : '';
-    const shortTitle = info.title.length > 48
-      ? info.title.substring(0, 45) + '…'
-      : info.title;
-
-    const label = isRestock
-      ? '📦 Get restock alert'
-      : '🔔 Track price drop';
-
-    const subText = isRestock
-      ? 'Item is out of stock'
-      : (priceText ? `Current price: ${priceText}` : 'Price tracking available');
-
-    // Use Shadow DOM to isolate styles from the host page
-    const host = document.createElement('div');
-    host.id = WIDGET_ID;
-    host.style.cssText = [
-      'position: fixed',
-      'bottom: 24px',
-      'right: 24px',
-      'z-index: 2147483647',
-      'font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
-    ].join(';');
-
-    const shadow = host.attachShadow({ mode: 'closed' });
-
-    shadow.innerHTML = `
-      <style>
-        .dn-widget {
-          background: #1a1a2e;
-          border: 1px solid rgba(91,103,248,0.5);
-          border-radius: 14px;
-          padding: 12px 14px;
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          box-shadow: 0 4px 24px rgba(0,0,0,0.35);
-          cursor: pointer;
-          max-width: 280px;
-          transition: transform 0.15s ease, box-shadow 0.15s ease;
-          text-decoration: none;
-          user-select: none;
-        }
-        .dn-widget:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 6px 28px rgba(91,103,248,0.4);
-        }
-        .dn-bell {
-          font-size: 22px;
-          flex-shrink: 0;
-          line-height: 1;
-        }
-        .dn-text {
-          display: flex;
-          flex-direction: column;
-          gap: 1px;
-          min-width: 0;
-        }
-        .dn-label {
-          color: #ffffff;
-          font-size: 13px;
-          font-weight: 600;
-          white-space: nowrap;
-        }
-        .dn-sub {
-          color: rgba(255,255,255,0.55);
-          font-size: 11px;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-        .dn-close {
-          margin-left: auto;
-          color: rgba(255,255,255,0.35);
-          font-size: 16px;
-          padding: 2px 4px;
-          cursor: pointer;
-          flex-shrink: 0;
-          border-radius: 4px;
-          line-height: 1;
-        }
-        .dn-close:hover { color: rgba(255,255,255,0.7); }
-      </style>
-      <div class="dn-widget" id="dn-btn">
-        <div class="dn-bell">${isRestock ? '📦' : '🔔'}</div>
-        <div class="dn-text">
-          <div class="dn-label">${label}</div>
-          <div class="dn-sub" title="${shortTitle}">${subText}</div>
-        </div>
-        <div class="dn-close" id="dn-close" title="Dismiss">✕</div>
-      </div>
-    `;
-
-    // Clicking the widget opens the extension popup
-    shadow.getElementById('dn-btn').addEventListener('click', (e) => {
-      if (e.target.id === 'dn-close') return;
-      chrome.runtime.sendMessage({ action: 'openPopup' });
-    });
-
-    // Dismiss button removes the widget
-    shadow.getElementById('dn-close').addEventListener('click', (e) => {
-      e.stopPropagation();
-      host.remove();
-    });
-
-    document.body.appendChild(host);
-  }
-
-  function tryDetectAndInject() {
+  function tryShowTrackCard() {
     const domain = getStoreDomain();
     if (!domain || !extractors[domain]) return;
 
@@ -298,22 +183,16 @@
       const price = cleanPrice(info.price);
       const outOfStock = !!info.outOfStock;
 
-      // Only show widget if we have at minimum a title + (price OR out-of-stock signal)
       if (title && (price || outOfStock)) {
-        injectWidget({ title, price, outOfStock });
+        showTrackOnlyCard(outOfStock);
       }
     } catch (e) {
       // Silently ignore extraction errors
     }
   }
 
-  // Run after page is fully loaded (content scripts run at document_idle)
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', tryDetectAndInject);
-  } else {
-    // Small delay to let JS-rendered prices load (e.g. Amazon dynamic content)
-    setTimeout(tryDetectAndInject, 800);
-  }
+  // After JS-rendered content loads, show the track card if compare hasn't shown one
+  setTimeout(tryShowTrackCard, 800);
 
   // ── Multi-Retailer PDP Compare Detection ──
 
@@ -346,12 +225,10 @@
     _compareDispatched = false;
     const panel = document.querySelector('.dealnotify-compare-panel');
     if (panel) panel.remove();
-    const widget = document.getElementById(WIDGET_ID);
-    if (widget) widget.remove();
 
     // Delay to let the SPA render new product content before extracting
     setTimeout(detectAndCompare, 1200);
-    setTimeout(tryDetectAndInject, 800);
+    setTimeout(tryShowTrackCard, 800);
   }
 
   // Poll for URL changes (React SPAs don't fire popstate on pushState)
@@ -370,15 +247,17 @@
     if (!pdpDetector || !sourceRetailer) return;
     if (!pdpDetector(window.location.pathname)) return;
 
-    // Use existing extractors to get title/price for this retailer
-    let title, price, asin;
+    // Use existing extractors to get title/price/outOfStock for this retailer
+    let title, price, outOfStock, asin;
     try {
       const info = extractors[domain]();
       title = sanitizeText(info.title || document.title, MAX_TITLE_LENGTH);
       price = cleanPrice(info.price) || null;
+      outOfStock = !!info.outOfStock;
     } catch (e) {
       title = sanitizeText(document.title, MAX_TITLE_LENGTH);
       price = null;
+      outOfStock = false;
     }
     if (!title) return;
 
@@ -391,7 +270,7 @@
     _compareDispatched = true;
 
     const priceNum = price ? parseFloat(price.replace(/[^0-9.]/g, '')) : null;
-    showComparisonLoadingPanel(isNaN(priceNum) ? null : priceNum, sourceRetailer);
+    showComparisonLoadingPanel(isNaN(priceNum) ? null : priceNum, sourceRetailer, outOfStock);
 
     chrome.runtime.sendMessage({
       action: 'COMPARE_PRODUCT',
