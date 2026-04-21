@@ -167,8 +167,19 @@ def add_security_headers(response):
     response.headers['X-XSS-Protection'] = '1; mode=block'
 
     # ── CORS for Chrome Extension ──
+    # Content scripts send Origin of the host page (e.g. amazon.com), not the extension ID.
+    # Allow extension IDs, dealnotify.co, and all retailer/Amazon origins the extension runs on.
     origin = request.headers.get('Origin', '')
-    if origin.startswith('chrome-extension://') or origin.endswith('dealnotify.co'):
+    _cors_allowed = (
+        origin.startswith('chrome-extension://')
+        or origin.endswith('dealnotify.co')
+        or origin.endswith('amazon.com')
+        or origin.endswith('walmart.com')
+        or origin.endswith('target.com')
+        or origin.endswith('bestbuy.com')
+        or origin.endswith('costco.com')
+    )
+    if _cors_allowed:
         response.headers['Access-Control-Allow-Origin'] = origin
         response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Admin-Key, X-Admin-Password'
         response.headers['Access-Control-Allow-Methods'] = 'GET, POST, DELETE, OPTIONS'
