@@ -318,12 +318,13 @@ function finalizeComparisonPanel() {
   const retailerRows = comparePane.querySelectorAll('.dealnotify-compare-panel__retailer-row');
 
   if (!retailerRows.length) {
-    comparePane.innerHTML = '';
+    // Remove shimmers/hint already done above — just show a clear message on the Compare tab.
+    // Don't switch to Track tab: the user came here for compare and should know it ran but
+    // found nothing, not be confused by a silent redirect.
     const noResults = document.createElement('div');
     noResults.className = 'dealnotify-compare-panel__no-results';
-    noResults.textContent = 'No better prices found at other retailers.';
+    noResults.textContent = 'This product wasn\'t found at Amazon, Walmart, Best Buy, or Costco.';
     comparePane.appendChild(noResults);
-    _activateTab(panel, 'track');
     return;
   }
 
