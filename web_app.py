@@ -2976,7 +2976,7 @@ def compare_product():
         comparisons.append(entry)
 
     return jsonify({
-        'source': {'asin': asin, 'url': source_url, 'title': source_title, 'price': source_price},
+        'source': {'retailer': source_retailer, 'asin': asin, 'url': source_url, 'title': source_title, 'price': source_price},
         'comparisons': comparisons,
     }), 200
 

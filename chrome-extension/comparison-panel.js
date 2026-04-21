@@ -6,13 +6,14 @@
 const DN_COMPARE_API_BASE = 'https://www.dealnotify.co';
 
 const DN_RETAILER_LABELS = {
+  amazon:  'Amazon',
   walmart: 'Walmart',
-  target: 'Target',
+  target:  'Target',
   bestbuy: 'Best Buy',
-  costco: 'Costco',
+  costco:  'Costco',
 };
 
-function showComparisonLoadingPanel(sourcePrice) {
+function showComparisonLoadingPanel(sourcePrice, sourceRetailer) {
   const existing = document.querySelector('.dealnotify-compare-panel');
   if (existing) existing.remove();
 
@@ -34,13 +35,13 @@ function showComparisonLoadingPanel(sourcePrice) {
   header.appendChild(closeBtn);
   panel.appendChild(header);
 
-  // Amazon source row (real price if available)
+  // Source retailer price row (real price if available)
   if (sourcePrice != null) {
     const sourceRow = document.createElement('div');
     sourceRow.className = 'dealnotify-compare-panel__source-row';
     const sourceLabel = document.createElement('span');
     sourceLabel.className = 'dealnotify-compare-panel__source-label';
-    sourceLabel.textContent = 'Amazon';
+    sourceLabel.textContent = DN_RETAILER_LABELS[sourceRetailer] || 'Current price';
     const sourceAmt = document.createElement('span');
     sourceAmt.className = 'dealnotify-compare-panel__source-price';
     sourceAmt.textContent = `$${sourcePrice.toFixed(2)}`;
@@ -101,6 +102,8 @@ function renderComparisonPanel(response) {
   if (existing) existing.remove();
 
   const sourcePrice = response.source && response.source.price;
+  const sourceRetailer = (response.source && response.source.retailer) || 'amazon';
+  const sourceLabel = DN_RETAILER_LABELS[sourceRetailer] || 'Current price';
 
   // ── Panel container ──
   const panel = document.createElement('div');
@@ -124,20 +127,20 @@ function renderComparisonPanel(response) {
   header.appendChild(closeBtn);
   panel.appendChild(header);
 
-  // ── Amazon source price row ──
+  // ── Source retailer price row ──
   if (sourcePrice != null) {
     const sourceRow = document.createElement('div');
     sourceRow.className = 'dealnotify-compare-panel__source-row';
 
-    const sourceLabel = document.createElement('span');
-    sourceLabel.className = 'dealnotify-compare-panel__source-label';
-    sourceLabel.textContent = 'Amazon';
+    const sourceLabelEl = document.createElement('span');
+    sourceLabelEl.className = 'dealnotify-compare-panel__source-label';
+    sourceLabelEl.textContent = sourceLabel;
 
     const sourceAmt = document.createElement('span');
     sourceAmt.className = 'dealnotify-compare-panel__source-price';
     sourceAmt.textContent = `$${sourcePrice.toFixed(2)}`;
 
-    sourceRow.appendChild(sourceLabel);
+    sourceRow.appendChild(sourceLabelEl);
     sourceRow.appendChild(sourceAmt);
     panel.appendChild(sourceRow);
   }

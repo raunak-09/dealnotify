@@ -368,7 +368,7 @@
     _compareDispatched = true;
 
     const priceNum = price ? parseFloat(price.replace(/[^0-9.]/g, '')) : null;
-    showComparisonLoadingPanel(isNaN(priceNum) ? null : priceNum);
+    showComparisonLoadingPanel(isNaN(priceNum) ? null : priceNum, sourceRetailer);
 
     chrome.runtime.sendMessage({
       action: 'COMPARE_PRODUCT',

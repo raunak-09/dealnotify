@@ -72,7 +72,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (!token) { sendResponse(null); return; }
 
       // Compare against all supported retailers except the one we're currently on
-      const ALL_COMPARE_RETAILERS = ['walmart', 'target', 'bestbuy', 'costco'];
+      const ALL_COMPARE_RETAILERS = ['amazon', 'walmart', 'target', 'bestbuy', 'costco'];
       const sourceRetailer = message.source_retailer || 'amazon';
       const targetRetailers = ALL_COMPARE_RETAILERS.filter(r => r !== sourceRetailer);
 
