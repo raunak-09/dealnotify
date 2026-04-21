@@ -73,7 +73,7 @@ function _activateTab(panel, tabId) {
     p.classList.toggle('dealnotify-compare-panel__pane--active', p.dataset.dnPane === tabId));
 }
 
-function _buildTrackPane(outOfStock) {
+function _buildTrackPane(outOfStock, bestMatch) {
   const pane = document.createElement('div');
   pane.className = 'dealnotify-compare-panel__pane';
   pane.dataset.dnPane = 'track';
@@ -81,11 +81,29 @@ function _buildTrackPane(outOfStock) {
   const content = document.createElement('div');
   content.className = 'dealnotify-compare-panel__track-content';
 
+  // Best competitor price callout (shown when compare results exist)
+  if (bestMatch && bestMatch.price != null) {
+    const bestLabel = DN_RETAILER_LABELS[bestMatch.retailer] || bestMatch.retailer;
+    const priceCallout = document.createElement('div');
+    priceCallout.className = 'dealnotify-compare-panel__track-best-price';
+    priceCallout.innerHTML =
+      `<span class="dealnotify-compare-panel__track-best-label">Best price found</span>` +
+      `<span class="dealnotify-compare-panel__track-best-retailer">${bestLabel}</span>` +
+      `<span class="dealnotify-compare-panel__track-best-amount">$${bestMatch.price.toFixed(2)}</span>`;
+    if (bestMatch.savings && bestMatch.savings > 0) {
+      const badge = document.createElement('span');
+      badge.className = 'dealnotify-compare-panel__savings';
+      badge.textContent = `Save $${bestMatch.savings.toFixed(2)}`;
+      priceCallout.appendChild(badge);
+    }
+    content.appendChild(priceCallout);
+  }
+
   const msg = document.createElement('p');
   msg.className = 'dealnotify-compare-panel__track-msg';
   msg.textContent = outOfStock
     ? 'This item is out of stock. Get notified when it\'s back.'
-    : 'Get notified when the price drops.';
+    : 'Get notified when the price drops further.';
 
   const cta = document.createElement('button');
   cta.className = 'dealnotify-compare-panel__track-cta';
@@ -316,8 +334,8 @@ function renderComparisonPanel(response) {
 
   newPanel.appendChild(comparePane);
 
-  // ── Track pane ──
-  newPanel.appendChild(_buildTrackPane(!!outOfStock));
+  // ── Track pane — inject best match price so it's visible from the Track tab too ──
+  newPanel.appendChild(_buildTrackPane(!!outOfStock, matches[0]));
 
   document.body.appendChild(newPanel);
 }

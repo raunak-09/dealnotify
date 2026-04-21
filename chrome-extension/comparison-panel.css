@@ -246,8 +246,44 @@
 
 /* ── Track tab content ── */
 .dealnotify-compare-panel__track-content {
-  padding: 18px 14px 16px;
+  padding: 14px 14px 16px;
   text-align: center;
+}
+
+/* Best competitor price callout */
+.dealnotify-compare-panel__track-best-price {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: #f7f8ff;
+  border: 1px solid #eaebff;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+
+.dealnotify-compare-panel__track-best-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: #888;
+}
+
+.dealnotify-compare-panel__track-best-retailer {
+  font-size: 12px;
+  font-weight: 700;
+  color: #5c5c7a;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.dealnotify-compare-panel__track-best-amount {
+  font-size: 22px;
+  font-weight: 800;
+  color: #1a1a2e;
+  line-height: 1.1;
 }
 
 .dealnotify-compare-panel__track-msg {
