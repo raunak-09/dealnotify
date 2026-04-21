@@ -315,38 +315,66 @@
     setTimeout(tryDetectAndInject, 800);
   }
 
-  // ── Amazon PDP Compare Detection ──
+  // ── Multi-Retailer PDP Compare Detection ──
+
+  // Maps domain → function that returns true when the current URL is a product page
+  const PDP_DETECTORS = {
+    'amazon.com':  (path) => /\/(?:dp|gp\/product)\/[A-Z0-9]{10}/.test(path),
+    'walmart.com': (path) => /\/ip\//.test(path),
+    'target.com':  (path) => /\/p\/[^/]/.test(path),
+    'bestbuy.com': (path) => /\/site\/.+\.p(\?|\/|$)/.test(path + '/'),
+    'costco.com':  (path) => /\.product\./.test(path),
+  };
+
+  const DOMAIN_TO_RETAILER = {
+    'amazon.com':  'amazon',
+    'walmart.com': 'walmart',
+    'target.com':  'target',
+    'bestbuy.com': 'bestbuy',
+    'costco.com':  'costco',
+  };
 
   let _compareDispatched = false;
 
-  function detectAndCompareAmazonPDP() {
+  function detectAndCompare() {
     if (_compareDispatched) return;
-    const hostname = window.location.hostname;
-    if (!hostname.includes('amazon.com')) return;
 
-    const asinMatch = window.location.pathname.match(/\/(?:dp|gp\/product)\/([A-Z0-9]{10})(?:[/?]|$)/);
-    if (!asinMatch) return;
-    const asin = asinMatch[1];
+    const domain = getStoreDomain();
+    if (!domain) return;
 
-    const title = sanitizeText(
-      document.getElementById('productTitle')?.textContent || document.title,
-      MAX_TITLE_LENGTH
-    );
-    const priceRaw = document.querySelector('.a-price .a-offscreen')?.textContent
-      || document.querySelector('#priceblock_ourprice')?.textContent
-      || '';
-    const price = cleanPrice(priceRaw) || null;
+    const pdpDetector = PDP_DETECTORS[domain];
+    const sourceRetailer = DOMAIN_TO_RETAILER[domain];
+    if (!pdpDetector || !sourceRetailer) return;
+    if (!pdpDetector(window.location.pathname)) return;
+
+    // Use existing extractors to get title/price for this retailer
+    let title, price, asin;
+    try {
+      const info = extractors[domain]();
+      title = sanitizeText(info.title || document.title, MAX_TITLE_LENGTH);
+      price = cleanPrice(info.price) || null;
+    } catch (e) {
+      title = sanitizeText(document.title, MAX_TITLE_LENGTH);
+      price = null;
+    }
+    if (!title) return;
+
+    // For Amazon PDPs also extract the ASIN (used as stable cache key)
+    if (domain === 'amazon.com') {
+      const m = window.location.pathname.match(/\/(?:dp|gp\/product)\/([A-Z0-9]{10})(?:[/?]|$)/);
+      asin = m ? m[1] : null;
+    }
 
     _compareDispatched = true;
 
-    // Show shimmer loading panel immediately while the API runs
     const priceNum = price ? parseFloat(price.replace(/[^0-9.]/g, '')) : null;
     showComparisonLoadingPanel(isNaN(priceNum) ? null : priceNum);
 
     chrome.runtime.sendMessage({
       action: 'COMPARE_PRODUCT',
-      source_url: window.location.href,
-      asin,
+      source_url:     window.location.href,
+      source_retailer: sourceRetailer,
+      asin:           asin || null,
       title,
       price,
     }, (response) => {
@@ -364,6 +392,6 @@
   }
 
   // Fire at document_idle — no artificial delay for compare (widget uses its own 800ms)
-  detectAndCompareAmazonPDP();
+  detectAndCompare();
 
 })();

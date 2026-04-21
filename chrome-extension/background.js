@@ -71,6 +71,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const token = stored.dn_token;
       if (!token) { sendResponse(null); return; }
 
+      // Compare against all supported retailers except the one we're currently on
+      const ALL_COMPARE_RETAILERS = ['walmart', 'target', 'bestbuy', 'costco'];
+      const sourceRetailer = message.source_retailer || 'amazon';
+      const targetRetailers = ALL_COMPARE_RETAILERS.filter(r => r !== sourceRetailer);
+
       try {
         const res = await fetch(`${API_BASE}/api/compare`, {
           method: 'POST',
@@ -79,11 +84,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             'Authorization': `Bearer ${token}`,
           },
           body: JSON.stringify({
-            source_url: message.source_url,
-            asin: message.asin,
-            title: message.title,
-            price: message.price,
-            target_retailers: ['walmart', 'target', 'bestbuy', 'costco'],
+            source_url:      message.source_url,
+            source_retailer: sourceRetailer,
+            asin:            message.asin,
+            title:           message.title,
+            price:           message.price,
+            target_retailers: targetRetailers,
           }),
         });
         if (!res.ok) { sendResponse(null); return; }

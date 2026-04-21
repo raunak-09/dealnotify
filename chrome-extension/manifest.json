@@ -9,7 +9,11 @@
   ],
   "host_permissions": [
     "https://www.dealnotify.co/*",
-    "https://*.amazon.com/*"
+    "https://*.amazon.com/*",
+    "https://*.walmart.com/*",
+    "https://*.target.com/*",
+    "https://*.bestbuy.com/*",
+    "https://*.costco.com/*"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -26,22 +30,18 @@
   },
   "content_scripts": [
     {
-      "matches": ["*://*.amazon.com/*"],
-      "js": ["comparison-panel.js", "content.js"],
-      "css": ["comparison-panel.css"],
-      "run_at": "document_idle"
-    },
-    {
       "matches": [
+        "*://*.amazon.com/*",
         "*://*.amazon.co.uk/*",
         "*://*.amazon.ca/*",
         "*://*.walmart.com/*",
         "*://*.bestbuy.com/*",
         "*://*.target.com/*",
-        "*://*.ebay.com/*",
-        "*://*.costco.com/*"
+        "*://*.costco.com/*",
+        "*://*.ebay.com/*"
       ],
-      "js": ["content.js"],
+      "js": ["comparison-panel.js", "content.js"],
+      "css": ["comparison-panel.css"],
       "run_at": "document_idle"
     }
   ],

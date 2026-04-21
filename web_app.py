@@ -2885,9 +2885,10 @@ def compare_product():
 
     data = request.get_json() or {}
     source_url = data.get('source_url', '')
-    if not source_url or 'amazon.com' not in source_url:
-        return jsonify({'error': 'source_url must be an amazon.com URL'}), 400
+    if not source_url:
+        return jsonify({'error': 'source_url required'}), 400
 
+    source_retailer = data.get('source_retailer', 'amazon')
     asin = data.get('asin') or _extract_asin_from_url(source_url)
     source_title = data.get('title')
     _raw_price = data.get('price')
@@ -2914,7 +2915,7 @@ def compare_product():
     # Separate cached vs uncached retailers
     uncached_retailers = []
     for retailer in target_retailers:
-        cached = None if force_refresh else _get_cached_comparison('amazon', source_identifier, retailer)
+        cached = None if force_refresh else _get_cached_comparison(source_retailer, source_identifier, retailer)
         if cached:
             hit = {
                 'retailer': retailer,
@@ -2935,7 +2936,7 @@ def compare_product():
     # Search uncached retailers in parallel
     def _search_retailer(retailer):
         try:
-            return retailer, find_comparable_product(source_url, 'amazon', retailer, identity=caller_identity)
+            return retailer, find_comparable_product(source_url, source_retailer, retailer, identity=caller_identity)
         except Exception as e:
             print(f"❌ /api/compare error for {retailer}: {e}")
             return retailer, None
@@ -2951,7 +2952,7 @@ def compare_product():
     for retailer in uncached_retailers:
         match = retailer_matches.get(retailer)
         comparison_id = _save_comparison(
-            'amazon', source_identifier, source_url, source_title, source_price,
+            source_retailer, source_identifier, source_url, source_title, source_price,
             retailer, match,
         )
 
