@@ -314,7 +314,7 @@ def _search_target(identity: dict) -> list:
 
     try:
         fc, api_version = _init_firecrawl(api_key)
-        markdown, html = _do_scrape(fc, api_version, url, formats=['markdown'], wait_for_ms=3000)
+        markdown, html = _do_scrape(fc, api_version, url, formats=['markdown'], wait_for_ms=2000)
     except Exception as exc:
         logging.warning("Firecrawl Target search failed: %s", exc)
         return []
@@ -406,7 +406,7 @@ def _search_bestbuy(identity: dict) -> list:
 
     try:
         fc, api_version = _init_firecrawl(api_key)
-        markdown, html = _do_scrape(fc, api_version, url, formats=['markdown', 'html'], wait_for_ms=5000)
+        markdown, html = _do_scrape(fc, api_version, url, formats=['markdown', 'html'], wait_for_ms=3000)
     except Exception as exc:
         logging.warning("Firecrawl Best Buy search failed: %s", exc)
         return []
@@ -575,6 +575,12 @@ def _score_with_keywords(source_identity: dict, candidates: list[dict], retailer
 
 
 def _score_matches(source_identity: dict, candidates: list[dict], retailer: str = "") -> dict:
+    # Keyword scorer is instant — try it first to avoid LLM latency on clear matches
+    kw_result = _score_with_keywords(source_identity, candidates, retailer=retailer)
+    if kw_result.get("confidence") in ("exact", "likely"):
+        return kw_result
+
+    # Keyword score is ambiguous — call LLM for better accuracy on hard cases
     provider = os.environ.get("MATCHING_LLM_PROVIDER", "gemini").lower()
     if provider == "gemini":
         result = _score_with_gemini(source_identity, candidates)
@@ -583,16 +589,15 @@ def _score_matches(source_identity: dict, candidates: list[dict], retailer: str 
     elif provider == "groq":
         result = _score_with_groq(source_identity, candidates)
     else:
-        print(f"⚠️ Unknown MATCHING_LLM_PROVIDER={provider} (non-fatal), falling back to gemini")
+        logging.warning("Unknown MATCHING_LLM_PROVIDER=%s — falling back to gemini", provider)
         result = _score_with_gemini(source_identity, candidates)
 
-    # If LLM returned a scoring error (rate limit, quota exhausted, etc.), use keyword fallback
+    # If LLM errored (rate limit, quota, etc.), use keyword result as-is
     if result.get("reasoning") in ("No API key configured",) or \
             str(result.get("reasoning", "")).startswith("Gemini error:"):
-        print(f"⚠️ LLM scoring unavailable ({result.get('reasoning')}) — using keyword fallback")
-        llm_error = result.get("reasoning")
-        result = _score_with_keywords(source_identity, candidates, retailer=retailer)
-        result["llm_error"] = llm_error
+        logging.warning("LLM scoring unavailable (%s) — using keyword fallback", result.get('reasoning'))
+        kw_result["llm_error"] = result.get("reasoning")
+        return kw_result
 
     return result
 
