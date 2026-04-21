@@ -326,7 +326,8 @@ def _search_target(identity: dict) -> list:
     logging.warning("Target search: markdown_len=%d preview=%r", len(markdown), markdown[:300])
     try:
         results = _parse_target_results(markdown, html)
-        logging.warning("Target search: found %d candidates", len(results))
+        logging.warning("Target search: found %d candidates: %s", len(results),
+                        [(c['title'][:50], c['price']) for c in results[:3]])
         return results
     except Exception as exc:
         logging.warning("Failed to parse Target search results: %s", exc)
@@ -340,21 +341,18 @@ def _parse_bestbuy_results(markdown: str, html: str) -> list:
     candidates = []
     seen_urls: set = set()
 
-    link_pattern = re.compile(
+    md_link_pattern = re.compile(
         r'\[([^\]]{10,200})\]\((https://(?:www\.)?bestbuy\.com/site/[^\s\)]+\.p[^\s\)]*)\)'
     )
-
-    for m in link_pattern.finditer(markdown):
+    for m in md_link_pattern.finditer(markdown):
         if len(candidates) >= 5:
             break
-
         title = m.group(1).strip()
         raw_url = m.group(2).strip()
         clean_url = re.sub(r'\?.*$', '', raw_url)
         if clean_url in seen_urls:
             continue
         seen_urls.add(clean_url)
-
         price = None
         end = min(len(markdown), m.end() + 300)
         price_m = re.search(r'\$\s*([\d,]+\.\d{2})', markdown[m.end():end])
@@ -363,8 +361,30 @@ def _parse_bestbuy_results(markdown: str, html: str) -> list:
                 price = float(price_m.group(1).replace(",", ""))
             except ValueError:
                 pass
-
         candidates.append({"title": title, "price": price, "url": clean_url, "image_url": None})
+
+    # Also try HTML if markdown yielded nothing — Best Buy SPAs sometimes render product
+    # links in HTML even when JS template literals are unresolved in the markdown output
+    if not candidates and html:
+        html_link_pattern = re.compile(
+            r'<a[^>]+href=["\']([^"\']*bestbuy\.com/site/[^"\']*\.p\b[^"\']*)["\'][^>]*>'
+            r'([^<]{10,200})</a>',
+            re.IGNORECASE,
+        )
+        for m in html_link_pattern.finditer(html):
+            if len(candidates) >= 5:
+                break
+            raw_url = m.group(1).strip()
+            title = re.sub(r'<[^>]+>', '', m.group(2)).strip()
+            if not title:
+                continue
+            clean_url = re.sub(r'\?.*$', '', raw_url)
+            if not clean_url.startswith('http'):
+                clean_url = 'https://www.bestbuy.com' + clean_url
+            if clean_url in seen_urls:
+                continue
+            seen_urls.add(clean_url)
+            candidates.append({"title": title, "price": None, "url": clean_url, "image_url": None})
 
     return candidates
 
@@ -386,7 +406,7 @@ def _search_bestbuy(identity: dict) -> list:
 
     try:
         fc, api_version = _init_firecrawl(api_key)
-        markdown, html = _do_scrape(fc, api_version, url, formats=['markdown'], wait_for_ms=3000)
+        markdown, html = _do_scrape(fc, api_version, url, formats=['markdown', 'html'], wait_for_ms=5000)
     except Exception as exc:
         logging.warning("Firecrawl Best Buy search failed: %s", exc)
         return []
@@ -395,10 +415,12 @@ def _search_bestbuy(identity: dict) -> list:
         logging.warning("Best Buy search: Firecrawl returned empty content (blocked or JS-only page)")
         return []
 
-    logging.warning("Best Buy search: markdown_len=%d preview=%r", len(markdown), markdown[:300])
+    logging.warning("Best Buy search: markdown_len=%d html_len=%d preview=%r",
+                    len(markdown), len(html), markdown[:300])
     try:
         results = _parse_bestbuy_results(markdown, html)
-        logging.warning("Best Buy search: found %d candidates", len(results))
+        logging.warning("Best Buy search: found %d candidates: %s", len(results),
+                        [(c['title'][:50], c['price']) for c in results[:3]])
         return results
     except Exception as exc:
         logging.warning("Failed to parse Best Buy search results: %s", exc)
@@ -498,7 +520,7 @@ Respond with ONLY valid JSON, no prose:
 """
 
 
-def _score_with_keywords(source_identity: dict, candidates: list[dict]) -> dict:
+def _score_with_keywords(source_identity: dict, candidates: list[dict], retailer: str = "") -> dict:
     """Fallback scorer using token-overlap when LLM APIs are unavailable."""
     _stopwords = {'the', 'a', 'an', 'and', 'or', 'with', 'for', 'in', 'on', 'at', 'of',
                   'to', 'by', 'from', 'is', 'it', 'as', 'pack', 'count', 'oz'}
@@ -538,8 +560,13 @@ def _score_with_keywords(source_identity: dict, candidates: list[dict]) -> dict:
     elif best_score >= 0.35:
         confidence = "possible"
     else:
+        logging.warning("%s keyword fallback: no match (best_score=%.2f, source_words=%s)",
+                        retailer or "?", best_score, source_words)
         return {"confidence": "none", "best_index": None, "reasoning": "Low keyword overlap"}
 
+    logging.warning("%s keyword fallback: confidence=%s best_score=%.2f best_idx=%s best_title=%r",
+                    retailer or "?", confidence, best_score, best_idx,
+                    candidates[best_idx].get('title', '')[:60] if best_idx is not None else '')
     return {
         "confidence": confidence,
         "best_index": best_idx,
@@ -547,7 +574,7 @@ def _score_with_keywords(source_identity: dict, candidates: list[dict]) -> dict:
     }
 
 
-def _score_matches(source_identity: dict, candidates: list[dict]) -> dict:
+def _score_matches(source_identity: dict, candidates: list[dict], retailer: str = "") -> dict:
     provider = os.environ.get("MATCHING_LLM_PROVIDER", "gemini").lower()
     if provider == "gemini":
         result = _score_with_gemini(source_identity, candidates)
@@ -564,7 +591,7 @@ def _score_matches(source_identity: dict, candidates: list[dict]) -> dict:
             str(result.get("reasoning", "")).startswith("Gemini error:"):
         print(f"⚠️ LLM scoring unavailable ({result.get('reasoning')}) — using keyword fallback")
         llm_error = result.get("reasoning")
-        result = _score_with_keywords(source_identity, candidates)
+        result = _score_with_keywords(source_identity, candidates, retailer=retailer)
         result["llm_error"] = llm_error
 
     return result
@@ -667,7 +694,10 @@ def find_comparable_product(
     if not candidates:
         return _no_match("no candidates found")
 
-    result = _score_matches(identity, candidates)
+    result = _score_matches(identity, candidates, retailer=target_retailer)
+    logging.warning("%s scoring final: confidence=%s best_index=%s reasoning=%r",
+                    target_retailer, result.get('confidence'), result.get('best_index'),
+                    result.get('reasoning', '')[:80])
     if result.get("confidence") == "none" or result.get("best_index") is None:
         return _no_match("no matching candidate found")
 
