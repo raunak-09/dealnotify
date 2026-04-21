@@ -335,6 +335,29 @@
   };
 
   let _compareDispatched = false;
+  let _lastHref = window.location.href;
+
+  function _onSpaNavigate() {
+    const href = window.location.href;
+    if (href === _lastHref) return;
+    _lastHref = href;
+
+    // Reset compare state so it re-runs for the new product page
+    _compareDispatched = false;
+    const panel = document.querySelector('.dealnotify-compare-panel');
+    if (panel) panel.remove();
+    const widget = document.getElementById(WIDGET_ID);
+    if (widget) widget.remove();
+
+    // Delay to let the SPA render new product content before extracting
+    setTimeout(detectAndCompare, 1200);
+    setTimeout(tryDetectAndInject, 800);
+  }
+
+  // Poll for URL changes (React SPAs don't fire popstate on pushState)
+  setInterval(_onSpaNavigate, 500);
+  // Also catch back/forward navigation
+  window.addEventListener('popstate', () => setTimeout(_onSpaNavigate, 100));
 
   function detectAndCompare() {
     if (_compareDispatched) return;
