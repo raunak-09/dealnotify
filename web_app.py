@@ -9,6 +9,7 @@ import os
 import secrets
 import time
 import hmac
+import threading
 import html as html_module
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -2824,7 +2825,44 @@ def _extract_asin_from_url(url: str) -> str | None:
     return m.group(1) if m else None
 
 
+# In-memory comparison cache — 15-minute TTL, sits in front of DB cache to avoid
+# Firecrawl + DB calls on rapid repeat page loads or tab refreshes
+_mem_compare_cache: dict = {}
+_mem_cache_lock = threading.Lock()
+_MEM_CACHE_TTL = 900  # 15 minutes
+
+
+def _mem_cache_get(source_retailer, source_identifier, target_retailer):
+    key = (source_retailer, source_identifier, target_retailer)
+    with _mem_cache_lock:
+        entry = _mem_compare_cache.get(key)
+        if not entry:
+            return None
+        result, ts = entry
+        if time.time() - ts > _MEM_CACHE_TTL:
+            del _mem_compare_cache[key]
+            return None
+        return result
+
+
+def _mem_cache_set(source_retailer, source_identifier, target_retailer, value):
+    key = (source_retailer, source_identifier, target_retailer)
+    with _mem_cache_lock:
+        _mem_compare_cache[key] = (value, time.time())
+        # Evict expired entries if the dict grows large
+        if len(_mem_compare_cache) > 500:
+            now = time.time()
+            stale = [k for k, (_, ts) in _mem_compare_cache.items() if now - ts > _MEM_CACHE_TTL]
+            for k in stale:
+                del _mem_compare_cache[k]
+
+
 def _get_cached_comparison(source_retailer, source_identifier, target_retailer):
+    # Check in-memory cache first (fastest path)
+    mem_hit = _mem_cache_get(source_retailer, source_identifier, target_retailer)
+    if mem_hit is not None:
+        return mem_hit
+
     try:
         conn = get_db_conn()
         cur = conn.cursor()
@@ -2836,7 +2874,11 @@ def _get_cached_comparison(source_retailer, source_identifier, target_retailer):
                    ORDER BY cached_at DESC LIMIT 1""",
                 (source_retailer, source_identifier, target_retailer),
             )
-            return _fetchone(cur)
+            row = _fetchone(cur)
+            if row:
+                # Warm the in-memory cache so subsequent requests within 15 min skip the DB
+                _mem_cache_set(source_retailer, source_identifier, target_retailer, row)
+            return row
         finally:
             cur.close()
             conn.close()
@@ -2852,24 +2894,42 @@ def _save_comparison(source_retailer, source_identifier, source_url, source_titl
         cur = conn.cursor()
         try:
             hit = match.get("match") if match else None
+            confidence = hit.get("confidence") if hit else "none"
+            # Matches: 7-day TTL (prices are relatively stable).
+            # No-match: 30-day TTL (if a retailer doesn't carry the product, that's unlikely to change soon).
+            ttl_days = 7 if confidence in ("exact", "likely") else 30
+            expires_at = datetime.now() + timedelta(days=ttl_days)
             cur.execute(
                 """INSERT INTO product_comparisons
                    (source_retailer, source_identifier, source_url, source_title, source_price,
-                    target_retailer, target_url, target_title, target_price, confidence, match_reasoning)
-                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+                    target_retailer, target_url, target_title, target_price, confidence, match_reasoning,
+                    expires_at)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
                 (
                     source_retailer, source_identifier, source_url, source_title, source_price,
                     target_retailer,
                     hit.get("url") if hit else None,
                     hit.get("title") if hit else None,
                     hit.get("price") if hit else None,
-                    hit.get("confidence") if hit else "none",
+                    confidence,
                     hit.get("reasoning") if hit else match.get("reason") if match else None,
+                    expires_at,
                 ),
             )
             row = cur.fetchone()
             conn.commit()
-            return row[0] if row else None
+            comparison_id = row[0] if row else None
+            # Warm in-memory cache with the freshly saved comparison so repeated requests
+            # within 15 min hit memory instead of DB + Firecrawl
+            if comparison_id:
+                _mem_cache_set(source_retailer, source_identifier, target_retailer, {
+                    'id': comparison_id,
+                    'target_url': hit.get("url") if hit else None,
+                    'target_title': hit.get("title") if hit else None,
+                    'target_price': hit.get("price") if hit else None,
+                    'confidence': confidence,
+                })
+            return comparison_id
         finally:
             cur.close()
             conn.close()
