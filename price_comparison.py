@@ -133,14 +133,14 @@ def _do_scrape(fc, api_version: str, url: str, formats: list | None = None, wait
     if api_version == 'v2':
         kwargs = {'formats': fmts}
         if wait_for_ms:
-            kwargs['waitFor'] = wait_for_ms
+            kwargs['wait_for'] = wait_for_ms
         resp = fc.scrape(url, **kwargs)
         markdown = getattr(resp, 'markdown', None) or ''
         html = getattr(resp, 'html', None) or getattr(resp, 'content', None) or ''
         return markdown, html
     scrape_opts: dict = {'formats': fmts}
     if wait_for_ms:
-        scrape_opts['waitFor'] = wait_for_ms
+        scrape_opts['wait_for'] = wait_for_ms
     try:
         result = fc.scrape_url(url, scrape_opts)
     except TypeError:
