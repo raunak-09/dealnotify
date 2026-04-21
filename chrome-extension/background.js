@@ -9,6 +9,34 @@
 
 const API_BASE = 'https://www.dealnotify.co';
 
+// ── Google Analytics 4 (Measurement Protocol) ──
+// Used for background service worker events (install/update) where gtag.js cannot run.
+// To enable: create a Measurement Protocol API secret in GA4 Admin → Data Streams → Measure Protocol API secrets
+const GA_MEASUREMENT_ID = 'G-3JJNMF7KKJ';
+const GA_API_SECRET = ''; // TODO: set your Measurement Protocol API secret here
+
+async function getOrCreateGAClientId() {
+  const stored = await chrome.storage.local.get(['dn_ga_client_id']);
+  if (stored.dn_ga_client_id) return stored.dn_ga_client_id;
+  const clientId = crypto.randomUUID();
+  await chrome.storage.local.set({ dn_ga_client_id: clientId });
+  return clientId;
+}
+
+async function sendGAEvent(name, params = {}) {
+  if (!GA_API_SECRET) return;
+  try {
+    const clientId = await getOrCreateGAClientId();
+    await fetch(
+      `https://www.google-analytics.com/mp/collect?measurement_id=${GA_MEASUREMENT_ID}&api_secret=${GA_API_SECRET}`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ client_id: clientId, events: [{ name, params }] }),
+      }
+    );
+  } catch (e) {}
+}
+
 const SUPPORTED_DOMAINS = [
   'amazon.com', 'amazon.co.uk', 'amazon.ca',
   'walmart.com', 'bestbuy.com', 'target.com',
@@ -164,19 +192,18 @@ chrome.storage.onChanged.addListener((changes, area) => {
 
 chrome.runtime.onInstalled.addListener(async (details) => {
   if (details.reason === 'install') {
-    // First install — set default icon title
     chrome.action.setTitle({ title: 'DealNotify — Click to log in' });
+    sendGAEvent('extension_install');
   }
 
   if (details.reason === 'update') {
-    // Extension updated — session persists in chrome.storage.local automatically
-    // Just refresh the icon title
     const stored = await chrome.storage.local.get(['dn_token', 'dn_email']);
     if (stored.dn_token) {
       chrome.action.setTitle({
         title: `DealNotify — Logged in as ${stored.dn_email || 'user'}`
       });
     }
+    sendGAEvent('extension_update', { previous_version: details.previousVersion });
   }
 });
 

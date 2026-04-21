@@ -13,6 +13,17 @@
 
 const API_BASE = 'https://www.dealnotify.co';
 
+// ── Google Analytics 4 ──
+// gtag.js is loaded async from popup.html; dataLayer buffers calls until it's ready.
+window.dataLayer = window.dataLayer || [];
+function gtag() { dataLayer.push(arguments); }
+gtag('js', new Date());
+gtag('config', 'G-3JJNMF7KKJ', { send_page_view: false });
+
+function trackEvent(name, params) {
+  try { gtag('event', name, params || {}); } catch (e) {}
+}
+
 const SUPPORTED_STORES = {
   'amazon.com':   'Amazon',
   'amazon.co.uk': 'Amazon UK',
@@ -149,6 +160,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // If invalid, validateSession() already called forceLogout()
   } else {
     showView('auth');
+    trackEvent('popup_open', { logged_in: false });
   }
 
   bindEvents();
@@ -270,8 +282,11 @@ async function detectAndRoute() {
 
   if (!store) {
     showView('unsupported');
+    trackEvent('unsupported_store', { url: currentTab.url });
     return;
   }
+
+  trackEvent('popup_open', { logged_in: true, store: store.name });
 
   // Show tracking view and attempt to get product info from content script
   showView('track');
@@ -427,6 +442,8 @@ async function handleLogin(e) {
   // Fetch fresh user details (plan, verified status)
   await validateSession();
 
+  trackEvent('login', { method: 'email' });
+
   showLoggedInUI();
   hideMessage(authMessage);
   await detectAndRoute();
@@ -480,6 +497,7 @@ async function handleSignup(e) {
     dn_plan: 'free'
   });
 
+  trackEvent('sign_up', { method: 'email' });
   showMessage(authMessage, 'Account created! Please check your email to verify.', 'success');
 
   // Show logged-in UI but they'll need to verify before tracking works
@@ -550,6 +568,12 @@ async function handleTrack() {
   }
 
   // Success!
+  trackEvent('track_product', {
+    track_type: selectedTrackType,
+    store: getStoreFromUrl(currentTab.url)?.name || 'unknown',
+    has_target_price: !!(selectedTrackType === 'price' && payload.target_price),
+  });
+
   const successText = $('successText');
   if (selectedTrackType === 'price') {
     const tp = payload.target_price ? `$${payload.target_price}` : 'your target';
