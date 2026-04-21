@@ -69,7 +69,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'COMPARE_PRODUCT') {
     chrome.storage.local.get(['dn_token'], (stored) => {
       const token = stored.dn_token;
-      if (!token) { sendResponse(null); return; }
+      if (!token) { sendResponse({ unauthenticated: true }); return; }
 
       const ALL_COMPARE_RETAILERS = ['amazon', 'walmart', 'target', 'bestbuy', 'costco'];
       const sourceRetailer = message.source_retailer || 'amazon';

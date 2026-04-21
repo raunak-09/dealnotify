@@ -310,11 +310,26 @@
         if (p) p.remove();
         return;
       }
+      if (response.unauthenticated) {
+        renderUnauthPanel(isNaN(priceNum) ? null : priceNum, sourceRetailer, !!outOfStock);
+        return;
+      }
       // response.streaming === true — results arrive via COMPARE_RESULT_PARTIAL
     });
   }
 
   // Fire at document_idle — no artificial delay for compare (widget uses its own 800ms)
   detectAndCompare();
+
+  // Auto-retry compare when user signs in while on a PDP
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local') return;
+    if (changes.dn_token && !changes.dn_token.oldValue && changes.dn_token.newValue) {
+      _compareDispatched = false;
+      const panel = document.querySelector('.dealnotify-compare-panel');
+      if (panel) panel.remove();
+      detectAndCompare();
+    }
+  });
 
 })();

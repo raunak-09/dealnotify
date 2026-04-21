@@ -395,3 +395,61 @@ function showTrackOnlyCard(outOfStock) {
 
   document.body.appendChild(panel);
 }
+
+
+// ── Unauthenticated state: Compare tab shows sign-in CTA ──
+
+function renderUnauthPanel(sourcePrice, sourceRetailer, outOfStock) {
+  const existing = document.querySelector('.dealnotify-compare-panel');
+  if (existing) existing.remove();
+
+  const panel = _createBaseCard();
+
+  _buildTabBar(panel, [
+    { id: 'compare', label: '📊 Compare' },
+    { id: 'track',   label: '🔔 Track'   },
+  ], 'compare');
+
+  // Compare pane — sign-in CTA
+  const comparePane = document.createElement('div');
+  comparePane.className = 'dealnotify-compare-panel__pane dealnotify-compare-panel__pane--active';
+  comparePane.dataset.dnPane = 'compare';
+
+  if (sourcePrice != null) {
+    const sourceRow = document.createElement('div');
+    sourceRow.className = 'dealnotify-compare-panel__source-row';
+    const sourceLabelEl = document.createElement('span');
+    sourceLabelEl.className = 'dealnotify-compare-panel__source-label';
+    sourceLabelEl.textContent = DN_RETAILER_LABELS[sourceRetailer] || 'Current price';
+    const sourceAmt = document.createElement('span');
+    sourceAmt.className = 'dealnotify-compare-panel__source-price';
+    sourceAmt.textContent = `$${sourcePrice.toFixed(2)}`;
+    sourceRow.appendChild(sourceLabelEl);
+    sourceRow.appendChild(sourceAmt);
+    comparePane.appendChild(sourceRow);
+  }
+
+  const unauthContent = document.createElement('div');
+  unauthContent.className = 'dealnotify-compare-panel__unauth-content';
+
+  const msg = document.createElement('p');
+  msg.className = 'dealnotify-compare-panel__unauth-msg';
+  msg.textContent = 'Find the best price across Walmart, Target, Best Buy & more — for free.';
+
+  const cta = document.createElement('button');
+  cta.className = 'dealnotify-compare-panel__unauth-cta';
+  cta.textContent = 'Sign in to Compare →';
+  cta.addEventListener('click', () => {
+    chrome.runtime.sendMessage({ action: 'openPopup' });
+  });
+
+  unauthContent.appendChild(msg);
+  unauthContent.appendChild(cta);
+  comparePane.appendChild(unauthContent);
+  panel.appendChild(comparePane);
+
+  // Track pane — unauthenticated users can still set price/restock alerts
+  panel.appendChild(_buildTrackPane(!!outOfStock));
+
+  document.body.appendChild(panel);
+}
