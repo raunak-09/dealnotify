@@ -389,6 +389,54 @@ def _parse_bestbuy_results(markdown: str, html: str) -> list:
     return candidates
 
 
+def _search_bestbuy_json(search_query: str) -> list:
+    """Fast path: hit Best Buy's internal search JSON endpoint (no API key required)."""
+    import urllib.request
+    from urllib.parse import quote_plus
+
+    url = (
+        "https://www.bestbuy.com/api/2.0/json/search"
+        f"?format=json&q={quote_plus(search_query)}&context=product&store=&pageSize=5"
+    )
+    req = urllib.request.Request(url, headers={
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+        "Accept": "application/json",
+        "Referer": "https://www.bestbuy.com/",
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            if resp.status != 200:
+                return []
+            import json as _json
+            data = _json.loads(resp.read())
+    except Exception as exc:
+        logging.warning("Best Buy JSON API failed: %s", exc)
+        return []
+
+    candidates = []
+    products = data.get("products") or data.get("items") or []
+    for p in products[:5]:
+        name = p.get("name") or p.get("longDescription") or ""
+        if not name:
+            continue
+        price_raw = p.get("salePrice") or p.get("regularPrice") or p.get("price")
+        try:
+            price = float(price_raw) if price_raw is not None else None
+        except (TypeError, ValueError):
+            price = None
+        raw_url = p.get("url") or p.get("addToCartUrl") or ""
+        if raw_url and not raw_url.startswith("http"):
+            raw_url = "https://www.bestbuy.com" + raw_url
+        sku = p.get("sku") or ""
+        if not raw_url and sku:
+            raw_url = f"https://www.bestbuy.com/site/{sku}.p"
+        candidates.append({"title": name, "price": price, "url": raw_url, "image_url": None})
+
+    logging.warning("Best Buy JSON API: found %d candidates: %s", len(candidates),
+                    [(c['title'][:50], c['price']) for c in candidates[:3]])
+    return candidates
+
+
 def _search_bestbuy(identity: dict) -> list:
     """Search Best Buy for candidates matching the given product identity."""
     from urllib.parse import quote_plus
@@ -397,16 +445,22 @@ def _search_bestbuy(identity: dict) -> list:
     if not search_query:
         return []
 
+    # Fast path: internal JSON API (no Firecrawl needed, no anti-bot issues)
+    candidates = _search_bestbuy_json(search_query)
+    if candidates:
+        return candidates
+
+    # Fallback: Firecrawl scrape (may be blocked by anti-bot)
     api_key = os.getenv("FIRECRAWL_API_KEY")
     if not api_key:
-        logging.warning("FIRECRAWL_API_KEY not set — cannot search Best Buy")
+        logging.warning("FIRECRAWL_API_KEY not set — cannot search Best Buy via Firecrawl")
         return []
 
     url = f"https://www.bestbuy.com/site/searchpage.jsp?st={quote_plus(search_query)}"
 
     try:
         fc, api_version = _init_firecrawl(api_key)
-        markdown, html = _do_scrape(fc, api_version, url, formats=['markdown', 'html'], wait_for_ms=3000)
+        markdown, html = _do_scrape(fc, api_version, url, formats=['markdown', 'html'], wait_for_ms=1500)
     except Exception as exc:
         logging.warning("Firecrawl Best Buy search failed: %s", exc)
         return []
@@ -415,7 +469,7 @@ def _search_bestbuy(identity: dict) -> list:
         logging.warning("Best Buy search: Firecrawl returned empty content (blocked or JS-only page)")
         return []
 
-    logging.warning("Best Buy search: markdown_len=%d html_len=%d preview=%r",
+    logging.warning("Best Buy search (Firecrawl fallback): markdown_len=%d html_len=%d preview=%r",
                     len(markdown), len(html), markdown[:300])
     try:
         results = _parse_bestbuy_results(markdown, html)

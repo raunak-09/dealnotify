@@ -12,7 +12,7 @@ import hmac
 import threading
 import html as html_module
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, wait as futures_wait, FIRST_COMPLETED
 from datetime import datetime, timedelta
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
@@ -3009,10 +3009,18 @@ def compare_product():
 
     with ThreadPoolExecutor(max_workers=4) as pool:
         futures = {pool.submit(_search_retailer, r): r for r in uncached_retailers}
-        retailer_matches = {}
-        for future in as_completed(futures):
-            retailer, match = future.result()
-            retailer_matches[retailer] = match
+        retailer_matches = {r: None for r in uncached_retailers}
+        done, timed_out = futures_wait(futures, timeout=11)
+        for future in done:
+            try:
+                retailer, match = future.result()
+                retailer_matches[retailer] = match
+            except Exception as e:
+                print(f"❌ /api/compare future error: {e}")
+        for future in timed_out:
+            retailer = futures[future]
+            print(f"⏱ /api/compare: {retailer} timed out, skipping")
+            future.cancel()
 
     # Score, save and build response entries in original order
     for retailer in uncached_retailers:
