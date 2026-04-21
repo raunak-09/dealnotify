@@ -190,6 +190,26 @@ def _do_scrape(fc, api_version: str, url: str, formats: list | None = None, wait
         return jina_md, ''  # Jina returns markdown only; HTML parsers won't run
 
 
+def _scrape(url: str, formats: list | None = None, wait_for_ms: int = 0) -> tuple[str, str]:
+    """Unified scrape helper: Firecrawl (with Jina fallback) or Jina-only if no API key.
+
+    All _search_* functions use this instead of calling _init_firecrawl/_do_scrape directly.
+    This ensures Jina is always tried even when FIRECRAWL_API_KEY is absent or exhausted.
+    """
+    api_key = (os.getenv("FIRECRAWL_API_KEY") or "").strip()
+    if api_key:
+        try:
+            fc, api_version = _init_firecrawl(api_key)
+            # _do_scrape already falls back to Jina internally on payment/error
+            return _do_scrape(fc, api_version, url, formats=formats, wait_for_ms=wait_for_ms)
+        except Exception as exc:
+            logging.warning("Firecrawl init failed, going to Jina directly: %s", exc)
+
+    # No API key or Firecrawl init failed — go straight to Jina
+    logging.warning("Using Jina directly for %s (no Firecrawl key or init failure)", url)
+    return _scrape_with_jina(url), ''
+
+
 def _extract_amazon_identity(source_url: str) -> dict:
     """Extract product identity from an Amazon product URL.
 
@@ -205,16 +225,8 @@ def _extract_amazon_identity(source_url: str) -> dict:
     identity = _empty_identity(slug_query)
     identity["asin"] = asin
 
-    api_key = (os.getenv("FIRECRAWL_API_KEY") or "").strip()
-    if not api_key:
-        logging.warning("FIRECRAWL_API_KEY not set — returning partial identity")
-        identity["search_query"] = _build_search_query(identity)
-        return identity
-
     try:
-        fc, api_version = _init_firecrawl(api_key)
-        markdown, html = _do_scrape(fc, api_version, source_url)
-
+        markdown, html = _scrape(source_url)
         if markdown or html:
             parsed = _parse_amazon_markdown(markdown, html)
             identity.update(parsed)
@@ -276,18 +288,12 @@ def _search_walmart(identity: dict) -> list:
     if not search_query:
         return []
 
-    api_key = os.getenv("FIRECRAWL_API_KEY")
-    if not api_key:
-        logging.warning("FIRECRAWL_API_KEY not set — cannot search Walmart")
-        return []
-
     url = f"https://www.walmart.com/search?q={quote_plus(search_query)}"
 
     try:
-        fc, api_version = _init_firecrawl(api_key)
-        markdown, html = _do_scrape(fc, api_version, url)
+        markdown, html = _scrape(url)
     except Exception as exc:
-        logging.warning("Firecrawl Walmart search failed: %s", exc)
+        logging.warning("Walmart search scrape failed: %s", exc)
         return []
 
     if not markdown and not html:
@@ -345,22 +351,16 @@ def _search_target(identity: dict) -> list:
     if not search_query:
         return []
 
-    api_key = os.getenv("FIRECRAWL_API_KEY")
-    if not api_key:
-        logging.warning("FIRECRAWL_API_KEY not set — cannot search Target")
-        return []
-
     url = f"https://www.target.com/s?searchTerm={quote_plus(search_query)}"
 
     try:
-        fc, api_version = _init_firecrawl(api_key)
-        markdown, html = _do_scrape(fc, api_version, url, formats=['markdown'], wait_for_ms=2000)
+        markdown, html = _scrape(url, formats=['markdown'], wait_for_ms=2000)
     except Exception as exc:
-        logging.warning("Firecrawl Target search failed: %s", exc)
+        logging.warning("Target search scrape failed: %s", exc)
         return []
 
     if not markdown and not html:
-        logging.warning("Target search: Firecrawl returned empty content (blocked or JS-only page)")
+        logging.warning("Target search: returned empty content (blocked or JS-only page)")
         return []
 
     logging.warning("Target search: markdown_len=%d preview=%r", len(markdown), markdown[:300])
@@ -514,26 +514,20 @@ def _search_bestbuy(identity: dict) -> list:
     if candidates:
         return candidates
 
-    # Fallback: Firecrawl scrape (may be blocked by anti-bot)
-    api_key = os.getenv("FIRECRAWL_API_KEY")
-    if not api_key:
-        logging.warning("FIRECRAWL_API_KEY not set — cannot search Best Buy via Firecrawl")
-        return []
-
+    # Fallback: scrape search page (Firecrawl if available, else Jina)
     url = f"https://www.bestbuy.com/site/searchpage.jsp?st={quote_plus(search_query)}"
 
     try:
-        fc, api_version = _init_firecrawl(api_key)
-        markdown, html = _do_scrape(fc, api_version, url, formats=['markdown', 'html'], wait_for_ms=1500)
+        markdown, html = _scrape(url, formats=['markdown', 'html'], wait_for_ms=1500)
     except Exception as exc:
-        logging.warning("Firecrawl Best Buy search failed: %s", exc)
+        logging.warning("Best Buy search scrape failed: %s", exc)
         return []
 
     if not markdown and not html:
-        logging.warning("Best Buy search: Firecrawl returned empty content (blocked or JS-only page)")
+        logging.warning("Best Buy search: returned empty content (blocked or JS-only page)")
         return []
 
-    logging.warning("Best Buy search (Firecrawl fallback): markdown_len=%d html_len=%d preview=%r",
+    logging.warning("Best Buy search (scrape fallback): markdown_len=%d html_len=%d preview=%r",
                     len(markdown), len(html), markdown[:300])
     try:
         results = _parse_bestbuy_results(markdown, html)
@@ -589,22 +583,16 @@ def _search_costco(identity: dict) -> list:
     if not search_query:
         return []
 
-    api_key = os.getenv("FIRECRAWL_API_KEY")
-    if not api_key:
-        logging.warning("FIRECRAWL_API_KEY not set — cannot search Costco")
-        return []
-
     url = f"https://www.costco.com/CatalogSearch?keyword={quote_plus(search_query)}"
 
     try:
-        fc, api_version = _init_firecrawl(api_key)
-        markdown, html = _do_scrape(fc, api_version, url, formats=['markdown'], wait_for_ms=3000)
+        markdown, html = _scrape(url, formats=['markdown'], wait_for_ms=3000)
     except Exception as exc:
-        logging.warning("Firecrawl Costco search failed: %s", exc)
+        logging.warning("Costco search scrape failed: %s", exc)
         return []
 
     if not markdown and not html:
-        logging.warning("Costco search: Firecrawl returned empty content (blocked or JS-only page)")
+        logging.warning("Costco search: returned empty content (blocked or JS-only page)")
         return []
 
     logging.warning("Costco search: markdown_len=%d preview=%r", len(markdown), markdown[:300])
@@ -663,19 +651,12 @@ def _search_amazon(identity: dict) -> list:
     if not search_query:
         return []
 
-    api_key = os.getenv("FIRECRAWL_API_KEY")
-    if not api_key:
-        logging.warning("FIRECRAWL_API_KEY not set — cannot search Amazon")
-        return []
-
     url = f"https://www.amazon.com/s?k={quote_plus(search_query)}"
 
     try:
-        fc, api_version = _init_firecrawl(api_key)
-        # Amazon search pages are server-rendered — no JS wait needed
-        markdown, html = _do_scrape(fc, api_version, url)
+        markdown, html = _scrape(url)
     except Exception as exc:
-        logging.warning("Firecrawl Amazon search failed: %s", exc)
+        logging.warning("Amazon search scrape failed: %s", exc)
         return []
 
     if not markdown and not html:
