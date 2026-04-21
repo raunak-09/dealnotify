@@ -684,11 +684,33 @@ You are a product-matching assistant for a retail price comparison tool.
 Given a SOURCE product and a list of CANDIDATE products from another retailer,
 identify which candidate (if any) is the same or near-equivalent product.
 
-Scoring rules:
-- "exact": same brand, same model number / UPC, same size/color/variant
-- "likely": same brand and product, minor variant differences (e.g., 2-pack vs 3-pack, color)
-- "possible": similar product but unclear if actually the same
-- "none": no candidate is a real match
+RULES (apply strictly in order):
+1. Brand veto: If the source and a candidate have clearly different brand names, that candidate
+   is "none" — do not consider name similarity. A different brand is a different product.
+2. Model number rule: If the source title contains a model number (e.g. "WH-1000XM5", "OLED55C3",
+   "iPad Pro 11-inch M4"), a candidate with a different or absent model number is "none".
+   An exact model number match is near-certain "exact".
+3. Variant leniency: Same brand + same model but different color, pack size, or minor spec
+   variant → "likely". Do not penalise if one listing omits color while the other specifies it.
+4. Use "possible" only when brand or model genuinely cannot be determined from the titles.
+
+Scoring:
+- "exact": same brand + same model number + same size/color/variant
+- "likely": same brand + same model, minor variant differences OR one listing lacks variant detail
+- "possible": similar product but brand/model unclear from the titles given
+- "none": different brand, different model number, or clearly a different product
+
+Examples:
+SOURCE: Sony WH-1000XM5 Wireless Noise Canceling Headphones, Black
+CANDIDATES:
+0. Sony WH-1000XM5 Headphones Wireless, Silver
+1. Sony WH-1000XM4 Wireless Headphones, Black
+→ {"best_index": 0, "confidence": "exact", "reasoning": "Same brand and model WH-1000XM5, only color differs"}
+
+SOURCE: Sony WH-1000XM5 Wireless Noise Canceling Headphones
+CANDIDATES:
+0. Bose QuietComfort 45 Bluetooth Headphones
+→ {"best_index": null, "confidence": "none", "reasoning": "Different brand (Bose vs Sony)"}
 
 Respond with ONLY valid JSON, no prose:
 {"best_index": <int or null>, "confidence": "<exact|likely|possible|none>", "reasoning": "<one sentence>"}\
@@ -696,7 +718,7 @@ Respond with ONLY valid JSON, no prose:
 
 
 def _score_with_keywords(source_identity: dict, candidates: list[dict], retailer: str = "") -> dict:
-    """Fallback scorer using token-overlap when LLM APIs are unavailable."""
+    """Fallback scorer using weighted token-overlap when LLM APIs are unavailable."""
     _stopwords = {'the', 'a', 'an', 'and', 'or', 'with', 'for', 'in', 'on', 'at', 'of',
                   'to', 'by', 'from', 'is', 'it', 'as', 'pack', 'count', 'oz'}
     source_title = (source_identity.get('title') or '').lower()
@@ -708,29 +730,39 @@ def _score_with_keywords(source_identity: dict, candidates: list[dict], retailer
     if not source_words:
         return {"confidence": "none", "best_index": None, "reasoning": "No source words to match"}
 
+    # Build weighted source token set: model tokens count 3×, others 1×
+    def _weighted_size(token_set: set) -> float:
+        return sum(3.0 if t in source_model_tokens else 1.0 for t in token_set)
+
+    source_weighted_total = _weighted_size(source_words)
+
     best_score = 0.0
     best_idx = None
     for i, c in enumerate(candidates):
         cand_raw = (c.get('title') or '').lower()
-        # Strip markdown bold markers that Walmart markdown contains
-        cand_raw = re.sub(r'\*+', '', cand_raw)
+        cand_raw = re.sub(r'\*+', '', cand_raw)  # strip Walmart markdown bold markers
         cand_words = set(re.findall(r'\b[a-z0-9]+\b', cand_raw)) - _stopwords
         if not cand_words:
             continue
-        overlap = len(source_words & cand_words)
-        # Score by recall (how many source terms appear in candidate) since
-        # candidate titles contain extra marketing text that inflates denominators
-        score = overlap / len(source_words) if source_words else 0.0
-        # Boost: if brand + at least one model token both appear in candidate,
-        # that's a strong signal — treat as likely regardless of raw recall score
+
+        # Brand-mismatch veto: if source brand is known and absent from candidate → skip
+        if source_brand and source_brand not in cand_raw:
+            continue
+
+        overlap = source_words & cand_words
+        weighted_overlap = _weighted_size(overlap)
+        score = weighted_overlap / source_weighted_total if source_weighted_total else 0.0
+
+        # Boost: brand + at least one model token both appear → floor at likely
         model_hit = source_model_tokens & cand_words
         if source_brand and source_brand in cand_raw and model_hit:
             score = max(score, 0.6)
+
         if score > best_score:
             best_score = score
             best_idx = i
 
-    if best_score >= 0.55:
+    if best_score >= 0.50:
         confidence = "likely"
     elif best_score >= 0.35:
         confidence = "possible"
@@ -806,10 +838,10 @@ def _score_with_gemini(source_identity: dict, candidates: list[dict]) -> dict:
         },
     }).encode()
 
-    # Use gemini-2.0-flash-lite — reliable JSON mode, no thinking-token overhead
+    # Use gemini-2.0-flash — better accuracy, no thinking-token overhead
     url = (
         "https://generativelanguage.googleapis.com/v1beta/models/"
-        f"gemini-2.0-flash-lite:generateContent?key={api_key}"
+        f"gemini-2.0-flash:generateContent?key={api_key}"
     )
 
     try:
