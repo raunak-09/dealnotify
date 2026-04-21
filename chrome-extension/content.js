@@ -324,18 +324,20 @@
   // Fire at document_idle — no artificial delay for compare (widget uses its own 800ms)
   detectAndCompare();
 
-  // Auto-retry compare when user signs in while on a PDP
+  // Auto-retry compare when user signs in while the unauth panel is showing.
+  // Checking for the unauth panel (not token oldValue) is the correct condition:
+  // it fires whenever the user signs in from the CTA, regardless of prior token state.
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
-    if (changes.dn_token && !changes.dn_token.oldValue && changes.dn_token.newValue) {
-      const domain = getStoreDomain();
-      const pdpDetector = domain && PDP_DETECTORS[domain];
-      if (!pdpDetector || !pdpDetector(window.location.pathname)) return;
-      _compareDispatched = false;
-      const panel = document.querySelector('.dealnotify-compare-panel');
-      if (panel) panel.remove();
-      detectAndCompare();
-    }
+    if (!changes.dn_token || !changes.dn_token.newValue) return;
+    if (!document.querySelector('.dealnotify-compare-panel__unauth-content')) return;
+    const domain = getStoreDomain();
+    const pdpDetector = domain && PDP_DETECTORS[domain];
+    if (!pdpDetector || !pdpDetector(window.location.pathname)) return;
+    _compareDispatched = false;
+    const panel = document.querySelector('.dealnotify-compare-panel');
+    if (panel) panel.remove();
+    detectAndCompare();
   });
 
 })();
