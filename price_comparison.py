@@ -389,52 +389,76 @@ def _parse_bestbuy_results(markdown: str, html: str) -> list:
     return candidates
 
 
+_BB_JSON_URLS = [
+    # Try known Best Buy internal search endpoint patterns
+    "https://www.bestbuy.com/api/2.0/json/search?format=json&q={q}&context=product&pageSize=5",
+    "https://www.bestbuy.com/api/3.0/json/search?format=json&q={q}&type=product&pageSize=5",
+    "https://www.bestbuy.com/api/v1/json/search?format=json&q={q}&type=product&pageSize=5",
+]
+
+
 def _search_bestbuy_json(search_query: str) -> list:
-    """Fast path: hit Best Buy's internal search JSON endpoint (no API key required)."""
+    """Fast path: try Best Buy's internal search JSON endpoints (no API key required)."""
     import urllib.request
+    import json as _json
     from urllib.parse import quote_plus
 
-    url = (
-        "https://www.bestbuy.com/api/2.0/json/search"
-        f"?format=json&q={quote_plus(search_query)}&context=product&store=&pageSize=5"
-    )
-    req = urllib.request.Request(url, headers={
+    encoded = quote_plus(search_query)
+    headers = {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-        "Accept": "application/json",
+        "Accept": "application/json, text/plain, */*",
         "Referer": "https://www.bestbuy.com/",
-    })
-    try:
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            if resp.status != 200:
-                return []
-            import json as _json
-            data = _json.loads(resp.read())
-    except Exception as exc:
-        logging.warning("Best Buy JSON API failed: %s", exc)
-        return []
+    }
 
-    candidates = []
-    products = data.get("products") or data.get("items") or []
-    for p in products[:5]:
-        name = p.get("name") or p.get("longDescription") or ""
-        if not name:
-            continue
-        price_raw = p.get("salePrice") or p.get("regularPrice") or p.get("price")
+    for url_template in _BB_JSON_URLS:
+        url = url_template.format(q=encoded)
+        req = urllib.request.Request(url, headers=headers)
         try:
-            price = float(price_raw) if price_raw is not None else None
-        except (TypeError, ValueError):
-            price = None
-        raw_url = p.get("url") or p.get("addToCartUrl") or ""
-        if raw_url and not raw_url.startswith("http"):
-            raw_url = "https://www.bestbuy.com" + raw_url
-        sku = p.get("sku") or ""
-        if not raw_url and sku:
-            raw_url = f"https://www.bestbuy.com/site/{sku}.p"
-        candidates.append({"title": name, "price": price, "url": raw_url, "image_url": None})
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                if resp.status != 200:
+                    continue
+                data = _json.loads(resp.read())
+        except Exception as exc:
+            logging.warning("Best Buy JSON API %s failed: %s", url, exc)
+            continue
 
-    logging.warning("Best Buy JSON API: found %d candidates: %s", len(candidates),
-                    [(c['title'][:50], c['price']) for c in candidates[:3]])
-    return candidates
+        # Parse whichever response shape we got
+        products = (
+            data.get("products")
+            or data.get("items")
+            or data.get("searchResults")
+            or (data.get("data") or {}).get("products")
+            or []
+        )
+        if not products:
+            continue
+
+        candidates = []
+        for p in products[:5]:
+            name = p.get("name") or p.get("longDescription") or p.get("title") or ""
+            if not name:
+                continue
+            price_raw = p.get("salePrice") or p.get("regularPrice") or p.get("price")
+            try:
+                price = float(price_raw) if price_raw is not None else None
+            except (TypeError, ValueError):
+                price = None
+            raw_url = p.get("url") or p.get("pdpUrl") or ""
+            if raw_url and not raw_url.startswith("http"):
+                raw_url = "https://www.bestbuy.com" + raw_url
+            sku = str(p.get("sku") or p.get("skuId") or "")
+            if not raw_url and sku:
+                raw_url = f"https://www.bestbuy.com/site/{sku}.p"
+            candidates.append({"title": name, "price": price, "url": raw_url, "image_url": None})
+
+        if candidates:
+            logging.warning("Best Buy JSON API (%s): found %d candidates: %s",
+                            url, len(candidates),
+                            [(c['title'][:50], c['price']) for c in candidates[:3]])
+            return candidates
+
+    logging.warning("Best Buy JSON API: all endpoints returned no products for %r", search_query)
+    return []
 
 
 def _search_bestbuy(identity: dict) -> list:
