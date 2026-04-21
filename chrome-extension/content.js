@@ -50,8 +50,15 @@
       const price = getText('[itemprop="price"]')
                  || getText('[data-testid="price-wrap"] .f2')
                  || getText('.price-characteristic');
-      const outOfStock = pageContains('out of stock')
-                      || pageContains('get in-stock alert');
+      // Scope OOS check to the buy box only — full-page scan picks up
+      // "out of stock" from reviews and related products, causing false positives.
+      const buyBox = document.querySelector('[data-testid="add-to-cart-section"]')
+                  || document.querySelector('[data-testid="buy-box"]')
+                  || document.querySelector('.prod-blitz-copy');
+      const buyBoxText = buyBox ? buyBox.innerText.toLowerCase() : '';
+      const outOfStock = !!document.querySelector('[data-testid="get-in-stock-alert"]')
+                      || buyBoxText.includes('out of stock')
+                      || buyBoxText.includes('get in-stock alert');
       return { title, price, outOfStock };
     },
 
@@ -72,8 +79,13 @@
                  || getText('h1[data-test="product-title"]');
       const price = getText('[data-test="product-price"]')
                  || getText('.styles__CurrentPriceFontSize');
-      const outOfStock = pageContains('out of stock')
-                      || pageContains('sold out');
+      // Scope to fulfillment/buy-box area to avoid false positives from reviews
+      const fulfillment = document.querySelector('[data-test="fulfillment-cell"]')
+                       || document.querySelector('[data-test="add-to-cart-button"]')?.closest('section');
+      const fulfillmentText = fulfillment ? fulfillment.innerText.toLowerCase() : '';
+      const outOfStock = !!document.querySelector('[data-test="oos-header"]')
+                      || fulfillmentText.includes('out of stock')
+                      || fulfillmentText.includes('sold out');
       return { title, price, outOfStock };
     },
 
