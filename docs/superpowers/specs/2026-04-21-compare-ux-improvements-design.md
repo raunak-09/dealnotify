@@ -176,6 +176,32 @@ Reduce false positives (wrong product matched) and false negatives (same product
 
 ---
 
+## Section 4: "Best Price" Badge + Missing Price Fixes
+
+### Bug 1 — "Best price" badge ignores source retailer price
+
+**Current behaviour:** The badge goes to the cheapest competitor (`idx === 0` after sort). If the current page is $50 and competitors are $60 and $70, the $60 result still gets "Best price" — which is wrong.
+
+**Fix (`comparison-panel.js` — `renderComparisonPanel` and `appendComparisonResult`):**
+- Only show "Best price" badge if `match.price < sourcePrice` (i.e. competitor is genuinely cheaper)
+- If `sourcePrice` exists and all competitors are more expensive: show a "You're already at the best price" note in the compare pane instead of any badge
+- If `sourcePrice` is null (couldn't extract from page): fall back to current behaviour (cheapest competitor gets the badge)
+
+**Fix (`comparison-panel.js` — `_buildTrackPane`):**
+- Best-price callout in Track tab should also only show if `bestMatch.price < sourcePrice`; if source is cheapest, show nothing (or a "this is already the best price" line)
+
+### Bug 2 — Price missing from comparison rows
+
+**Current behaviour:** `comparisons` filter keeps results with `c.url` but no `c.price` — they render with a blank price cell, which looks broken.
+
+**Fix (`comparison-panel.js`):**
+- Add `&& c.price != null` to the existing `matches` filter so null-price results are excluded entirely
+- Same guard in `appendComparisonResult` for progressive mode
+
+**Note:** The backend already attempts to parse prices for every result; null means the scrape/parse failed for that retailer. Showing "unknown price" is worse than hiding the row.
+
+---
+
 ## Out of Scope
 - Target and Best Buy affiliate ID wiring (v2 queue, per CLAUDE.md)
 - Costco Akamai blocking — accept as known limitation
