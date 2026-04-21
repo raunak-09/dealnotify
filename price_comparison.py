@@ -128,26 +128,66 @@ def _init_firecrawl(api_key: str):
     raise ImportError("firecrawl-py is not installed")
 
 
+def _scrape_with_jina(url: str) -> str:
+    """Free fallback scraper using Jina AI Reader (r.jina.ai). No API key needed.
+    Returns markdown text; HTML is not available via this path."""
+    import urllib.request as _ureq
+    jina_url = f"https://r.jina.ai/{url}"
+    req = _ureq.Request(jina_url, headers={
+        "User-Agent": "Mozilla/5.0 (compatible; DealNotify/1.0)",
+        "Accept": "text/plain, text/markdown, */*",
+        "X-Return-Format": "markdown",
+        "X-Timeout": "20",
+    })
+    try:
+        with _ureq.urlopen(req, timeout=25) as resp:
+            return resp.read().decode('utf-8', errors='replace')
+    except Exception as exc:
+        logging.warning("Jina fallback failed for %s: %s", url, exc)
+        return ''
+
+
+_PAYMENT_ERRORS = ("payment required", "insufficient credits", "402", "upgrade your plan")
+
+
 def _do_scrape(fc, api_version: str, url: str, formats: list | None = None, wait_for_ms: int = 0) -> tuple[str, str]:
     fmts = formats or ['markdown', 'html']
-    if api_version == 'v2':
-        kwargs = {'formats': fmts}
-        if wait_for_ms:
-            kwargs['wait_for'] = wait_for_ms
-        resp = fc.scrape(url, **kwargs)
-        markdown = getattr(resp, 'markdown', None) or ''
-        html = getattr(resp, 'html', None) or getattr(resp, 'content', None) or ''
-        return markdown, html
-    scrape_opts: dict = {'formats': fmts}
-    if wait_for_ms:
-        scrape_opts['wait_for'] = wait_for_ms
     try:
-        result = fc.scrape_url(url, scrape_opts)
-    except TypeError:
-        result = fc.scrape_url(url, fmts)
-    if not isinstance(result, dict):
-        return '', ''
-    return result.get('markdown') or '', result.get('html') or ''
+        if api_version == 'v2':
+            kwargs = {'formats': fmts}
+            if wait_for_ms:
+                kwargs['wait_for'] = wait_for_ms
+            resp = fc.scrape(url, **kwargs)
+            markdown = getattr(resp, 'markdown', None) or ''
+            html = getattr(resp, 'html', None) or getattr(resp, 'content', None) or ''
+        else:
+            scrape_opts: dict = {'formats': fmts}
+            if wait_for_ms:
+                scrape_opts['wait_for'] = wait_for_ms
+            try:
+                result = fc.scrape_url(url, scrape_opts)
+            except TypeError:
+                result = fc.scrape_url(url, fmts)
+            if not isinstance(result, dict):
+                return '', ''
+            markdown = result.get('markdown') or ''
+            html = result.get('html') or ''
+
+        if markdown or html:
+            return markdown, html
+
+        # Empty response — fall through to Jina
+        raise RuntimeError("Firecrawl returned empty content")
+
+    except Exception as exc:
+        exc_str = str(exc).lower()
+        if any(e in exc_str for e in _PAYMENT_ERRORS):
+            logging.warning("Firecrawl credits exhausted — falling back to Jina for %s", url)
+        else:
+            logging.warning("Firecrawl scrape failed (%s) — falling back to Jina for %s", exc, url)
+
+        jina_md = _scrape_with_jina(url)
+        return jina_md, ''  # Jina returns markdown only; HTML parsers won't run
 
 
 def _extract_amazon_identity(source_url: str) -> dict:
