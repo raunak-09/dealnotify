@@ -185,6 +185,7 @@ function showComparisonLoadingPanel(sourcePrice, sourceRetailer, outOfStock) {
   panel.appendChild(_buildTrackPane(!!outOfStock));
 
   panel.dataset.dnOutOfStock = outOfStock ? '1' : '0';
+  panel.dataset.dnSourceRetailer = sourceRetailer || '';
   document.body.appendChild(panel);
 }
 
@@ -318,12 +319,18 @@ function finalizeComparisonPanel() {
   const retailerRows = comparePane.querySelectorAll('.dealnotify-compare-panel__retailer-row');
 
   if (!retailerRows.length) {
-    // Remove shimmers/hint already done above — just show a clear message on the Compare tab.
-    // Don't switch to Track tab: the user came here for compare and should know it ran but
-    // found nothing, not be confused by a silent redirect.
+    const sourceRetailer = panel.dataset.dnSourceRetailer || '';
+    const allRetailers = ['amazon', 'walmart', 'target', 'bestbuy', 'costco'];
+    const searchedLabels = allRetailers
+      .filter(r => r !== sourceRetailer)
+      .map(r => DN_RETAILER_LABELS[r] || r);
+    const lastLabel = searchedLabels.pop();
+    const retailerList = searchedLabels.length
+      ? searchedLabels.join(', ') + ', or ' + lastLabel
+      : lastLabel;
     const noResults = document.createElement('div');
     noResults.className = 'dealnotify-compare-panel__no-results';
-    noResults.textContent = 'This product wasn\'t found at Amazon, Walmart, Best Buy, or Costco.';
+    noResults.textContent = `This product wasn't found at ${retailerList}.`;
     comparePane.appendChild(noResults);
     return;
   }
