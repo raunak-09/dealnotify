@@ -356,6 +356,10 @@
 
   // Fire at document_idle — no artificial delay for compare (widget uses its own 800ms)
   detectAndCompare();
+  // JS-rendered retailers (Walmart, Target, BestBuy, Costco) may not have product
+  // content in the DOM at document_idle. Retry after 1200ms; the _compareDispatched
+  // guard makes this a no-op if the first attempt already succeeded (e.g. Amazon).
+  setTimeout(detectAndCompare, 1200);
 
   // Auto-retry compare when user signs in while the unauth panel is showing.
   // Checking for the unauth panel (not token oldValue) is the correct condition:
