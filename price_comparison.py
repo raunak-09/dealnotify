@@ -463,7 +463,7 @@ def _search_bestbuy_json(search_query: str) -> list:
         url = url_template.format(q=encoded)
         req = urllib.request.Request(url, headers=headers)
         try:
-            with urllib.request.urlopen(req, timeout=5) as resp:
+            with urllib.request.urlopen(req, timeout=3) as resp:
                 if resp.status != 200:
                     continue
                 data = _json.loads(resp.read())
@@ -730,7 +730,9 @@ def _score_with_keywords(source_identity: dict, candidates: list[dict], retailer
     """Fallback scorer using weighted token-overlap when LLM APIs are unavailable."""
     _stopwords = {'the', 'a', 'an', 'and', 'or', 'with', 'for', 'in', 'on', 'at', 'of',
                   'to', 'by', 'from', 'is', 'it', 'as', 'pack', 'count', 'oz'}
-    source_title = (source_identity.get('title') or '').lower()
+    # Use search_query for scoring when available — it's already capped to core product words
+    # and excludes bundle accessories that inflate the denominator and lower overlap scores.
+    source_title = (source_identity.get('search_query') or source_identity.get('title') or '').lower()
     source_words = set(re.findall(r'\b[a-z0-9]+\b', source_title)) - _stopwords
     # Alphanumeric model tokens (e.g. "1000xm5", "b09xs7jwhh") are strong identity signals
     source_model_tokens = {w for w in source_words if re.search(r'[0-9]', w) and len(w) >= 4}

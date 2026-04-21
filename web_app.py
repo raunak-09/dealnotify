@@ -2972,10 +2972,10 @@ def compare_product():
             'upc': None,
             'price': source_price,
             'image_url': None,
-            'search_query': re.sub(r'\s{2,}', ' ', re.sub(
+            'search_query': ' '.join(re.sub(
                 r'\b(renewed|refurbished|restored|certified refurbished|open[- ]?box|used)\b',
                 '', source_title, flags=re.IGNORECASE,
-            )).strip()[:60] if source_title else None,
+            ).split()[:8]) if source_title else None,
         }
 
     # Separate cached vs uncached retailers
