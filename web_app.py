@@ -2799,14 +2799,20 @@ def check_all_prices_admin():
 def wrap_affiliate_link(retailer: str, url: str | None) -> str | None:
     if not url:
         return None
+    amazon_tag = os.environ.get("AMAZON_AFFILIATE_TAG")
+    if retailer == "amazon":
+        if not amazon_tag:
+            return url
+        separator = "&" if "?" in url else "?"
+        return f"{url}{separator}tag={amazon_tag}"
     affiliate_ids = {
         "walmart": os.environ.get("WALMART_AFFILIATE_ID"),
         "target": os.environ.get("TARGET_AFFILIATE_ID"),
         "bestbuy": os.environ.get("BESTBUY_AFFILIATE_ID"),
+        "costco": os.environ.get("COSTCO_AFFILIATE_ID"),
     }
     affiliate_id = affiliate_ids.get(retailer)
     if not affiliate_id:
-        print(f"⚠️ No affiliate ID configured for {retailer} (non-fatal) — returning unwrapped URL")
         return url
     separator = "&" if "?" in url else "?"
     return f"{url}{separator}affid={affiliate_id}"
@@ -2909,7 +2915,7 @@ def compare_product():
             'upc': None,
             'price': source_price,
             'image_url': None,
-            'search_query': ' '.join(w.strip(',') for w in source_title.split()[:5]) if source_title else None,
+            'search_query': ' '.join(w.strip(',-–—') for w in source_title.split()[:5]).strip(',-–— ') if source_title else None,
         }
 
     # Separate cached vs uncached retailers

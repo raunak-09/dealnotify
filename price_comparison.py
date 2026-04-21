@@ -550,9 +550,6 @@ def _search_amazon(identity: dict) -> list:
         logging.warning("FIRECRAWL_API_KEY not set — cannot search Amazon")
         return []
 
-    # Strip trailing punctuation from search query (e.g. trailing " -" from title parsing)
-    search_query = search_query.strip(" -–—")
-
     url = f"https://www.amazon.com/s?k={quote_plus(search_query)}"
 
     try:
@@ -585,7 +582,7 @@ _VALID_CONFIDENCES = {"exact", "likely", "possible", "none"}
 
 _MATCHING_PROMPT = """\
 You are a product-matching assistant for a retail price comparison tool.
-Given a SOURCE product from Amazon and a list of CANDIDATE products from Walmart,
+Given a SOURCE product and a list of CANDIDATE products from another retailer,
 identify which candidate (if any) is the same or near-equivalent product.
 
 Scoring rules:
@@ -772,7 +769,13 @@ def find_comparable_product(
         return _no_match(f"searcher for {target_retailer!r} not yet implemented")
 
     if identity is None:
-        identity = _extract_amazon_identity(source_url)
+        if source_retailer == 'amazon':
+            identity = _extract_amazon_identity(source_url)
+        else:
+            # For non-Amazon sources without a pre-built identity, construct a minimal one
+            # from the URL slug so searches still have some query to work with
+            slug_query = re.sub(r'[^a-zA-Z0-9 ]', ' ', source_url).strip()[:60]
+            identity = _empty_identity(slug_query)
 
     candidates = RETAILER_SEARCHERS[target_retailer](identity)
     if not candidates:
