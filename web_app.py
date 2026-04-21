@@ -2897,8 +2897,9 @@ def _save_comparison(source_retailer, source_identifier, source_url, source_titl
             hit = match.get("match") if match else None
             confidence = hit.get("confidence") if hit else "none"
             # Matches: 7-day TTL (prices are relatively stable).
-            # No-match: 30-day TTL (if a retailer doesn't carry the product, that's unlikely to change soon).
-            ttl_days = 7 if confidence in ("exact", "likely") else 30
+            # No-match: 1-day TTL — short enough to retry after scoring fixes or quota resets,
+            # but long enough to avoid hammering the API on rapid repeat page loads.
+            ttl_days = 7 if confidence in ("exact", "likely") else 1
             expires_at = datetime.now() + timedelta(days=ttl_days)
             cur.execute(
                 """INSERT INTO product_comparisons
