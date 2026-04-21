@@ -390,14 +390,17 @@ def _parse_bestbuy_results(markdown: str, html: str) -> list:
     candidates = []
     seen_urls: set = set()
 
+    # Firecrawl often emits relative URLs (/site/...) rather than absolute ones
     md_link_pattern = re.compile(
-        r'\[([^\]]{10,200})\]\((https://(?:www\.)?bestbuy\.com/site/[^\s\)]+\.p[^\s\)]*)\)'
+        r'\[([^\]]{10,200})\]\(((?:https://(?:www\.)?bestbuy\.com)?/site/[^\s\)]+\.p[^\s\)]*)\)'
     )
     for m in md_link_pattern.finditer(markdown):
         if len(candidates) >= 5:
             break
         title = m.group(1).strip()
         raw_url = m.group(2).strip()
+        if not raw_url.startswith('http'):
+            raw_url = 'https://www.bestbuy.com' + raw_url
         clean_url = re.sub(r'\?.*$', '', raw_url)
         if clean_url in seen_urls:
             continue
@@ -412,25 +415,35 @@ def _parse_bestbuy_results(markdown: str, html: str) -> list:
                 pass
         candidates.append({"title": title, "price": price, "url": clean_url, "image_url": None})
 
-    # Also try HTML if markdown yielded nothing — Best Buy SPAs sometimes render product
-    # links in HTML even when JS template literals are unresolved in the markdown output
+    # HTML fallback: BestBuy product <a> tags wrap nested elements, so we can't match
+    # text directly inside <a>...</a>. Instead: collect all product hrefs, then find
+    # the nearest aria-label or <h4> heading within the following 600 chars of HTML.
     if not candidates and html:
-        html_link_pattern = re.compile(
-            r'<a[^>]+href=["\']([^"\']*bestbuy\.com/site/[^"\']*\.p\b[^"\']*)["\'][^>]*>'
-            r'([^<]{10,200})</a>',
+        href_pattern = re.compile(
+            r'href=["\']([^"\']*(?:bestbuy\.com)?/site/[^"\']+\.p\b[^"\']*)["\']',
             re.IGNORECASE,
         )
-        for m in html_link_pattern.finditer(html):
+        heading_pattern = re.compile(
+            r'(?:aria-label|title)=["\']([^"\']{10,200})["\']'
+            r'|<(?:h[1-6])[^>]*>\s*(?:<[^>]+>)*([^<]{10,200})',
+            re.IGNORECASE,
+        )
+        for m in href_pattern.finditer(html):
             if len(candidates) >= 5:
                 break
             raw_url = m.group(1).strip()
-            title = re.sub(r'<[^>]+>', '', m.group(2)).strip()
-            if not title:
-                continue
+            if not raw_url.startswith('http'):
+                raw_url = 'https://www.bestbuy.com' + raw_url
             clean_url = re.sub(r'\?.*$', '', raw_url)
-            if not clean_url.startswith('http'):
-                clean_url = 'https://www.bestbuy.com' + clean_url
             if clean_url in seen_urls:
+                continue
+            # Look for a product title in the surrounding HTML context
+            end = min(len(html), m.end() + 600)
+            hm = heading_pattern.search(html[m.start():end])
+            title = ''
+            if hm:
+                title = (hm.group(1) or hm.group(2) or '').strip()
+            if not title:
                 continue
             seen_urls.add(clean_url)
             candidates.append({"title": title, "price": None, "url": clean_url, "image_url": None})
@@ -527,7 +540,7 @@ def _search_bestbuy(identity: dict) -> list:
     url = f"https://www.bestbuy.com/site/searchpage.jsp?st={quote_plus(search_query)}"
 
     try:
-        markdown, html = _scrape(url, formats=['markdown', 'html'], wait_for_ms=1500)
+        markdown, html = _scrape(url, formats=['markdown', 'html'], wait_for_ms=3000)
     except Exception as exc:
         logging.warning("Best Buy search scrape failed: %s", exc)
         return []
