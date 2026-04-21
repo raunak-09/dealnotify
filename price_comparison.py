@@ -726,6 +726,7 @@ def _score_with_keywords(source_identity: dict, candidates: list[dict], retailer
     # Alphanumeric model tokens (e.g. "1000xm5", "b09xs7jwhh") are strong identity signals
     source_model_tokens = {w for w in source_words if re.search(r'[0-9]', w) and len(w) >= 4}
     source_brand = (source_identity.get('brand') or '').lower().strip()
+    _brand_pat = re.compile(rf'\b{re.escape(source_brand)}\b') if source_brand else None
 
     if not source_words:
         return {"confidence": "none", "best_index": None, "reasoning": "No source words to match"}
@@ -746,7 +747,7 @@ def _score_with_keywords(source_identity: dict, candidates: list[dict], retailer
             continue
 
         # Brand-mismatch veto: if source brand is known and absent from candidate → skip
-        if source_brand and source_brand not in cand_raw:
+        if source_brand and not _brand_pat.search(cand_raw):
             continue
 
         overlap = source_words & cand_words
@@ -755,7 +756,7 @@ def _score_with_keywords(source_identity: dict, candidates: list[dict], retailer
 
         # Boost: brand + at least one model token both appear → floor at likely
         model_hit = source_model_tokens & cand_words
-        if source_brand and source_brand in cand_raw and model_hit:
+        if source_brand and bool(_brand_pat.search(cand_raw)) and model_hit:
             score = max(score, 0.6)
 
         if score > best_score:
@@ -852,9 +853,14 @@ def _score_with_gemini(source_identity: dict, candidates: list[dict]) -> dict:
 
         text = body["candidates"][0]["content"]["parts"][0]["text"]
         # Extract JSON even when Gemini adds prose preamble
-        json_match = re.search(r'\{[^{}]*"confidence"[^{}]*\}', text, re.DOTALL)
-        if json_match:
-            result = json.loads(json_match.group(0))
+        start = text.find('{')
+        end = text.rfind('}')
+        if start != -1 and end != -1 and end > start:
+            m_text = text[start:end+1]
+        else:
+            m_text = None
+        if m_text:
+            result = json.loads(m_text)
         else:
             result = json.loads(text)
     except Exception as exc:
