@@ -10,6 +10,16 @@
  *  - Never injects DOM elements or modifies the page
  */
 
+// Guard against double-injection: when the extension is reloaded while a tab
+// remains open, Chrome keeps the old content script alive AND injects the new
+// one. Without this check, two copies of the message listener would register
+// and every COMPARE_RESULT_PARTIAL would call appendComparisonResult twice.
+if (window._dealnotifyLoaded) {
+  // Already injected in this tab — bail out to avoid duplicate listeners.
+} else {
+
+window._dealnotifyLoaded = true;
+
 (() => {
   'use strict';
 
@@ -378,3 +388,5 @@
   });
 
 })();
+
+} // end if (!window._dealnotifyLoaded)
