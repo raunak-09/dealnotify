@@ -28,9 +28,17 @@ The Compare feature lets users see if an Amazon product they are viewing is avai
 - Added keyword-based fallback scorer (`_score_with_keywords`) that activates when Gemini API is rate-limited or quota-exhausted — uses recall-based token overlap (≥55% → likely, ≥35% → possible)
 - `get_user_by_token()` returns tuple `(user, products)` — both compare endpoints had `user, _ =` unpacking added
 
-### v2 queue
-- Target and Best Buy retailer integration (stubs exist in `RETAILER_SEARCHERS`)
-- `TARGET_AFFILIATE_ID` and `BESTBUY_AFFILIATE_ID` env vars (leave blank for now)
-- Rate limit increase based on usage data
+### v2 items completed (as of 2026-04-21)
+- ✅ Target, Best Buy, Costco retailer integration (`RETAILER_SEARCHERS` fully wired)
+- ✅ Amazon as compare target from non-Amazon PDPs
+- ✅ Multi-retailer progressive results (one API call per retailer in parallel)
+- ✅ Extension-side compare cache (30-min TTL, keyed by ASIN or URL)
+- ✅ Unauthenticated user sign-in CTA with auto-retry on login
+- ✅ Best-price badge across all retailers
+- ✅ Rate limit raised to 200/hr
+
+### v3 queue
+- `TARGET_AFFILIATE_ID` and `BESTBUY_AFFILIATE_ID` env vars (env vars exist, leave blank for now)
 - Push notifications for price improvements on tracked products
 - Upgrade Gemini API to paid tier to avoid daily quota exhaustion
+- eBay PDP compare support (extractors exist; PDP detector + retailer mapping not yet wired)
