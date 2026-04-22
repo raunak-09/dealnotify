@@ -18,7 +18,7 @@ const API_BASE = 'https://www.dealnotify.co';
 // Shares GA_API_SECRET and client_id with background.js.
 // To activate: set GA_API_SECRET from GA4 Admin → Data Streams → Measurement Protocol API secrets.
 const GA_MEASUREMENT_ID = 'G-3JJNMF7KKJ';
-const GA_API_SECRET = ''; // TODO: paste your Measurement Protocol API secret here
+const GA_API_SECRET = 'zu_8TRH6TbaGj4TczXNrLw';
 
 function trackEvent(name, params) {
   if (!GA_API_SECRET) return;

@@ -13,7 +13,7 @@ const API_BASE = 'https://www.dealnotify.co';
 // Used for background service worker events (install/update) where gtag.js cannot run.
 // To enable: create a Measurement Protocol API secret in GA4 Admin → Data Streams → Measure Protocol API secrets
 const GA_MEASUREMENT_ID = 'G-3JJNMF7KKJ';
-const GA_API_SECRET = ''; // TODO: set your Measurement Protocol API secret here
+const GA_API_SECRET = 'zu_8TRH6TbaGj4TczXNrLw';
 
 async function getOrCreateGAClientId() {
   const stored = await chrome.storage.local.get(['dn_ga_client_id']);
