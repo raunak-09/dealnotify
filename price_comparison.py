@@ -55,9 +55,28 @@ _CONDITION_LABEL_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Generational/variant suffixes that vary across retailers but don't identify different products.
+# e.g. "Echo Dot (4th Gen)" vs "Echo Dot" — both refer to the same product family.
+_GENERATIONAL_SUFFIX_RE = re.compile(
+    r'[\(\[]?\s*(?:'
+    r'\d+(?:st|nd|rd|th)\s+gen(?:eration)?'       # 4th gen, 2nd generation
+    r'|\b(?:20\d{2}|19\d{2})\b\s*(?:model|release|edition)?'  # 2022, 2022 model, 1999 edition
+    r'|gen(?:eration)?\s*\d+'                      # gen 2, generation 3
+    r'|v\d+(?:\.\d+)?'                             # v2, v3.1
+    r'|mk\s*(?:i{1,3}|iv|v{1,3}|\d+)'             # mk2, mkII
+    r')\s*[\)\]]?',
+    re.IGNORECASE,
+)
+
 def _strip_condition_labels(text: str) -> str:
     """Remove Amazon-specific condition markers that confuse searches on other retailers."""
     return re.sub(r'\s{2,}', ' ', _CONDITION_LABEL_RE.sub('', text)).strip(' ,-–—()')
+
+def _normalize_product_name(text: str) -> str:
+    """Strip generational/variant suffixes that differ between retailers for the same product."""
+    normalized = _GENERATIONAL_SUFFIX_RE.sub(' ', text)
+    normalized = re.sub(r'\s{2,}', ' ', normalized).strip(' ,-–—()')
+    return normalized
 
 def _build_search_query(identity: dict) -> str:
     # UPC is useful for matching/verification but Walmart text search returns
@@ -65,10 +84,11 @@ def _build_search_query(identity: dict) -> str:
     brand = identity.get("brand") or ""
     model = identity.get("model") or ""
     if brand and model:
-        return _strip_condition_labels(f"{brand} {model}")
+        return _normalize_product_name(_strip_condition_labels(f"{brand} {model}"))
     title = identity.get("title") or ""
     if title:
-        return " ".join(_strip_condition_labels(title).split()[:8])
+        cleaned = _normalize_product_name(_strip_condition_labels(title))
+        return " ".join(cleaned.split()[:8])
     asin = identity.get("asin") or ""
     return asin
 
@@ -217,6 +237,82 @@ def _scrape(url: str, formats: list | None = None, wait_for_ms: int = 0) -> tupl
     # No API key or Firecrawl init failed — go straight to Jina
     logging.warning("Using Jina directly for %s (no Firecrawl key or init failure)", url)
     return _scrape_with_jina(url), ''
+
+
+def _parse_walmart_product_page(markdown: str, html: str) -> dict:
+    """Extract product fields from a scraped Walmart product page."""
+    result: dict = {k: None for k in ("title", "brand", "model", "upc", "price", "image_url")}
+
+    # Title: prefer og:title or itemprop="name" from HTML
+    title_m = re.search(r'<meta[^>]+property=["\']og:title["\'][^>]+content=["\']([^"\']+)["\']', html)
+    if not title_m:
+        title_m = re.search(r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:title["\']', html)
+    if title_m:
+        result["title"] = title_m.group(1).strip()
+    else:
+        # Fallback: first non-trivial markdown heading
+        for m in re.finditer(r'^#{1,2}\s+(.+)', markdown, re.MULTILINE):
+            candidate = m.group(1).strip()
+            if len(candidate) > 10 and 'walmart' not in candidate.lower():
+                result["title"] = candidate
+                break
+
+    # Price: look for $ amounts
+    price_m = re.search(r'\$\s*([\d,]+\.\d{2})', markdown)
+    if price_m:
+        try:
+            result["price"] = float(price_m.group(1).replace(",", ""))
+        except ValueError:
+            pass
+
+    # Brand and model from product detail sections
+    def _find_field(label: str) -> str | None:
+        m2 = re.search(rf'(?i){re.escape(label)}\s*[:\|]\s*([^\n|<]+)', markdown)
+        return m2.group(1).strip() if m2 else None
+
+    result["brand"] = _find_field("Brand") or _find_field("Manufacturer")
+    result["model"] = _find_field("Model") or _find_field("Model Number") or _find_field("Part Number")
+    result["upc"] = _find_field("UPC") or _find_field("GTIN")
+
+    # Image
+    img_m = re.search(r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']', html)
+    if not img_m:
+        img_m = re.search(r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image["\']', html)
+    if img_m:
+        result["image_url"] = img_m.group(1)
+
+    return result
+
+
+def _walmart_item_id_from_url(url: str) -> str | None:
+    """Extract Walmart item ID from a walmart.com/ip/... URL."""
+    m = re.search(r'/ip/(?:[^/]+/)?(\d+)', url)
+    return m.group(1) if m else None
+
+
+def _extract_walmart_identity(source_url: str) -> dict:
+    """Extract product identity from a Walmart product URL.
+
+    Scrapes the Walmart PDP to get title, brand, model, and price so that
+    cross-retailer searches use real product data rather than URL slugs.
+    Never raises — returns a dict with all keys always present.
+    """
+    item_id = _walmart_item_id_from_url(source_url)
+
+    # Start with a URL-slug fallback query
+    slug_query = item_id or re.sub(r'[^a-zA-Z0-9 ]', ' ', source_url).strip()[:60]
+    identity = _empty_identity(slug_query)
+
+    try:
+        markdown, html = _scrape(source_url)
+        if markdown or html:
+            parsed = _parse_walmart_product_page(markdown, html)
+            identity.update(parsed)
+    except Exception as exc:
+        logging.warning("Walmart identity extraction failed: %s", exc)
+
+    identity["search_query"] = _build_search_query(identity)
+    return identity
 
 
 def _extract_amazon_identity(source_url: str) -> dict:
@@ -739,6 +835,25 @@ Respond with ONLY valid JSON, no prose:
 """
 
 
+def _price_tier(price: float | None) -> str:
+    """Classify a price into budget / mid / premium tier."""
+    if price is None:
+        return "mid"
+    if price >= 300:
+        return "premium"
+    if price >= 50:
+        return "mid"
+    return "budget"
+
+# Confidence thresholds per price tier: (likely_min, possible_min)
+# Premium products have wider acceptable price variance, so we accept lower keyword overlap.
+_TIER_THRESHOLDS: dict[str, tuple[float, float]] = {
+    "budget": (0.50, 0.35),
+    "mid":    (0.45, 0.30),
+    "premium": (0.38, 0.25),
+}
+
+
 def _score_with_keywords(source_identity: dict, candidates: list[dict], retailer: str = "") -> dict:
     """Fallback scorer using weighted token-overlap when LLM APIs are unavailable."""
     _stopwords = {'the', 'a', 'an', 'and', 'or', 'with', 'for', 'in', 'on', 'at', 'of',
@@ -754,6 +869,10 @@ def _score_with_keywords(source_identity: dict, candidates: list[dict], retailer
 
     if not source_words:
         return {"confidence": "none", "best_index": None, "reasoning": "No source words to match"}
+
+    # Select confidence thresholds based on source product price tier
+    tier = _price_tier(source_identity.get("price"))
+    likely_min, possible_min = _TIER_THRESHOLDS[tier]
 
     # Build weighted source token set: model tokens count 3×, others 1×
     def _weighted_size(token_set: set) -> float:
@@ -778,31 +897,31 @@ def _score_with_keywords(source_identity: dict, candidates: list[dict], retailer
         weighted_overlap = _weighted_size(overlap)
         score = weighted_overlap / source_weighted_total if source_weighted_total else 0.0
 
-        # Boost: brand + at least one model token both appear → floor at likely
+        # Boost: brand + at least one model token both appear → floor at likely_min
         model_hit = source_model_tokens & cand_words
         if source_brand and bool(_brand_pat.search(cand_raw)) and model_hit:
-            score = max(score, 0.6)
+            score = max(score, likely_min + 0.15)
 
         if score > best_score:
             best_score = score
             best_idx = i
 
-    if best_score >= 0.50:
+    if best_score >= likely_min:
         confidence = "likely"
-    elif best_score >= 0.35:
+    elif best_score >= possible_min:
         confidence = "possible"
     else:
-        logging.warning("%s keyword fallback: no match (best_score=%.2f, source_words=%s)",
-                        retailer or "?", best_score, source_words)
+        logging.warning("%s keyword fallback: no match (best_score=%.2f tier=%s source_words=%s)",
+                        retailer or "?", best_score, tier, source_words)
         return {"confidence": "none", "best_index": None, "reasoning": "Low keyword overlap"}
 
-    logging.warning("%s keyword fallback: confidence=%s best_score=%.2f best_idx=%s best_title=%r",
-                    retailer or "?", confidence, best_score, best_idx,
+    logging.warning("%s keyword fallback: confidence=%s best_score=%.2f tier=%s best_idx=%s best_title=%r",
+                    retailer or "?", confidence, best_score, tier, best_idx,
                     candidates[best_idx].get('title', '')[:60] if best_idx is not None else '')
     return {
         "confidence": confidence,
         "best_index": best_idx,
-        "reasoning": f"Keyword overlap {best_score:.0%} (LLM unavailable)"
+        "reasoning": f"Keyword overlap {best_score:.0%} tier={tier} (LLM unavailable)"
     }
 
 
@@ -932,9 +1051,11 @@ def find_comparable_product(
     if identity is None:
         if source_retailer == 'amazon':
             identity = _extract_amazon_identity(source_url)
+        elif source_retailer == 'walmart':
+            identity = _extract_walmart_identity(source_url)
         else:
-            # For non-Amazon sources without a pre-built identity, construct a minimal one
-            # from the URL slug so searches still have some query to work with
+            # For other sources without a dedicated extractor, construct a minimal identity
+            # from the URL slug so searches still have some query to work with.
             slug_query = re.sub(r'[^a-zA-Z0-9 ]', ' ', source_url).strip()[:60]
             identity = _empty_identity(slug_query)
 
