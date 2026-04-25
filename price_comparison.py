@@ -13,6 +13,62 @@ Env vars (set by caller / environment):
 import os
 import re
 import logging
+import threading
+import time
+
+# ---------------------------------------------------------------------------
+# Crawl metrics — per-retailer counters for cost tracking and tier-effectiveness analysis.
+# Exposed via web_app.py /api/admin/crawl-stats. Counters are in-memory and reset on
+# process restart; that's fine for our scale — Railway restarts are observable and the
+# numbers are directional, not accounting-grade.
+# ---------------------------------------------------------------------------
+
+class _CrawlMetrics:
+    """Thread-safe per-retailer counter store."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._counts: dict[tuple[str, str], int] = {}
+        self._started_at: float = time.time()
+
+    def inc(self, metric: str, retailer: str = "", n: int = 1) -> None:
+        retailer = retailer or "unknown"
+        with self._lock:
+            key = (metric, retailer)
+            self._counts[key] = self._counts.get(key, 0) + n
+
+    def snapshot(self) -> dict:
+        with self._lock:
+            counts_copy = dict(self._counts)
+            started_at = self._started_at
+        # Group as { metric: { retailer: count } }
+        grouped: dict[str, dict[str, int]] = {}
+        for (metric, retailer), n in counts_copy.items():
+            grouped.setdefault(metric, {})[retailer] = n
+        return {
+            'started_at': started_at,
+            'uptime_seconds': time.time() - started_at,
+            'metrics': grouped,
+        }
+
+    def reset(self) -> None:
+        with self._lock:
+            self._counts.clear()
+            self._started_at = time.time()
+
+
+_crawl_metrics = _CrawlMetrics()
+
+
+def get_crawl_metrics() -> dict:
+    """Public accessor for web_app.py admin endpoint."""
+    return _crawl_metrics.snapshot()
+
+
+def reset_crawl_metrics() -> None:
+    """Public reset for web_app.py admin endpoint."""
+    _crawl_metrics.reset()
+
 
 # ---------------------------------------------------------------------------
 # Retailer searcher registry
@@ -158,8 +214,12 @@ def _init_firecrawl(api_key: str):
 
 
 def _scrape_with_jina(url: str) -> str:
-    """Free fallback scraper using Jina AI Reader (r.jina.ai). No API key needed.
-    Returns markdown text; HTML is not available via this path."""
+    """Last-ditch fallback scraper using Jina AI Reader (r.jina.ai). No API key needed.
+    Returns markdown text; HTML is not available via this path.
+
+    NOTE: Empirically unreliable on retail PDPs — never load-bearing. Output must
+    pass _jina_quality_ok() before being returned to callers. See docs/11 - Crawl Strategy.md.
+    """
     import urllib.request as _ureq
     jina_url = f"https://r.jina.ai/{url}"
     req = _ureq.Request(jina_url, headers={
@@ -176,12 +236,61 @@ def _scrape_with_jina(url: str) -> str:
         return ''
 
 
+def _jina_quality_ok(content: str, is_search_page: bool = False) -> bool:
+    """Quality gate for Jina output before returning it to downstream parsers.
+
+    Jina commonly returns near-empty pages, login walls, or anti-bot stubs for retail
+    sites. Without this gate, downstream parsers see junk and produce false negatives.
+
+    A response is considered usable if it has either:
+      - A clear $X.XX price marker (for PDPs and search results), OR
+      - At least one product link to a known retailer (for search pages), AND
+      - Minimum 800 chars of text (filters out anti-bot pages and login walls).
+    """
+    if not content or len(content) < 800:
+        return False
+    has_price = bool(re.search(r'\$\s*\d+(?:[.,]\d{2,})', content))
+    if has_price:
+        return True
+    if is_search_page:
+        # Search pages may not always show prices inline (lazy-loaded), but should have product links
+        has_product_link = bool(re.search(
+            r'\((https?://[^)\s]*(?:amazon|walmart|target|bestbuy|costco|ebay)\.com/[^)\s]+)\)',
+            content,
+        ))
+        return has_product_link
+    return False
+
+
 _PAYMENT_ERRORS = ("payment required", "insufficient credits", "402", "upgrade your plan")
 
+_SEARCH_URL_PATTERNS = (
+    '/s?', '/search?', '/searchpage', 'CatalogSearch', 'searchTerm',
+)
 
-def _do_scrape(fc, api_version: str, url: str, formats: list | None = None, wait_for_ms: int = 0) -> tuple[str, str]:
+
+def _is_search_url(url: str) -> bool:
+    return any(p in url for p in _SEARCH_URL_PATTERNS)
+
+
+def _try_jina(url: str, retailer: str = "") -> tuple[str, str]:
+    """Last-ditch Jina attempt with quality gate. Returns ('','') if output is junk
+    so downstream parsers don't see anti-bot pages or login walls."""
+    _crawl_metrics.inc('jina_attempts', retailer)
+    jina_md = _scrape_with_jina(url)
+    if not _jina_quality_ok(jina_md, is_search_page=_is_search_url(url)):
+        logging.warning("Jina output failed quality gate for %s (len=%d) — returning empty",
+                        url, len(jina_md))
+        return '', ''
+    _crawl_metrics.inc('jina_successes', retailer)
+    return jina_md, ''  # Jina returns markdown only; HTML parsers won't run
+
+
+def _do_scrape(fc, api_version: str, url: str, formats: list | None = None, wait_for_ms: int = 0,
+               retailer: str = "") -> tuple[str, str]:
     fmts = formats or ['markdown', 'html']
     try:
+        _crawl_metrics.inc('firecrawl_calls', retailer)
         if api_version == 'v2':
             kwargs = {'formats': fmts}
             if wait_for_ms:
@@ -198,11 +307,12 @@ def _do_scrape(fc, api_version: str, url: str, formats: list | None = None, wait
             except TypeError:
                 result = fc.scrape_url(url, fmts)
             if not isinstance(result, dict):
-                return '', ''
+                return _try_jina(url, retailer)
             markdown = result.get('markdown') or ''
             html = result.get('html') or ''
 
         if markdown or html:
+            _crawl_metrics.inc('firecrawl_successes', retailer)
             return markdown, html
 
         # Empty response — fall through to Jina
@@ -211,32 +321,99 @@ def _do_scrape(fc, api_version: str, url: str, formats: list | None = None, wait
     except Exception as exc:
         exc_str = str(exc).lower()
         if any(e in exc_str for e in _PAYMENT_ERRORS):
-            logging.warning("Firecrawl credits exhausted — falling back to Jina for %s", url)
+            _crawl_metrics.inc('firecrawl_credit_exhausted', retailer)
+            logging.warning("Firecrawl credits exhausted — last-ditch Jina for %s", url)
         else:
-            logging.warning("Firecrawl scrape failed (%s) — falling back to Jina for %s", exc, url)
+            _crawl_metrics.inc('firecrawl_failures', retailer)
+            logging.warning("Firecrawl scrape failed (%s) — last-ditch Jina for %s", exc, url)
 
-        jina_md = _scrape_with_jina(url)
-        return jina_md, ''  # Jina returns markdown only; HTML parsers won't run
+        return _try_jina(url, retailer)
 
 
-def _scrape(url: str, formats: list | None = None, wait_for_ms: int = 0) -> tuple[str, str]:
-    """Unified scrape helper: Firecrawl (with Jina fallback) or Jina-only if no API key.
+def _scrape_via_scraperapi(url: str, render_js: bool = False, retailer: str = "") -> tuple[str, str]:
+    """Tier-2 paid scraper. Cheaper than Firecrawl (~$0.001/req vs ~$0.01-0.04).
+    Returns (markdown_or_html, html). For now returns html as both, since ScraperAPI
+    returns raw HTML — downstream parsers in this module also accept HTML.
 
-    All _search_* functions use this instead of calling _init_firecrawl/_do_scrape directly.
-    This ensures Jina is always tried even when FIRECRAWL_API_KEY is absent or exhausted.
+    Requires SCRAPER_API_KEY env var. If not set, returns ('','') so caller can fall through.
     """
-    api_key = (os.getenv("FIRECRAWL_API_KEY") or "").strip()
-    if api_key:
-        try:
-            fc, api_version = _init_firecrawl(api_key)
-            # _do_scrape already falls back to Jina internally on payment/error
-            return _do_scrape(fc, api_version, url, formats=formats, wait_for_ms=wait_for_ms)
-        except Exception as exc:
-            logging.warning("Firecrawl init failed, going to Jina directly: %s", exc)
+    api_key = (os.getenv("SCRAPER_API_KEY") or "").strip()
+    if not api_key:
+        return '', ''
 
-    # No API key or Firecrawl init failed — go straight to Jina
-    logging.warning("Using Jina directly for %s (no Firecrawl key or init failure)", url)
-    return _scrape_with_jina(url), ''
+    import urllib.request as _ureq
+    from urllib.parse import urlencode
+
+    params = {
+        'api_key': api_key,
+        'url': url,
+        'country_code': 'us',
+    }
+    if render_js:
+        params['render'] = 'true'
+
+    api_url = f"https://api.scraperapi.com/?{urlencode(params)}"
+    req = _ureq.Request(api_url, headers={'Accept': 'text/html, */*'})
+
+    try:
+        _crawl_metrics.inc('scraperapi_calls', retailer)
+        with _ureq.urlopen(req, timeout=30) as resp:
+            html = resp.read().decode('utf-8', errors='replace')
+        if html and len(html) > 800:
+            _crawl_metrics.inc('scraperapi_successes', retailer)
+            # Most parsers in this module read either markdown or html. We don't have
+            # a markdown converter here, so pass html through both slots — markdown-only
+            # parsers will fail and fall through to html parsing where present.
+            return html, html
+        return '', ''
+    except Exception as exc:
+        _crawl_metrics.inc('scraperapi_failures', retailer)
+        logging.warning("ScraperAPI failed for %s: %s", url, exc)
+        return '', ''
+
+
+def _scrape(url: str, formats: list | None = None, wait_for_ms: int = 0,
+            retailer: str = "") -> tuple[str, str]:
+    """Unified scrape helper. Provider order driven by SCRAPER_PROVIDER env var:
+        - 'firecrawl' (default): Firecrawl primary, Jina last-ditch with quality gate
+        - 'scraperapi': ScraperAPI primary, Firecrawl fallback, Jina last-ditch
+        - 'firecrawl-then-scraperapi': Try Firecrawl first; on credit exhaustion or empty,
+          escalate to ScraperAPI (preserves Firecrawl quality but caps spend at credits)
+
+    Tier flow per call: Tier-2 paid (if configured) → Tier-3 Firecrawl → Tier-4 Jina (gated).
+    See docs/11 - Crawl Strategy.md for the full strategy.
+    """
+    provider = (os.getenv("SCRAPER_PROVIDER") or "firecrawl").strip().lower()
+    fc_api_key = (os.getenv("FIRECRAWL_API_KEY") or "").strip()
+    sa_api_key = (os.getenv("SCRAPER_API_KEY") or "").strip()
+
+    # ScraperAPI primary
+    if provider == 'scraperapi' and sa_api_key:
+        md, html = _scrape_via_scraperapi(url, render_js=bool(wait_for_ms), retailer=retailer)
+        if md or html:
+            return md, html
+        # fall through to Firecrawl
+
+    # Firecrawl path (default)
+    if fc_api_key:
+        try:
+            fc, api_version = _init_firecrawl(fc_api_key)
+            md, html = _do_scrape(fc, api_version, url, formats=formats,
+                                  wait_for_ms=wait_for_ms, retailer=retailer)
+            if md or html:
+                return md, html
+        except Exception as exc:
+            logging.warning("Firecrawl init failed: %s", exc)
+
+    # firecrawl-then-scraperapi escalation: try ScraperAPI after Firecrawl miss/fail
+    if provider == 'firecrawl-then-scraperapi' and sa_api_key:
+        md, html = _scrape_via_scraperapi(url, render_js=bool(wait_for_ms), retailer=retailer)
+        if md or html:
+            return md, html
+
+    # Last-ditch: Jina (rarely useful in practice — see strategy doc)
+    logging.warning("All paid scrapers missed for %s — last-ditch Jina", url)
+    return _try_jina(url, retailer)
 
 
 def _parse_walmart_product_page(markdown: str, html: str) -> dict:
@@ -304,7 +481,7 @@ def _extract_walmart_identity(source_url: str) -> dict:
     identity = _empty_identity(slug_query)
 
     try:
-        markdown, html = _scrape(source_url)
+        markdown, html = _scrape(source_url, retailer="walmart")
         if markdown or html:
             parsed = _parse_walmart_product_page(markdown, html)
             identity.update(parsed)
@@ -331,7 +508,7 @@ def _extract_amazon_identity(source_url: str) -> dict:
     identity["asin"] = asin
 
     try:
-        markdown, html = _scrape(source_url)
+        markdown, html = _scrape(source_url, retailer="amazon")
         if markdown or html:
             parsed = _parse_amazon_markdown(markdown, html)
             identity.update(parsed)
@@ -396,7 +573,7 @@ def _search_walmart(identity: dict) -> list:
     url = f"https://www.walmart.com/search?q={quote_plus(search_query)}"
 
     try:
-        markdown, html = _scrape(url)
+        markdown, html = _scrape(url, retailer="walmart")
     except Exception as exc:
         logging.warning("Walmart search scrape failed: %s", exc)
         return []
@@ -448,6 +625,109 @@ def _parse_target_results(markdown: str, html: str) -> list:
     return candidates
 
 
+_TARGET_REDSKY_KEYS = [
+    # Public web client keys observed in target.com's JS bundle. These rotate occasionally
+    # so we try several. If none work, fall through to scraping.
+    "9f36aeafbe60771e321a7cc95a78140772ab3e96",
+    "ff457966e64d5e877fdbad070f276d18ecec4a01",
+]
+
+_TARGET_REDSKY_URL = (
+    "https://redsky.target.com/redsky_aggregations/v1/web/plp_search_v2"
+    "?key={key}&keyword={q}&channel=WEB&page=/s/{q}&count=12&offset=0"
+    "&pricing_store_id=3991&platform=desktop&visitor_id=DEALNOTIFY"
+)
+
+
+def _search_target_redsky(search_query: str) -> list:
+    """Tier-1 fast path: Target's internal redsky JSON API. No API key required, free,
+    structured. Modeled on _search_bestbuy_json — tries known keys and parses defensively.
+    """
+    import urllib.request
+    import json as _json
+    from urllib.parse import quote
+
+    encoded = quote(search_query)
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Origin": "https://www.target.com",
+        "Referer": "https://www.target.com/",
+    }
+
+    _crawl_metrics.inc('native_api_calls', 'target')
+    for key in _TARGET_REDSKY_KEYS:
+        url = _TARGET_REDSKY_URL.format(key=key, q=encoded)
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=4) as resp:
+                if resp.status != 200:
+                    continue
+                data = _json.loads(resp.read())
+        except Exception as exc:
+            logging.warning("Target redsky %s failed: %s", key[:8], exc)
+            continue
+
+        # Response shape: data → search_response → products → list of product dicts
+        products = (
+            (data.get("data") or {})
+            .get("search", {})
+            .get("products")
+            or (data.get("data") or {}).get("search_response", {}).get("products")
+            or []
+        )
+        if not products:
+            continue
+
+        candidates = []
+        for p in products[:5]:
+            item = p.get("item") or {}
+            name = (
+                (item.get("product_description") or {}).get("title")
+                or item.get("name")
+                or p.get("name")
+                or ""
+            )
+            if not name:
+                continue
+            price_obj = p.get("price") or {}
+            price_raw = (
+                price_obj.get("current_retail")
+                or price_obj.get("reg_retail")
+                or price_obj.get("formatted_current_price")
+            )
+            try:
+                if isinstance(price_raw, str):
+                    price_raw = price_raw.replace("$", "").replace(",", "").strip()
+                price = float(price_raw) if price_raw is not None else None
+            except (TypeError, ValueError):
+                price = None
+            tcin = item.get("tcin") or p.get("tcin") or ""
+            slug = (item.get("enrichment") or {}).get("buy_url") or ""
+            if slug and not slug.startswith("http"):
+                slug = "https://www.target.com" + slug
+            if not slug and tcin:
+                slug = f"https://www.target.com/p/-/A-{tcin}"
+
+            image_url = None
+            primary_img = (item.get("enrichment") or {}).get("images") or {}
+            if primary_img:
+                image_url = primary_img.get("primary_image_url") or None
+
+            candidates.append({"title": name, "price": price, "url": slug, "image_url": image_url})
+
+        if candidates:
+            _crawl_metrics.inc('native_api_successes', 'target')
+            logging.warning("Target redsky API: found %d candidates: %s",
+                            len(candidates),
+                            [(c['title'][:50], c['price']) for c in candidates[:3]])
+            return candidates
+
+    logging.warning("Target redsky: no candidates returned for %r", search_query)
+    return []
+
+
 def _search_target(identity: dict) -> list:
     """Search Target for candidates matching the given product identity."""
     from urllib.parse import quote_plus
@@ -456,10 +736,15 @@ def _search_target(identity: dict) -> list:
     if not search_query:
         return []
 
+    # Fast path: redsky JSON API (no Firecrawl, no anti-bot issues)
+    candidates = _search_target_redsky(search_query)
+    if candidates:
+        return candidates
+
     url = f"https://www.target.com/s?searchTerm={quote_plus(search_query)}"
 
     try:
-        markdown, html = _scrape(url, formats=['markdown'], wait_for_ms=2000)
+        markdown, html = _scrape(url, formats=['markdown'], wait_for_ms=2000, retailer="target")
     except Exception as exc:
         logging.warning("Target search scrape failed: %s", exc)
         return []
@@ -568,6 +853,7 @@ def _search_bestbuy_json(search_query: str) -> list:
         "Referer": "https://www.bestbuy.com/",
     }
 
+    _crawl_metrics.inc('native_api_calls', 'bestbuy')
     for url_template in _BB_JSON_URLS:
         url = url_template.format(q=encoded)
         req = urllib.request.Request(url, headers=headers)
@@ -610,6 +896,7 @@ def _search_bestbuy_json(search_query: str) -> list:
             candidates.append({"title": name, "price": price, "url": raw_url, "image_url": None})
 
         if candidates:
+            _crawl_metrics.inc('native_api_successes', 'bestbuy')
             logging.warning("Best Buy JSON API (%s): found %d candidates: %s",
                             url, len(candidates),
                             [(c['title'][:50], c['price']) for c in candidates[:3]])
@@ -636,7 +923,7 @@ def _search_bestbuy(identity: dict) -> list:
     url = f"https://www.bestbuy.com/site/searchpage.jsp?st={quote_plus(search_query)}"
 
     try:
-        markdown, html = _scrape(url, formats=['markdown', 'html'], wait_for_ms=3000)
+        markdown, html = _scrape(url, formats=['markdown', 'html'], wait_for_ms=3000, retailer="bestbuy")
     except Exception as exc:
         logging.warning("Best Buy search scrape failed: %s", exc)
         return []
@@ -704,7 +991,7 @@ def _search_costco(identity: dict) -> list:
     url = f"https://www.costco.com/CatalogSearch?keyword={quote_plus(search_query)}"
 
     try:
-        markdown, html = _scrape(url, formats=['markdown'], wait_for_ms=3000)
+        markdown, html = _scrape(url, formats=['markdown'], wait_for_ms=3000, retailer="costco")
     except Exception as exc:
         logging.warning("Costco search scrape failed: %s", exc)
         return []
@@ -772,7 +1059,7 @@ def _search_amazon(identity: dict) -> list:
     url = f"https://www.amazon.com/s?k={quote_plus(search_query)}"
 
     try:
-        markdown, html = _scrape(url)
+        markdown, html = _scrape(url, retailer="amazon")
     except Exception as exc:
         logging.warning("Amazon search scrape failed: %s", exc)
         return []
@@ -793,6 +1080,268 @@ def _search_amazon(identity: dict) -> list:
 
 
 RETAILER_SEARCHERS["amazon"] = _search_amazon
+
+
+# ---------------------------------------------------------------------------
+# Tier-1 retailer-native API stubs — wired when env vars are set.
+# These functions return [] when their key is missing, so the existing
+# scraping path remains the active route until keys are configured.
+# See docs/11 - Crawl Strategy.md → Phase 2 for activation steps.
+# ---------------------------------------------------------------------------
+
+# eBay OAuth Application access token cache.
+# Tokens live for 2 hours (7200s). We refresh ~5 minutes before expiry to avoid
+# in-flight expiry races. Token is shared process-wide, refreshed under a lock.
+_ebay_token_lock = threading.Lock()
+_ebay_token_state: dict = {"token": None, "expires_at": 0.0}
+
+
+def _get_ebay_app_token() -> str | None:
+    """Fetch an Application access token via OAuth2 client_credentials grant.
+    Caches the token in-process and refreshes ~5 minutes before expiry.
+
+    Requires EBAY_APP_ID (Client ID) and EBAY_CERT_ID (Client Secret) env vars.
+    Returns None if either is missing or the token request fails.
+    """
+    import base64
+    import urllib.request
+    import urllib.parse
+    import json as _json
+
+    app_id  = (os.getenv("EBAY_APP_ID")  or "").strip()
+    cert_id = (os.getenv("EBAY_CERT_ID") or "").strip()
+    if not (app_id and cert_id):
+        return None
+
+    now = time.time()
+    with _ebay_token_lock:
+        cached = _ebay_token_state.get("token")
+        expires_at = _ebay_token_state.get("expires_at", 0.0)
+        if cached and now < expires_at - 300:  # 5-min safety buffer
+            return cached
+
+        # Fetch new token
+        creds = base64.b64encode(f"{app_id}:{cert_id}".encode()).decode()
+        body  = urllib.parse.urlencode({
+            "grant_type": "client_credentials",
+            "scope": "https://api.ebay.com/oauth/api_scope",
+        }).encode()
+        req = urllib.request.Request(
+            "https://api.ebay.com/identity/v1/oauth2/token",
+            data=body,
+            method="POST",
+            headers={
+                "Authorization": f"Basic {creds}",
+                "Content-Type":  "application/x-www-form-urlencoded",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                payload = _json.loads(resp.read())
+            token   = payload.get("access_token")
+            ttl_s   = int(payload.get("expires_in", 7200))
+            if not token:
+                logging.warning("eBay OAuth: no access_token in response: %s", payload)
+                return None
+            _ebay_token_state["token"]      = token
+            _ebay_token_state["expires_at"] = now + ttl_s
+            _crawl_metrics.inc('ebay_token_refreshes', 'ebay')
+            logging.warning("eBay OAuth: minted new app token (ttl=%ds)", ttl_s)
+            return token
+        except Exception as exc:
+            logging.warning("eBay OAuth token fetch failed: %s", exc)
+            _crawl_metrics.inc('ebay_token_failures', 'ebay')
+            return None
+
+
+def _search_ebay_browse_api(search_query: str) -> list:
+    """Tier-1 fast path: eBay Browse API (5000 free calls/day).
+    Activated when EBAY_APP_ID + EBAY_CERT_ID env vars are set. Returns [] otherwise.
+    Endpoint: https://api.ebay.com/buy/browse/v1/item_summary/search
+
+    Uses an OAuth2 Application access token (client_credentials grant), refreshed
+    automatically every ~2h via _get_ebay_app_token().
+    """
+    token = _get_ebay_app_token()
+    if not token:
+        return []
+
+    import urllib.request
+    import json as _json
+    from urllib.parse import quote_plus
+
+    _crawl_metrics.inc('native_api_calls', 'ebay')
+    url = f"https://api.ebay.com/buy/browse/v1/item_summary/search?q={quote_plus(search_query)}&limit=5"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
+    }
+
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = _json.loads(resp.read())
+    except Exception as exc:
+        logging.warning("eBay Browse API failed: %s", exc)
+        return []
+
+    items = data.get("itemSummaries") or []
+    candidates = []
+    for it in items[:5]:
+        title = it.get("title") or ""
+        price_obj = it.get("price") or {}
+        try:
+            price = float(price_obj.get("value")) if price_obj.get("value") else None
+        except (TypeError, ValueError):
+            price = None
+        url_ = it.get("itemWebUrl") or ""
+        img = (it.get("image") or {}).get("imageUrl")
+        if title and url_:
+            candidates.append({"title": title, "price": price, "url": url_, "image_url": img})
+
+    if candidates:
+        _crawl_metrics.inc('native_api_successes', 'ebay')
+    return candidates
+
+
+def _search_bestbuy_open_api(search_query: str) -> list:
+    """Tier-1 fast path: Best Buy Open API (5000 free calls/day).
+    Activated when BESTBUY_API_KEY env var is set. Returns [] otherwise.
+    More reliable than the internal JSON path (_search_bestbuy_json) which can
+    break without notice. When this returns results, the internal path is skipped.
+    """
+    api_key = (os.getenv("BESTBUY_API_KEY") or "").strip()
+    if not api_key:
+        return []
+
+    import urllib.request
+    import json as _json
+    from urllib.parse import quote
+
+    _crawl_metrics.inc('native_api_calls', 'bestbuy_open')
+    # Best Buy Open API multi-term syntax: (search=word1&search=word2&...) — each
+    # `search=` is an AND'd filter. Cap at 6 terms to keep the URL short and avoid
+    # the API rejecting overly specific queries that would return zero results.
+    tokens = [quote(w) for w in search_query.split()[:6] if len(w) >= 2]
+    if not tokens:
+        return []
+    keyword_filter = "&".join(f"search={t}" for t in tokens)
+    url = (
+        f"https://api.bestbuy.com/v1/products({keyword_filter})"
+        f"?apiKey={api_key}&format=json&pageSize=5&show=sku,name,salePrice,regularPrice,url,image"
+    )
+
+    try:
+        req = urllib.request.Request(url, headers={"Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = _json.loads(resp.read())
+    except Exception as exc:
+        logging.warning("Best Buy Open API failed: %s", exc)
+        return []
+
+    products = data.get("products") or []
+    candidates = []
+    for p in products[:5]:
+        title = p.get("name") or ""
+        price = p.get("salePrice") or p.get("regularPrice")
+        try:
+            price = float(price) if price is not None else None
+        except (TypeError, ValueError):
+            price = None
+        url_ = p.get("url") or ""
+        if url_ and not url_.startswith("http"):
+            url_ = "https://www.bestbuy.com" + url_
+        img = p.get("image")
+        if title and url_:
+            candidates.append({"title": title, "price": price, "url": url_, "image_url": img})
+
+    if candidates:
+        _crawl_metrics.inc('native_api_successes', 'bestbuy_open')
+    return candidates
+
+
+def _search_amazon_paapi(search_query: str) -> list:
+    """Tier-1 fast path: Amazon Product Advertising API 5.0.
+    Activated when AMAZON_PA_ACCESS_KEY, AMAZON_PA_SECRET_KEY, and AMAZON_PA_PARTNER_TAG
+    are all set. Returns [] otherwise.
+
+    NOTE: PA-API requires the `python-amazon-paapi` package and AWS Signature v4 signing.
+    This stub returns [] until both env vars and the dependency are present, at which
+    point the implementation can be filled in (or use the official SDK).
+    See: https://webservices.amazon.com/paapi5/documentation/
+    """
+    access_key = (os.getenv("AMAZON_PA_ACCESS_KEY") or "").strip()
+    secret_key = (os.getenv("AMAZON_PA_SECRET_KEY") or "").strip()
+    partner_tag = (os.getenv("AMAZON_PA_PARTNER_TAG") or "").strip()
+    if not (access_key and secret_key and partner_tag):
+        return []
+
+    # Implementation deferred to Phase 2 (see docs/11 - Crawl Strategy.md).
+    # Once paapi5-python-sdk is installed and Associates approval is in place, fill in:
+    #   1. Construct SearchItemsRequest with Keywords=search_query, ItemCount=5,
+    #      Resources=['ItemInfo.Title', 'Offers.Listings.Price', 'Images.Primary.Large']
+    #   2. Sign the request with AWS4 (the SDK does this).
+    #   3. POST to https://webservices.amazon.com/paapi5/searchitems
+    #   4. Map response.SearchResult.Items to candidate dicts.
+    logging.warning("Amazon PA-API: keys present but implementation deferred to Phase 2")
+    _crawl_metrics.inc('native_api_calls', 'amazon_paapi_stub')
+    return []
+
+
+# Wire native-API fast paths into existing searchers — they no-op when keys absent.
+# Order: native API first, then existing scraping path (already handles its own fallbacks).
+
+_original_search_ebay = RETAILER_SEARCHERS.get("ebay")  # not currently registered; placeholder
+
+def _search_ebay(identity: dict) -> list:
+    """eBay searcher. Tier-1 (Browse API) → falls through to scraping path if not configured.
+    eBay PDPs aren't currently wired as a Compare source (see CLAUDE.md v3 queue), but the
+    target-side searcher is registered so users on Amazon/Walmart can compare against eBay.
+    """
+    search_query = identity.get("search_query") or ""
+    if not search_query:
+        return []
+    # Tier 1: Browse API
+    candidates = _search_ebay_browse_api(search_query)
+    if candidates:
+        return candidates
+    # No scraping fallback for eBay yet — would be added if Browse API quota becomes a concern
+    return []
+
+
+RETAILER_SEARCHERS["ebay"] = _search_ebay
+
+
+# Override Best Buy searcher to try Open API before internal JSON
+_search_bestbuy_internal_jsonscrape = _search_bestbuy
+
+def _search_bestbuy_with_native_api(identity: dict) -> list:
+    search_query = identity.get("search_query") or ""
+    if search_query:
+        candidates = _search_bestbuy_open_api(search_query)
+        if candidates:
+            return candidates
+    # Fall through to existing internal JSON + scraping path
+    return _search_bestbuy_internal_jsonscrape(identity)
+
+
+RETAILER_SEARCHERS["bestbuy"] = _search_bestbuy_with_native_api
+
+
+# Override Amazon searcher to try PA-API before scraping
+_search_amazon_scrape = _search_amazon
+
+def _search_amazon_with_native_api(identity: dict) -> list:
+    search_query = identity.get("search_query") or ""
+    if search_query:
+        candidates = _search_amazon_paapi(search_query)
+        if candidates:
+            return candidates
+    return _search_amazon_scrape(identity)
+
+
+RETAILER_SEARCHERS["amazon"] = _search_amazon_with_native_api
 
 
 _VALID_CONFIDENCES = {"exact", "likely", "possible", "none"}
@@ -1030,6 +1579,37 @@ def _score_with_groq(source_identity: dict, candidates: list[dict]) -> dict:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
+def extract_identity(source_url: str, source_retailer: str) -> dict:
+    """Public identity extractor. Web layer calls this once, caches the result, and
+    passes the identity to find_comparable_product() for every target retailer in the
+    same Compare request — saving N-1 redundant source-PDP scrapes.
+
+    Returns _empty_identity() for unsupported retailers so callers always get a dict.
+    Never raises.
+    """
+    if source_retailer == 'amazon':
+        return _extract_amazon_identity(source_url)
+    if source_retailer == 'walmart':
+        return _extract_walmart_identity(source_url)
+    # Other source retailers fall back to a slug-only identity (no scrape)
+    slug_query = re.sub(r'[^a-zA-Z0-9 ]', ' ', source_url).strip()[:60]
+    identity = _empty_identity(slug_query)
+    return identity
+
+
+def canonical_id_from_url(source_url: str, source_retailer: str) -> str | None:
+    """Extract a stable per-retailer canonical ID from a PDP URL.
+    Used as the cache key for identity and page-dedup tables.
+    """
+    if source_retailer == 'amazon':
+        return _asin_from_url(source_url)
+    if source_retailer == 'walmart':
+        return _walmart_item_id_from_url(source_url)
+    # For retailers without a regex extractor yet, fall back to None (callers will
+    # use source_url as the identifier instead).
+    return None
+
 
 def find_comparable_product(
     source_url: str,

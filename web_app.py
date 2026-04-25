@@ -19,7 +19,7 @@ from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 from dotenv import load_dotenv
 from price_monitor import scrape_price, scrape_stock_status, extract_stock_status
-from price_comparison import find_comparable_product
+from price_comparison import find_comparable_product, extract_identity, canonical_id_from_url
 import pg8000.dbapi as pg8000
 from urllib.parse import urlparse
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -366,6 +366,64 @@ def init_db():
                 comparison_id INTEGER REFERENCES product_comparisons(id),
                 clicked_at TIMESTAMP DEFAULT NOW()
             );
+        """)
+        # Compare feature — source identity cache
+        # Identity (title/brand/model/upc) is stable for the life of a SKU, so this gets a
+        # 30-day TTL — much longer than the comparison match cache. Cuts ~50% of Firecrawl
+        # calls per Compare miss by avoiding source-PDP re-scrape. See docs/11 - Crawl Strategy.md.
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS product_identities (
+                id SERIAL PRIMARY KEY,
+                retailer TEXT NOT NULL,
+                canonical_id TEXT NOT NULL,
+                source_url TEXT,
+                title TEXT,
+                brand TEXT,
+                model TEXT,
+                upc TEXT,
+                price NUMERIC(10,2),
+                image_url TEXT,
+                search_query TEXT,
+                cached_at TIMESTAMP DEFAULT NOW(),
+                expires_at TIMESTAMP DEFAULT (NOW() + INTERVAL '30 days')
+            );
+        """)
+        cur.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_identities_lookup
+            ON product_identities(retailer, canonical_id);
+        """)
+        # Cross-user product page dedup — see docs/11 - Crawl Strategy.md
+        # The price monitor uses this so 100 users tracking the same ASIN result in 1 scrape
+        # per cycle, not 100. Adaptive scheduling lives here too (stable_streak / next_check_at).
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS product_pages (
+                id SERIAL PRIMARY KEY,
+                retailer TEXT NOT NULL,
+                canonical_id TEXT NOT NULL,
+                url TEXT NOT NULL,
+                current_price NUMERIC(10,2),
+                stock_status TEXT,
+                last_checked TIMESTAMP,
+                stable_streak INTEGER DEFAULT 0,
+                next_check_at TIMESTAMP DEFAULT NOW(),
+                payload_json JSONB,
+                created_at TIMESTAMP DEFAULT NOW()
+            );
+        """)
+        cur.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_product_pages_canonical
+            ON product_pages(retailer, canonical_id);
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_product_pages_due
+            ON product_pages(next_check_at) WHERE next_check_at IS NOT NULL;
+        """)
+        # Link products → product_pages (lazy-populated; nullable until a check runs)
+        cur.execute("""
+            ALTER TABLE products ADD COLUMN IF NOT EXISTS page_id INTEGER REFERENCES product_pages(id);
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_products_page_id ON products(page_id);
         """)
         conn.commit()
         print("✅ Database tables ready")
@@ -2185,6 +2243,57 @@ def user_check_history():
         conn.close()
 
 
+@app.route('/api/admin/crawl-stats', methods=['GET'])
+def admin_crawl_stats():
+    """Admin: per-retailer crawl metrics for cost tracking and tier-effectiveness analysis.
+
+    Counters are in-memory (reset on Railway restart) and directional, not accounting-grade.
+    See docs/11 - Crawl Strategy.md for what each metric means.
+
+    Query params:
+        ?reset=1  → reset all counters after returning current snapshot
+    """
+    if not require_admin():
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    try:
+        from price_comparison import get_crawl_metrics, reset_crawl_metrics
+    except Exception as e:
+        return jsonify({'error': f'crawl metrics module not available: {e}'}), 500
+
+    snapshot = get_crawl_metrics()
+
+    # Derived: dedup_factor (only meaningful once price_monitor is using product_pages)
+    try:
+        conn = get_db_conn()
+        cur = conn.cursor()
+        try:
+            cur.execute("SELECT COUNT(*) AS n FROM products")
+            total_products = _fetchone(cur)['n']
+            cur.execute("SELECT to_regclass('product_pages') AS exists")
+            pp_exists = _fetchone(cur)['exists']
+            unique_pages = None
+            if pp_exists:
+                cur.execute("SELECT COUNT(*) AS n FROM product_pages")
+                unique_pages = _fetchone(cur)['n']
+            snapshot['dedup'] = {
+                'total_products': total_products,
+                'unique_pages': unique_pages,
+                'dedup_factor': (total_products / unique_pages) if unique_pages else None,
+            }
+        finally:
+            cur.close()
+            conn.close()
+    except Exception as e:
+        snapshot['dedup'] = {'error': str(e)}
+
+    if request.args.get('reset') == '1':
+        reset_crawl_metrics()
+        snapshot['reset'] = True
+
+    return jsonify(snapshot), 200
+
+
 @app.route('/admin')
 def admin():
     """Admin dashboard — restricted to ADMIN_EMAILS or ADMIN_PASSWORD env var"""
@@ -2536,6 +2645,202 @@ def robots():
 # AUTOMATED HOURLY PRICE CHECK JOB
 # ─────────────────────────────────────────────
 
+# ── Cross-user product page dedup + adaptive scheduling helpers ──
+# See docs/11 - Crawl Strategy.md for the strategy. Goal: scrape each unique product
+# page exactly once per check cycle, regardless of how many users are tracking it.
+# Backed by the product_pages table.
+
+import json as _json_for_pages
+
+_RE_AMAZON_ASIN = re.compile(r'/(?:dp|gp/product)/([A-Z0-9]{10})')
+_RE_WALMART_IP  = re.compile(r'walmart\.com/ip/(?:[^/]+/)?(\d+)')
+_RE_BESTBUY_SKU = re.compile(r'bestbuy\.com/site/.*?(\d+)\.p\b')
+_RE_TARGET_TCIN = re.compile(r'target\.com/p/[^/]+/-/A-(\d+)')
+_RE_COSTCO_PID  = re.compile(r'costco\.com/.*\.product\.(\d+)')
+_RE_EBAY_ITEM   = re.compile(r'ebay\.com/itm/(?:[^/]*/)?(\d+)')
+
+
+def _canonical_page_key(url: str) -> tuple:
+    """Return (retailer_slug, canonical_id) for a product URL. Used as the cache key
+    for product_pages. Falls back to ('other', cleaned_url) when no retailer pattern matches."""
+    if not url:
+        return ('other', '')
+    if 'amazon.' in url:
+        m = _RE_AMAZON_ASIN.search(url)
+        if m: return ('amazon', m.group(1))
+    if m := _RE_WALMART_IP.search(url):
+        return ('walmart', m.group(1))
+    if m := _RE_BESTBUY_SKU.search(url):
+        return ('bestbuy', m.group(1))
+    if m := _RE_TARGET_TCIN.search(url):
+        return ('target', m.group(1))
+    if m := _RE_COSTCO_PID.search(url):
+        return ('costco', m.group(1))
+    if m := _RE_EBAY_ITEM.search(url):
+        return ('ebay', m.group(1))
+    return ('other', re.sub(r'\?.*$', '', url))
+
+
+def _adaptive_next_interval_hours(stable_streak: int) -> int:
+    """Adaptive scheduling tiers — see docs/11 - Crawl Strategy.md.
+    A product whose price hasn't moved in N cycles is checked less frequently."""
+    if stable_streak <= 2:
+        return 2
+    if stable_streak <= 5:
+        return 4
+    if stable_streak <= 10:
+        return 8
+    return 24
+
+
+# Per-retailer cap on adaptive scheduling. Some retailers' ToS / API terms restrict
+# how long we can hold pricing data before refreshing. The cap below clamps
+# next_check_at so we never let a stable_streak push the interval past these limits.
+#
+# Best Buy: 1h max (Best Buy Open API ToS — pricing data must not be displayed more
+# than 1 hour stale). See https://developer.bestbuy.com/legal.
+#
+# Add other retailers here as ToS dictates. None means no cap (use adaptive default).
+_RETAILER_MAX_CHECK_HOURS: dict[str, int] = {
+    "bestbuy": 1,
+}
+
+# Same idea, applied to the Compare match cache (`product_comparisons` table). The
+# comparison panel surfaces these prices to users, so the same staleness rules apply.
+# Hours, applied as a HARD ceiling on top of the existing 7-day-match / 1-day-no-match
+# defaults. Retailers not in this dict use the day-based defaults.
+_RETAILER_COMPARE_CACHE_HOURS: dict[str, int] = {
+    "bestbuy": 1,
+}
+
+
+def _capped_next_interval_hours(retailer: str, stable_streak: int) -> int:
+    """Resolve the effective adaptive interval after applying any per-retailer cap."""
+    base = _adaptive_next_interval_hours(stable_streak)
+    cap = _RETAILER_MAX_CHECK_HOURS.get(retailer)
+    if cap is not None and base > cap:
+        return cap
+    return base
+
+
+def _compare_cache_expires_at(target_retailer: str, confidence: str) -> "datetime":
+    """Compute expires_at for a `product_comparisons` row, applying retailer-specific caps.
+    Falls back to the legacy 7-day-match / 1-day-no-match TTL when no cap is configured."""
+    base_days = 7 if confidence in ("exact", "likely") else 1
+    base_expires = datetime.now() + timedelta(days=base_days)
+    cap_hours = _RETAILER_COMPARE_CACHE_HOURS.get(target_retailer)
+    if cap_hours is None:
+        return base_expires
+    capped = datetime.now() + timedelta(hours=cap_hours)
+    return min(base_expires, capped)
+
+
+def _get_page_by_key(retailer: str, canonical_id: str):
+    """Fetch product_pages row by its (retailer, canonical_id) key, or None."""
+    if not retailer or not canonical_id:
+        return None
+    try:
+        conn = get_db_conn()
+        cur = conn.cursor()
+        try:
+            cur.execute(
+                "SELECT * FROM product_pages WHERE retailer = %s AND canonical_id = %s",
+                (retailer, canonical_id),
+            )
+            return _fetchone(cur)
+        finally:
+            cur.close()
+            conn.close()
+    except Exception as e:
+        print(f"⚠️ _get_page_by_key failed: {e}")
+        return None
+
+
+def _upsert_page_after_check(retailer: str, canonical_id: str, url: str,
+                              new_price, new_stock_status, payload: dict,
+                              prev_page_row):
+    """Persist a scrape result to product_pages and advance adaptive scheduling state.
+    Returns the page id (or None on failure)."""
+    if not retailer or not canonical_id:
+        return None
+
+    prev_price  = prev_page_row.get('current_price') if prev_page_row else None
+    prev_stock  = prev_page_row.get('stock_status') if prev_page_row else None
+    prev_streak = (prev_page_row.get('stable_streak') if prev_page_row else 0) or 0
+
+    try:
+        prev_price_f = float(prev_price) if prev_price is not None else None
+        new_price_f  = float(new_price) if new_price is not None else None
+    except (TypeError, ValueError):
+        prev_price_f = new_price_f = None
+
+    price_unchanged = (
+        prev_price_f is not None and new_price_f is not None
+        and abs(prev_price_f - new_price_f) < 0.01
+    )
+    stock_unchanged = (new_stock_status == prev_stock)
+
+    if prev_page_row and price_unchanged and stock_unchanged:
+        new_streak = prev_streak + 1
+    else:
+        # First check ever, or price/stock moved — reset to baseline
+        new_streak = 0
+
+    next_check_at = datetime.now() + timedelta(hours=_capped_next_interval_hours(retailer, new_streak))
+
+    try:
+        conn = get_db_conn()
+        cur = conn.cursor()
+        try:
+            cur.execute(
+                """INSERT INTO product_pages
+                   (retailer, canonical_id, url, current_price, stock_status,
+                    last_checked, stable_streak, next_check_at, payload_json)
+                   VALUES (%s,%s,%s,%s,%s, NOW(), %s,%s, %s)
+                   ON CONFLICT (retailer, canonical_id) DO UPDATE SET
+                     url = EXCLUDED.url,
+                     current_price = EXCLUDED.current_price,
+                     stock_status = EXCLUDED.stock_status,
+                     last_checked = NOW(),
+                     stable_streak = EXCLUDED.stable_streak,
+                     next_check_at = EXCLUDED.next_check_at,
+                     payload_json = EXCLUDED.payload_json
+                   RETURNING id""",
+                (retailer, canonical_id, url, new_price_f, new_stock_status,
+                 new_streak, next_check_at,
+                 _json_for_pages.dumps(payload) if payload else None),
+            )
+            row = _fetchone(cur)
+            conn.commit()
+            return row['id'] if row else None
+        finally:
+            cur.close()
+            conn.close()
+    except Exception as e:
+        print(f"⚠️ _upsert_page_after_check failed: {e}")
+        return None
+
+
+def _link_product_to_page(product_id: int, page_id: int):
+    """Lazy backfill: link an existing products row to its product_pages parent."""
+    if not product_id or not page_id:
+        return
+    try:
+        conn = get_db_conn()
+        cur = conn.cursor()
+        try:
+            cur.execute(
+                "UPDATE products SET page_id = %s WHERE id = %s AND page_id IS DISTINCT FROM %s",
+                (page_id, product_id, page_id),
+            )
+            conn.commit()
+        finally:
+            cur.close()
+            conn.close()
+    except Exception as e:
+        print(f"⚠️ _link_product_to_page failed: {e}")
+
+
 def check_all_prices_job():
     """
     Hourly background job: check prices for every tracked product across
@@ -2543,6 +2848,10 @@ def check_all_prices_job():
       - Pro  users → check if last_checked > 2 hours ago  (or never checked)
       - Free users → check if last_checked > 6 hours ago  (or never checked)
     The scheduler still runs every hour; per-product interval logic is handled here.
+
+    Cross-user dedup: each unique product page is scraped at most once per cycle. If
+    50 users track the same ASIN, this loop scrapes Amazon once and fans the result
+    out to all 50 user products. See docs/11 - Crawl Strategy.md.
     """
     PRO_INTERVAL_HOURS  = 2
     FREE_INTERVAL_HOURS = 6
@@ -2550,11 +2859,18 @@ def check_all_prices_job():
     started_at = datetime.now().isoformat()
     print(f"\n⏰ === Price check job started at {started_at} ===")
 
-    total_checked = 0
-    total_skipped = 0
-    total_alerts  = 0
-    total_errors  = 0
-    now           = datetime.now()
+    total_checked   = 0
+    total_skipped   = 0
+    total_alerts    = 0
+    total_errors    = 0
+    total_dedup_hits = 0       # cross-user dedup wins (cycle-local)
+    total_adaptive_skips = 0   # adaptive scheduling skips (next_check_at not due)
+    now             = datetime.now()
+
+    # Cycle-local cache: { (retailer, canonical_id): scrape_result_dict }
+    # Each unique product page is scraped at most once per cycle. After the first
+    # scrape, all subsequent products with the same canonical key reuse the result.
+    scraped_in_cycle: dict = {}
 
     try:
         # Fetch ALL users regardless of plan (active + pro)
@@ -2610,14 +2926,88 @@ def check_all_prices_job():
                 type_label = '📦Restock' if track_type == 'restock' else '💰Price'
                 print(f"🔍 [{plan_label}] [{type_label}] [{user['email']}] {url[:60]}")
 
-                # ── Scrape: use unified scraper that returns price + stock ──
-                try:
-                    scrape_result = scrape_stock_status(url)
-                    total_checked += 1
-                except Exception as scrape_err:
-                    print(f"   ❌ Scrape error: {scrape_err}")
-                    total_errors += 1
-                    continue
+                # ── Cross-user dedup + adaptive scheduling ─────────────────
+                # See docs/11 - Crawl Strategy.md.
+                page_key = _canonical_page_key(url)
+                page_retailer, page_canonical_id = page_key
+
+                # Tier 0a: cycle-local dedup — another user already had this page scraped this cycle
+                if page_key in scraped_in_cycle:
+                    scrape_result = scraped_in_cycle[page_key]
+                    total_dedup_hits += 1
+                    print(f"   ♻️  Dedup hit ({page_retailer}/{page_canonical_id}) — no scrape")
+                else:
+                    # Tier 0b: adaptive-scheduling skip — page row says next_check_at is in the future
+                    page_row = _get_page_by_key(page_retailer, page_canonical_id)
+                    if page_row and page_row.get('next_check_at'):
+                        nca = page_row['next_check_at']
+                        if isinstance(nca, str):
+                            try:
+                                nca = datetime.fromisoformat(nca)
+                            except ValueError:
+                                nca = None
+                        # Adaptive skip ONLY for plans where the user's interval is shorter than the page's
+                        # next_check_at. Free trial users (6h) shouldn't be subject to a 4h adaptive interval —
+                        # but they SHOULD benefit from the 8h+ tiers.
+                        if nca and nca > now:
+                            scrape_result = {
+                                'price': float(page_row['current_price']) if page_row.get('current_price') else None,
+                                'stock_status': page_row.get('stock_status', 'unknown'),
+                                'stock_detail': '',
+                            }
+                            scraped_in_cycle[page_key] = scrape_result
+                            total_adaptive_skips += 1
+                            streak = page_row.get('stable_streak') or 0
+                            print(f"   ⏭️  Adaptive skip — streak={streak}, next_check_at={nca.isoformat()}")
+                            # Lazy-link the products row to its page so future cycles can find it directly
+                            if not product.get('page_id'):
+                                _link_product_to_page(product['id'], page_row['id'])
+                        else:
+                            # Page exists but is due — scrape, then upsert
+                            try:
+                                scrape_result = scrape_stock_status(url)
+                                total_checked += 1
+                            except Exception as scrape_err:
+                                print(f"   ❌ Scrape error: {scrape_err}")
+                                total_errors += 1
+                                continue
+                            scraped_in_cycle[page_key] = scrape_result
+                            payload = {
+                                'price': scrape_result.get('price'),
+                                'stock_status': scrape_result.get('stock_status'),
+                                'stock_detail': scrape_result.get('stock_detail'),
+                                'scraped_at': datetime.now().isoformat(),
+                            }
+                            new_page_id = _upsert_page_after_check(
+                                page_retailer, page_canonical_id, url,
+                                scrape_result.get('price'), scrape_result.get('stock_status'),
+                                payload, page_row,
+                            )
+                            if new_page_id and not product.get('page_id'):
+                                _link_product_to_page(product['id'], new_page_id)
+                    else:
+                        # No page row yet — scrape, create the page row, lazy-link
+                        try:
+                            scrape_result = scrape_stock_status(url)
+                            total_checked += 1
+                        except Exception as scrape_err:
+                            print(f"   ❌ Scrape error: {scrape_err}")
+                            total_errors += 1
+                            continue
+                        scraped_in_cycle[page_key] = scrape_result
+                        payload = {
+                            'price': scrape_result.get('price'),
+                            'stock_status': scrape_result.get('stock_status'),
+                            'stock_detail': scrape_result.get('stock_detail'),
+                            'scraped_at': datetime.now().isoformat(),
+                        }
+                        new_page_id = _upsert_page_after_check(
+                            page_retailer, page_canonical_id, url,
+                            scrape_result.get('price'), scrape_result.get('stock_status'),
+                            payload, None,
+                        )
+                        if new_page_id and not product.get('page_id'):
+                            _link_product_to_page(product['id'], new_page_id)
 
                 current_price = scrape_result.get('price')
                 new_stock_status = scrape_result.get('stock_status', 'unknown')
@@ -2764,16 +3154,33 @@ def check_all_prices_job():
     except Exception as e:
         print(f"❌ Hourly job fatal error: {e}")
 
+    unique_pages_scraped = len(scraped_in_cycle)
     print(
         f"✅ Check done — "
-        f"{total_checked} checked, {total_skipped} skipped (not due), "
-        f"{total_alerts} alerts sent (price + restock), {total_errors} errors\n"
+        f"{total_checked} scraped, {total_dedup_hits} dedup-hits, "
+        f"{total_adaptive_skips} adaptive-skips, {total_skipped} interval-skips, "
+        f"{unique_pages_scraped} unique pages, "
+        f"{total_alerts} alerts sent, {total_errors} errors\n"
     )
+
+    # Roll up cycle metrics into the crawl_metrics counter so /api/admin/crawl-stats reflects them
+    try:
+        from price_comparison import _crawl_metrics
+        _crawl_metrics.inc('monitor_pages_scraped', 'all', n=unique_pages_scraped)
+        _crawl_metrics.inc('monitor_dedup_hits', 'all', n=total_dedup_hits)
+        _crawl_metrics.inc('monitor_adaptive_skips', 'all', n=total_adaptive_skips)
+        _crawl_metrics.inc('monitor_interval_skips', 'all', n=total_skipped)
+    except Exception:
+        pass
+
     return {
-        'checked': total_checked,
-        'skipped': total_skipped,
-        'alerts':  total_alerts,
-        'errors':  total_errors
+        'checked':        total_checked,
+        'skipped':        total_skipped,
+        'alerts':         total_alerts,
+        'errors':         total_errors,
+        'dedup_hits':     total_dedup_hits,
+        'adaptive_skips': total_adaptive_skips,
+        'unique_pages':   unique_pages_scraped,
     }
 
 
@@ -2862,6 +3269,11 @@ def _get_cached_comparison(source_retailer, source_identifier, target_retailer):
     # Check in-memory cache first (fastest path)
     mem_hit = _mem_cache_get(source_retailer, source_identifier, target_retailer)
     if mem_hit is not None:
+        try:
+            from price_comparison import _crawl_metrics
+            _crawl_metrics.inc('cache_hits_mem', target_retailer)
+        except Exception:
+            pass
         return mem_hit
 
     try:
@@ -2876,6 +3288,11 @@ def _get_cached_comparison(source_retailer, source_identifier, target_retailer):
                 (source_retailer, source_identifier, target_retailer),
             )
             row = _fetchone(cur)
+            try:
+                from price_comparison import _crawl_metrics
+                _crawl_metrics.inc('cache_hits_db' if row else 'cache_misses', target_retailer)
+            except Exception:
+                pass
             if row:
                 # Warm the in-memory cache so subsequent requests within 15 min skip the DB
                 _mem_cache_set(source_retailer, source_identifier, target_retailer, row)
@@ -2886,6 +3303,91 @@ def _get_cached_comparison(source_retailer, source_identifier, target_retailer):
     except Exception as e:
         print(f"⚠️ Cache lookup failed (non-fatal): {e}")
         return None
+
+
+# ── Identity cache (Compare) — 30-day TTL ──
+# Identity (title/brand/model/upc) is essentially permanent for a given SKU. Caching
+# it separately from the comparison match cache cuts ~50% of Firecrawl calls per
+# Compare miss because we no longer re-scrape the source PDP every time.
+
+def _get_cached_identity(retailer, canonical_id):
+    if not canonical_id:
+        return None
+    try:
+        conn = get_db_conn()
+        cur = conn.cursor()
+        try:
+            cur.execute(
+                """SELECT title, brand, model, upc, price, image_url, search_query
+                   FROM product_identities
+                   WHERE retailer = %s AND canonical_id = %s AND expires_at > NOW()
+                   LIMIT 1""",
+                (retailer, canonical_id),
+            )
+            row = _fetchone(cur)
+            try:
+                from price_comparison import _crawl_metrics
+                _crawl_metrics.inc('identity_cache_hits' if row else 'identity_cache_misses', retailer)
+            except Exception:
+                pass
+            if not row:
+                return None
+            return {
+                'asin': canonical_id if retailer == 'amazon' else None,
+                'title': row['title'],
+                'brand': row['brand'],
+                'model': row['model'],
+                'upc': row['upc'],
+                'price': float(row['price']) if row['price'] is not None else None,
+                'image_url': row['image_url'],
+                'search_query': row['search_query'],
+            }
+        finally:
+            cur.close()
+            conn.close()
+    except Exception as e:
+        print(f"⚠️ Identity cache lookup failed (non-fatal): {e}")
+        return None
+
+
+def _save_identity(retailer, canonical_id, source_url, identity):
+    """Upsert identity for (retailer, canonical_id). 30-day TTL via expires_at default.
+    No-ops if canonical_id is None (we can't cache without a stable key)."""
+    if not canonical_id or not identity:
+        return
+    try:
+        conn = get_db_conn()
+        cur = conn.cursor()
+        try:
+            cur.execute(
+                """INSERT INTO product_identities
+                   (retailer, canonical_id, source_url, title, brand, model, upc, price,
+                    image_url, search_query, expires_at)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s, NOW() + INTERVAL '30 days')
+                   ON CONFLICT (retailer, canonical_id) DO UPDATE SET
+                     source_url = EXCLUDED.source_url,
+                     title = EXCLUDED.title,
+                     brand = EXCLUDED.brand,
+                     model = EXCLUDED.model,
+                     upc = EXCLUDED.upc,
+                     price = EXCLUDED.price,
+                     image_url = EXCLUDED.image_url,
+                     search_query = EXCLUDED.search_query,
+                     cached_at = NOW(),
+                     expires_at = NOW() + INTERVAL '30 days'""",
+                (
+                    retailer, canonical_id, source_url,
+                    identity.get('title'), identity.get('brand'), identity.get('model'),
+                    identity.get('upc'), identity.get('price'), identity.get('image_url'),
+                    identity.get('search_query'),
+                ),
+            )
+            conn.commit()
+        finally:
+            cur.close()
+            conn.close()
+    except Exception as e:
+        print(f"⚠️ Failed to save identity (non-fatal): {e}")
 
 
 def _save_comparison(source_retailer, source_identifier, source_url, source_title,
@@ -2899,8 +3401,8 @@ def _save_comparison(source_retailer, source_identifier, source_url, source_titl
             # Matches: 7-day TTL (prices are relatively stable).
             # No-match: 1-day TTL — short enough to retry after scoring fixes or quota resets,
             # but long enough to avoid hammering the API on rapid repeat page loads.
-            ttl_days = 7 if confidence in ("exact", "likely") else 1
-            expires_at = datetime.now() + timedelta(days=ttl_days)
+            # Per-retailer caps (e.g. Best Buy 1h ToS) clamp the TTL when applicable.
+            expires_at = _compare_cache_expires_at(target_retailer, confidence)
             cur.execute(
                 """INSERT INTO product_comparisons
                    (source_retailer, source_identifier, source_url, source_title, source_price,
@@ -2979,6 +3481,15 @@ def compare_product():
             ).split()[:8]) if source_title else None,
         }
 
+    # Identity-cache fast path: if the extension didn't pass a title, try the 30-day
+    # identity cache before scraping. A cache hit here means zero Firecrawl calls for
+    # source identity, regardless of how many target retailers we're comparing against.
+    canonical_id = canonical_id_from_url(source_url, source_retailer) or asin
+    if not caller_identity and canonical_id:
+        cached_identity = _get_cached_identity(source_retailer, canonical_id)
+        if cached_identity:
+            caller_identity = cached_identity
+
     # Separate cached vs uncached retailers
     uncached_retailers = []
     for retailer in target_retailers:
@@ -3005,6 +3516,19 @@ def compare_product():
         f'compare:{user["id"]}', max_requests=200, window_seconds=3600
     ):
         return jsonify({'error': 'Rate limit exceeded — 200 API requests per hour'}), 429
+
+    # If we still have no identity (no title from extension AND cache miss), extract it
+    # ONCE here — feeding it to all parallel retailer searches below. This prevents
+    # find_comparable_product() from running an internal source-PDP scrape per target
+    # retailer, which would multiply Firecrawl calls by the number of retailers.
+    if uncached_retailers and not caller_identity:
+        try:
+            caller_identity = extract_identity(source_url, source_retailer)
+            if caller_identity and canonical_id and caller_identity.get('title'):
+                _save_identity(source_retailer, canonical_id, source_url, caller_identity)
+        except Exception as e:
+            print(f"⚠️ identity extraction failed (non-fatal): {e}")
+            caller_identity = None
 
     # Search uncached retailers in parallel
     def _search_retailer(retailer):

@@ -5,6 +5,16 @@
 - TARGET_AFFILIATE_ID: (v2 — leave blank for now)
 - BESTBUY_AFFILIATE_ID: (v2 — leave blank for now)
 
+## Crawl Strategy — Env Vars (added 2026-04-25)
+See docs/11 - Crawl Strategy.md for the full plan.
+- SCRAPER_PROVIDER: "firecrawl" (default) | "scraperapi" | "firecrawl-then-scraperapi"
+- SCRAPER_API_KEY: ScraperAPI key — Tier-2 paid alternative to Firecrawl (~10× cheaper). Sign up at https://www.scraperapi.com/
+- EBAY_APP_ID + EBAY_CERT_ID: eBay App ID (Client ID) and Cert ID (Client Secret) for the Browse API. Tier-1 free 5000/day. The app uses these to mint a 2-hour Application access token via OAuth2 client_credentials grant — refreshed automatically by `_get_ebay_app_token()`. Apply at https://developer.ebay.com/my/keys
+- BESTBUY_API_KEY: Best Buy Open API key — Tier-1 free 5000/day. Apply at https://developer.bestbuy.com/
+- AMAZON_PA_ACCESS_KEY / AMAZON_PA_SECRET_KEY / AMAZON_PA_PARTNER_TAG: Amazon Product Advertising API 5.0. Requires Amazon Associates approval. PA-API stub present; implementation deferred.
+
+When any of these keys is unset the corresponding tier no-ops and the existing scraping path is used. Set the keys to activate the new tier without code changes.
+
 ## Compare Feature — Summary (added 2026-04-17)
 
 The Compare feature lets users see if an Amazon product they are viewing is available cheaper at Walmart. It runs automatically on Amazon PDPs via the Chrome extension and shows a panel with the Walmart price, savings, and a CTA.
@@ -42,3 +52,29 @@ The Compare feature lets users see if an Amazon product they are viewing is avai
 - Push notifications for price improvements on tracked products
 - Upgrade Gemini API to paid tier to avoid daily quota exhaustion
 - eBay PDP compare support (extractors exist; PDP detector + retailer mapping not yet wired)
+
+## Crawl Strategy Phase 1 (added 2026-04-25)
+
+Goal: cut Firecrawl spend as users grow without slowing Compare. See docs/11 - Crawl Strategy.md.
+
+Shipped this commit:
+- ✅ Strategy doc at docs/11 - Crawl Strategy.md
+- ✅ Jina demoted to last-ditch with `_jina_quality_ok()` quality gate (was unreliable in production)
+- ✅ Per-retailer crawl metrics (`_crawl_metrics`) exposed at `GET /api/admin/crawl-stats?key=…`
+- ✅ Identity cache split — new `product_identities` table, 30-day TTL, hoisted out of per-retailer loop in `/api/compare`. Cuts ~50% of Firecrawl calls per Compare miss.
+- ✅ Target redsky JSON fast path (`_search_target_redsky`) — Tier-1 free, no key required.
+- ✅ Provider abstraction: `SCRAPER_PROVIDER` env var (`firecrawl` | `scraperapi` | `firecrawl-then-scraperapi`). ScraperAPI driver implemented.
+- ✅ Stub native-API integrations for eBay (Browse), Best Buy (Open API), Amazon (PA-API). Activated by env var.
+- ✅ Schema additions: `product_pages` (cross-user dedup), `products.page_id` column.
+
+Pending in this Phase 1 commit (still in progress):
+- 🔄 `price_monitor.py` refactor to use `product_pages` for cross-user dedup + adaptive scheduling.
+
+Phase 2 (pending external action):
+- ⏳ Sign up for ScraperAPI; set `SCRAPER_API_KEY` and `SCRAPER_PROVIDER=firecrawl-then-scraperapi`.
+- ⏳ Get eBay Browse API key; set `EBAY_APP_ID`.
+- ⏳ Get Best Buy Open API key; set `BESTBUY_API_KEY`.
+- ⏳ Apply for Amazon Product Advertising API; fill in `_search_amazon_paapi` body.
+
+Phase 3 (after 1 week of production data with Phase 1 deployed):
+- ⏳ Read `/api/admin/crawl-stats`, identify highest-spend retailers, prioritize Phase 2 work accordingly.
