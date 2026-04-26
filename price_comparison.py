@@ -686,12 +686,99 @@ def _parse_target_results(markdown: str, html: str) -> list:
     return candidates
 
 
-_TARGET_REDSKY_KEYS = [
-    # Public web client keys observed in target.com's JS bundle. These rotate occasionally
-    # so we try several. If none work, fall through to scraping.
+# Target redsky uses a "public" web-client API key that's embedded in target.com's
+# JS bundle. Target rotates these keys periodically; we observed both seed keys
+# 403'ing in production (DEA-CRAWL-PHASE1 logs). Solution: auto-discover the
+# current key at runtime from the bundle and re-discover when known keys go bad.
+
+_TARGET_REDSKY_SEED_KEYS = [
     "9f36aeafbe60771e321a7cc95a78140772ab3e96",
     "ff457966e64d5e877fdbad070f276d18ecec4a01",
 ]
+
+_target_redsky_lock = threading.Lock()
+_target_redsky_state: dict = {
+    "keys": list(_TARGET_REDSKY_SEED_KEYS),
+    "bad_keys": set(),               # 403'd keys we shouldn't retry
+    "last_discovery_at": 0.0,        # epoch seconds; throttle re-discovery
+}
+_TARGET_DISCOVERY_COOLDOWN_S = 3600  # don't try discovery more than once per hour
+
+
+def _discover_target_redsky_key() -> str | None:
+    """Fetch target.com once and extract the current redsky API key from the JS
+    bundle. Pattern: 40-character hex strings near "apiKey" / "redsky_api_key" /
+    similar JS-bundle markers."""
+    import urllib.request
+    try:
+        req = urllib.request.Request(
+            "https://www.target.com/",
+            headers={
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+                "Accept": "text/html,application/xhtml+xml",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            html = resp.read(2_000_000).decode('utf-8', errors='replace')  # cap at 2MB
+    except Exception as exc:
+        logging.warning("Target redsky discovery: failed to fetch homepage: %s", exc)
+        _crawl_metrics.inc('target_redsky_discovery_failures', 'target')
+        return None
+
+    # Look for 40-hex strings near apiKey/api_key/key markers in the JS bundle.
+    # Multiple patterns observed across Target's deploy versions.
+    patterns = [
+        r'"apiKey"\s*:\s*"([a-f0-9]{40})"',
+        r'apiKey["\']?\s*[:=]\s*["\']([a-f0-9]{40})["\']',
+        r'redsky[_-]?api[_-]?key["\']?\s*[:=]\s*["\']([a-f0-9]{40})["\']',
+        r'["\']([a-f0-9]{40})["\']',  # last-resort: ANY 40-hex string
+    ]
+    for pat in patterns:
+        for m in re.finditer(pat, html):
+            candidate = m.group(1)
+            # Don't re-add a key we already know is bad
+            with _target_redsky_lock:
+                if candidate not in _target_redsky_state["bad_keys"]:
+                    return candidate
+    logging.warning("Target redsky discovery: no candidate key found in homepage HTML")
+    _crawl_metrics.inc('target_redsky_discovery_failures', 'target')
+    return None
+
+
+def _get_target_redsky_keys() -> list:
+    """Return list of usable (non-bad) keys. Triggers discovery if all known keys
+    are bad and the cooldown has elapsed."""
+    with _target_redsky_lock:
+        usable = [k for k in _target_redsky_state["keys"]
+                  if k not in _target_redsky_state["bad_keys"]]
+        if usable:
+            return usable
+        now = time.time()
+        if now - _target_redsky_state["last_discovery_at"] < _TARGET_DISCOVERY_COOLDOWN_S:
+            return []  # cooldown active; let scraping fallback take over
+        _target_redsky_state["last_discovery_at"] = now
+
+    # Discover OUTSIDE the lock to avoid blocking other threads on the network call
+    new_key = _discover_target_redsky_key()
+    if not new_key:
+        return []
+    with _target_redsky_lock:
+        if new_key not in _target_redsky_state["keys"]:
+            _target_redsky_state["keys"].append(new_key)
+        _crawl_metrics.inc('target_redsky_discovery_successes', 'target')
+        logging.warning("Target redsky: discovered new key %s***", new_key[:8])
+        return [new_key]
+
+
+def _mark_target_redsky_bad(key: str) -> None:
+    """Mark a redsky key as bad after a 403. Subsequent calls won't retry it."""
+    with _target_redsky_lock:
+        _target_redsky_state["bad_keys"].add(key)
+        logging.warning("Target redsky: marked %s*** as bad (403); %d good keys remaining",
+                        key[:8],
+                        len([k for k in _target_redsky_state["keys"]
+                             if k not in _target_redsky_state["bad_keys"]]))
+
 
 _TARGET_REDSKY_URL = (
     "https://redsky.target.com/redsky_aggregations/v1/web/plp_search_v2"
@@ -702,11 +789,16 @@ _TARGET_REDSKY_URL = (
 
 def _search_target_redsky(search_query: str) -> list:
     """Tier-1 fast path: Target's internal redsky JSON API. No API key required, free,
-    structured. Modeled on _search_bestbuy_json — tries known keys and parses defensively.
-    """
+    structured. Auto-discovers fresh keys from target.com when hardcoded keys 403."""
     import urllib.request
+    import urllib.error as _uerr
     import json as _json
     from urllib.parse import quote
+
+    keys_to_try = _get_target_redsky_keys()
+    if not keys_to_try:
+        # No usable keys and discovery on cooldown — let caller fall through to scraping
+        return []
 
     encoded = quote(search_query)
     headers = {
@@ -718,7 +810,7 @@ def _search_target_redsky(search_query: str) -> list:
     }
 
     _crawl_metrics.inc('native_api_calls', 'target')
-    for key in _TARGET_REDSKY_KEYS:
+    for key in keys_to_try:
         url = _TARGET_REDSKY_URL.format(key=key, q=encoded)
         try:
             req = urllib.request.Request(url, headers=headers)
@@ -726,6 +818,13 @@ def _search_target_redsky(search_query: str) -> list:
                 if resp.status != 200:
                     continue
                 data = _json.loads(resp.read())
+        except _uerr.HTTPError as exc:
+            if exc.code == 403:
+                # Key revoked — flag as bad and try next
+                _mark_target_redsky_bad(key)
+                continue
+            logging.warning("Target redsky %s HTTP %d: %s", key[:8], exc.code, exc)
+            continue
         except Exception as exc:
             logging.warning("Target redsky %s failed: %s", key[:8], exc)
             continue
@@ -972,19 +1071,21 @@ def _search_bestbuy_json(search_query: str) -> list:
 
 
 def _search_bestbuy(identity: dict) -> list:
-    """Search Best Buy for candidates matching the given product identity."""
+    """Search Best Buy for candidates matching the given product identity.
+
+    NOTE: The internal `_search_bestbuy_json` path (api.bestbuy.com/api/[v1|2|3]/json)
+    has been deprecated — production logs (DEA-CRAWL-PHASE1) show all three endpoints
+    returning HTTP 404 in 2026. The Open API (BESTBUY_API_KEY env var) wired via
+    `_search_bestbuy_with_native_api` is now the canonical Tier-1 path; this function
+    is the scraping fallback for when the Open API key isn't set or returns no matches.
+    """
     from urllib.parse import quote_plus
 
     search_query = identity.get("search_query") or ""
     if not search_query:
         return []
 
-    # Fast path: internal JSON API (no Firecrawl needed, no anti-bot issues)
-    candidates = _search_bestbuy_json(search_query)
-    if candidates:
-        return candidates
-
-    # Fallback: scrape search page (Firecrawl if available, else Jina)
+    # Direct to scrape — internal JSON path removed because endpoints are 404 now.
     url = f"https://www.bestbuy.com/site/searchpage.jsp?st={quote_plus(search_query)}"
 
     try:
