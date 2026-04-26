@@ -367,18 +367,26 @@ def _scrape_via_scraperapi(url: str, render_js: bool = False, retailer: str = ""
         params['render'] = 'true'
 
     api_url = f"https://api.scraperapi.com/?{urlencode(params)}"
-    # Render adds 5–25s for JS execution — bump timeout proportionally
-    timeout_s = 45 if render_js else 30
+    # Tighter timeouts to fit within /api/compare's 20s parallel-search budget.
+    # Production logs (DEA-CRAWL-PHASE1) showed 30s/45s timeouts blowing past the
+    # Compare deadline, causing all retailers to be cancelled even when some would
+    # have succeeded with a tighter cap. Render is mostly used by Costco now (Target
+    # uses redsky JSON, Best Buy uses Open API once key is set) so the longer
+    # render budget is acceptable for monitor-context calls.
+    timeout_s = 18 if render_js else 8
 
     _RETRYABLE_HTTP = {429, 500, 502, 503, 504}
-    _BACKOFF = [1.0, 3.0]   # delays before retry attempts 2 and 3 — total ≤ 4s wait
+    BACKOFF_S = 1.0
+    MAX_ATTEMPTS = 2  # initial + 1 retry. Production data showed timeouts almost never
+                     # clear on retry (target site is genuinely slow); a second retry
+                     # mostly just burned the Compare timeout budget.
 
     _crawl_metrics.inc('scraperapi_calls', retailer)
 
     last_err = None
-    for attempt in range(3):
+    for attempt in range(MAX_ATTEMPTS):
         if attempt > 0:
-            time.sleep(_BACKOFF[attempt - 1])
+            time.sleep(BACKOFF_S)
             _crawl_metrics.inc('scraperapi_retries', retailer)
 
         try:
@@ -396,9 +404,11 @@ def _scrape_via_scraperapi(url: str, render_js: bool = False, retailer: str = ""
 
         except _uerr.HTTPError as exc:
             last_err = exc
-            if exc.code in _RETRYABLE_HTTP and attempt < 2:
-                logging.warning("ScraperAPI %d on %s — retrying in %.0fs (attempt %d/3)",
-                                exc.code, url, _BACKOFF[attempt], attempt + 2)
+            # Only retry HTTP errors that actually clear quickly: rate limits and
+            # transient 5xx. Other HTTP statuses are permanent (auth, bad request, etc.)
+            if exc.code in _RETRYABLE_HTTP and attempt < MAX_ATTEMPTS - 1:
+                logging.warning("ScraperAPI %d on %s — retry in %.0fs (attempt %d/%d)",
+                                exc.code, url, BACKOFF_S, attempt + 2, MAX_ATTEMPTS)
                 continue
             _crawl_metrics.inc('scraperapi_failures', retailer)
             logging.warning("ScraperAPI HTTP %d (final) for %s", exc.code, url)
@@ -406,18 +416,20 @@ def _scrape_via_scraperapi(url: str, render_js: bool = False, retailer: str = ""
 
         except Exception as exc:
             last_err = exc
-            # Network/timeout — retry once more
-            if attempt < 2:
-                logging.warning("ScraperAPI exception on %s (%s) — retrying in %.0fs (attempt %d/3)",
-                                url, exc, _BACKOFF[attempt], attempt + 2)
+            # Timeouts/network errors: try ONE retry max. Production data shows that
+            # when the target site is slow enough to timeout, a retry usually times
+            # out too — it's not worth burning 30s of budget chasing it.
+            if attempt < MAX_ATTEMPTS - 1:
+                logging.warning("ScraperAPI exception on %s (%s) — retry in %.0fs",
+                                url, exc, BACKOFF_S)
                 continue
             _crawl_metrics.inc('scraperapi_failures', retailer)
             logging.warning("ScraperAPI failed for %s: %s", url, exc)
             return '', ''
 
-    # All 3 attempts exhausted — record and return empty
+    # All attempts exhausted
     _crawl_metrics.inc('scraperapi_failures', retailer)
-    logging.warning("ScraperAPI exhausted 3 attempts for %s: %s", url, last_err)
+    logging.warning("ScraperAPI exhausted %d attempts for %s: %s", MAX_ATTEMPTS, url, last_err)
     return '', ''
 
 
@@ -907,7 +919,11 @@ def _search_bestbuy_json(search_query: str) -> list:
         url = url_template.format(q=encoded)
         req = urllib.request.Request(url, headers=headers)
         try:
-            with urllib.request.urlopen(req, timeout=3) as resp:
+            # 1.5s per endpoint — these unofficial endpoints have been timing out
+            # consistently in production. The Open API (BESTBUY_API_KEY) is the
+            # canonical Tier-1 path; this is dead-weight kept for compatibility.
+            # Total worst-case here: 3 × 1.5s = 4.5s instead of the original 9s.
+            with urllib.request.urlopen(req, timeout=1.5) as resp:
                 if resp.status != 200:
                     continue
                 data = _json.loads(resp.read())
@@ -1066,12 +1082,12 @@ def _parse_amazon_search_results(markdown: str, html: str) -> list:
     candidates = []
     seen_asins: set = set()
 
-    # Amazon search result links contain /dp/ASIN in the URL
-    link_pattern = re.compile(
+    # Markdown link format: [Title](https://amazon.com/.../dp/ASIN/...)
+    md_link_pattern = re.compile(
         r'\[([^\]]{10,200})\]\((https://(?:www\.)?amazon\.com/[^\s\)]*?/dp/([A-Z0-9]{10})[^\s\)]*)\)'
     )
 
-    for m in link_pattern.finditer(markdown):
+    for m in md_link_pattern.finditer(markdown):
         if len(candidates) >= 5:
             break
 
@@ -1093,6 +1109,62 @@ def _parse_amazon_search_results(markdown: str, html: str) -> list:
                 pass
 
         candidates.append({"title": title, "price": price, "url": clean_url, "image_url": None})
+
+    # HTML fallback: Production logs showed Firecrawl/scrapers sometimes return
+    # raw HTML rather than markdown for Amazon SERP, leaving the markdown regex
+    # with zero matches on a successful 1.8MB scrape. Parse the HTML directly
+    # for /dp/<ASIN>/ hrefs and pull the nearest H2 heading as the title.
+    if not candidates and html:
+        # Amazon search SERP renders product cards with these patterns:
+        #   <a class="a-link-normal s-line-clamp-..." href="/Brand-Product/dp/ASIN/...">
+        #   <a class="..." href="/dp/ASIN/...">
+        # Sponsored cards use href="/sspa/click?...&url=%2Fdp%2FASIN%2F..." (URL-encoded)
+        href_pattern = re.compile(
+            r'href=["\'](?:/sspa/click\?[^"\']*?url=%2F[^"\']*?)?'
+            r'(?:/[^"\']*?)?/dp/([A-Z0-9]{10})(?:[/?][^"\']*)?["\']',
+            re.IGNORECASE,
+        )
+        # Title heuristic: <h2 ...>...<span>TITLE</span>...</h2> within ~600 chars after href
+        title_pattern = re.compile(
+            r'<h2[^>]*>(?:<[^>]+>)*\s*<span[^>]*>([^<]{10,200})</span>',
+            re.IGNORECASE,
+        )
+        # Price near the card: $XX.XX or <span class="a-offscreen">$XX.XX</span>
+        price_pattern = re.compile(
+            r'<span[^>]+a-offscreen[^>]*>\s*\$\s*([\d,]+\.\d{2})\s*</span>'
+            r'|\$\s*([\d,]+\.\d{2})',
+            re.IGNORECASE,
+        )
+
+        for m in href_pattern.finditer(html):
+            if len(candidates) >= 5:
+                break
+            asin = m.group(1)
+            if asin in seen_asins:
+                continue
+            # Look for title in the surrounding HTML context (next 800 chars)
+            ctx_end = min(len(html), m.end() + 800)
+            title_m = title_pattern.search(html[m.start():ctx_end])
+            if not title_m:
+                continue
+            title = title_m.group(1).strip()
+            seen_asins.add(asin)
+
+            price = None
+            price_m = price_pattern.search(html[m.start():ctx_end])
+            if price_m:
+                price_str = price_m.group(1) or price_m.group(2)
+                try:
+                    price = float(price_str.replace(",", ""))
+                except (TypeError, ValueError):
+                    pass
+
+            candidates.append({
+                "title": title,
+                "price": price,
+                "url": f"https://www.amazon.com/dp/{asin}",
+                "image_url": None,
+            })
 
     return candidates
 
@@ -1270,9 +1342,24 @@ def _search_bestbuy_open_api(search_query: str) -> list:
 
     _crawl_metrics.inc('native_api_calls', 'bestbuy_open')
     # Best Buy Open API multi-term syntax: (search=word1&search=word2&...) — each
-    # `search=` is an AND'd filter. Cap at 6 terms to keep the URL short and avoid
-    # the API rejecting overly specific queries that would return zero results.
-    tokens = [quote(w) for w in search_query.split()[:6] if len(w) >= 2]
+    # `search=` is an AND'd filter. Cap at 6 terms to keep the URL short.
+    #
+    # IMPORTANT: Best Buy's filter syntax rejects URL-encoded special chars
+    # (%22 from ", %27 from ', etc.) with HTTP 400 even when properly encoded.
+    # Production logs (DEA-CRAWL-PHASE1) showed queries like 'Schwinn Iris 16"
+    # Kids\' Bike - Purple' all failing 400. Strip non-alphanumeric per token.
+    import string as _string
+    _ALLOWED = set(_string.ascii_letters + _string.digits)
+    # Filter punct-only tokens BEFORE the 6-token cap so a stripped "-" doesn't
+    # consume a slot that should go to a real keyword (e.g. "Schwinn Iris 16\"
+    # Kids' Bike - Purple" should keep "Purple", not drop it for "-").
+    tokens = []
+    for w in search_query.split():
+        cleaned = ''.join(c for c in w if c in _ALLOWED)
+        if len(cleaned) >= 2:
+            tokens.append(quote(cleaned))
+            if len(tokens) >= 6:
+                break
     if not tokens:
         return []
     keyword_filter = "&".join(f"search={t}" for t in tokens)
