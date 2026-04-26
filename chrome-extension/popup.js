@@ -485,6 +485,12 @@ function bindEvents() {
     btnResendVerification.addEventListener('click', handleResendVerification);
   }
 
+  // Google Sign-In
+  const btnGoogle = document.getElementById('btnGoogleSignIn');
+  if (btnGoogle) {
+    btnGoogle.addEventListener('click', handleGoogleSignIn);
+  }
+
   // Request store
   $('btnRequestStore').addEventListener('click', handleRequestStore);
 
@@ -499,6 +505,93 @@ function bindEvents() {
 // ═══════════════════════════════════════════
 //  AUTH HANDLERS
 // ═══════════════════════════════════════════
+
+/**
+ * Sign in with Google.
+ * Uses chrome.identity.getAuthToken to get a Google access token (Chrome
+ * handles the consent screen natively — no popup tab opens). Sends the token
+ * to /api/auth/google, which verifies via Google's tokeninfo endpoint and
+ * returns a DealNotify session token. See docs/13 - Google SSO Plan.md.
+ */
+async function handleGoogleSignIn() {
+  if (!chrome?.identity?.getAuthToken) {
+    showMessage(authMessage, 'Google sign-in is not available in this browser.', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('btnGoogleSignIn');
+  const btnText = document.getElementById('btnGoogleSignInText');
+  if (btn) btn.disabled = true;
+  if (btnText) btnText.textContent = 'Signing in…';
+  hideMessage(authMessage);
+
+  try {
+    // Get a Google access token. Chrome handles consent natively in a small
+    // dialog the first time; subsequent calls return cached tokens.
+    const token = await new Promise((resolve, reject) => {
+      chrome.identity.getAuthToken({ interactive: true }, (t) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message || 'Sign-in cancelled'));
+        } else if (!t) {
+          reject(new Error('No token returned by Google'));
+        } else {
+          resolve(t);
+        }
+      });
+    });
+
+    // Hand the token to the backend for verification + DealNotify session
+    const res = await fetch(`${API_BASE}/api/auth/google`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token })
+    });
+    let data = null;
+    try { data = await res.json(); } catch (e) { /* ignore non-JSON */ }
+
+    if (!res.ok || !data?.success || !data?.token) {
+      // If Google's token was rejected by the backend, drop the cached Chrome
+      // token so the next attempt re-prompts the user instead of silently
+      // failing with the same bad token.
+      try {
+        chrome.identity.removeCachedAuthToken({ token }, () => {});
+      } catch (_) { /* best-effort */ }
+      showMessage(authMessage, data?.error || 'Google sign-in failed. Please try again.', 'error');
+      return;
+    }
+
+    // Store session — Google users always start verified
+    currentUser = {
+      token: data.token,
+      email: data.email || '',
+      plan: 'free',
+      verified: true,
+    };
+    await chrome.storage.local.set({
+      dn_token: data.token,
+      dn_email: data.email || '',
+      dn_plan: 'free',
+      dn_verified: true,
+    });
+
+    trackEvent('login', { method: 'google' });
+    hideMessage(authMessage);
+    showLoggedInUI();
+    updateVerifyBanner();        // hides the banner since verified=true
+    await detectAndRoute();
+  } catch (err) {
+    // User cancelled the consent dialog — silent restore (don't error-flash)
+    const msg = (err?.message || '').toLowerCase();
+    const userCancelled = msg.includes('cancel') || msg.includes('did not approve');
+    if (!userCancelled) {
+      showMessage(authMessage, err.message || 'Google sign-in failed.', 'error');
+    }
+  } finally {
+    if (btn) btn.disabled = false;
+    if (btnText) btnText.textContent = 'Sign in with Google';
+  }
+}
+
 
 async function handleLogin(e) {
   e.preventDefault();
