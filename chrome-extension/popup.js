@@ -133,6 +133,12 @@ async function apiCall(endpoint, options = {}) {
       if (data?.unverified || data?.error === 'free_limit_reached') {
         return { ok: false, status: res.status, data };
       }
+      // Background calls (e.g., validateSession on popup open) must NEVER force
+      // logout — a transient 401/403 there should not destroy stored credentials
+      // and surprise the user. Only user-initiated actions trigger logout.
+      if (options._skipAutoLogout) {
+        return { ok: false, status: res.status, data };
+      }
       // Token is no longer valid — force clean logout
       await forceLogout('Your session has expired. Please log in again.');
       return { ok: false, status: res.status, data };
@@ -165,13 +171,22 @@ document.addEventListener('DOMContentLoaded', async () => {
   currentTab = tab;
 
   if (currentUser) {
-    // Validate session is still valid on every popup open
-    const sessionValid = await validateSession();
-    if (sessionValid) {
-      showLoggedInUI();
-      await detectAndRoute();
-    }
-    // If invalid, validateSession() already called forceLogout()
+    // Trust the stored token and show the logged-in UI immediately. This
+    // prevents the "logged out after closing popup" bug where validateSession
+    // would return false for any reason (transient network blip, dashboard
+    // response shape mismatch, brief backend hiccup) and the init code would
+    // fall through to the default auth view, leaving the user staring at a
+    // login screen even though their token was still in storage.
+    //
+    // validateSession runs in the background to refresh email/plan info — but
+    // it must NOT gate UI rendering or destroy local credentials. If the token
+    // is genuinely revoked, the user's NEXT action (add-product, compare, etc.)
+    // will hit a 401/403 and trigger the explicit forceLogout flow with a
+    // proper "session expired" message.
+    showLoggedInUI();
+    await detectAndRoute();
+    // Fire-and-forget refresh; failures are silent (stored token is trusted)
+    validateSession().catch(() => { /* swallow — UI already shown */ });
   } else {
     showView('auth');
     trackEvent('popup_open', { logged_in: false });
@@ -193,7 +208,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 async function validateSession() {
   if (!currentUser?.token) return false;
 
-  const { ok, data } = await apiCall('/api/dashboard');
+  // Background validation — never destroy local credentials on failure.
+  // _skipAutoLogout flag prevents apiCall from triggering forceLogout if the
+  // dashboard returns 401/403. If the token is truly revoked, the user's next
+  // explicit action will surface that cleanly.
+  const { ok, data } = await apiCall('/api/dashboard', { _skipAutoLogout: true });
 
   if (ok && data?.success && data?.user) {
     // Session valid — update local state with fresh data
