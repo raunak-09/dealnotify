@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "DealNotify - Price Drop & Restock Alerts",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "description": "Get price drop & restock alerts. Compare prices at Walmart, Target, Best Buy, and Costco from Amazon product pages.",
   "permissions": [
     "activeTab",

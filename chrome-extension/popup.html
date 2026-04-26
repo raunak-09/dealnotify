@@ -491,6 +491,32 @@
       align-items: center;
       justify-content: space-between;
     }
+    .verify-banner {
+      padding: 10px 16px;
+      background: #fff8e1;
+      border-bottom: 1px solid #f0e2b6;
+      color: #6b5800;
+      font-size: 12px;
+      line-height: 1.4;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .verify-banner .verify-icon { font-size: 14px; flex-shrink: 0; }
+    .verify-banner .verify-text { flex: 1; }
+    .verify-banner .verify-resend {
+      background: transparent;
+      border: 1px solid #c4a64a;
+      color: #6b5800;
+      padding: 3px 10px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .verify-banner .verify-resend:hover { background: #f0e2b6; }
+    .verify-banner .verify-resend:disabled { opacity: 0.6; cursor: default; }
     .user-bar .user-email {
       font-size: 13px;
       color: var(--text-light);
@@ -559,6 +585,13 @@
   <div class="user-bar" id="userBar" style="display:none;">
     <span class="user-email" id="userEmail"></span>
     <span class="user-plan" id="userPlan"></span>
+  </div>
+
+  <!-- ═══ VERIFY EMAIL BANNER (shown when account is unverified) ═══ -->
+  <div class="verify-banner" id="verifyBanner" style="display:none;">
+    <span class="verify-icon">✉️</span>
+    <span class="verify-text">Check your inbox to verify your email — alerts will start once verified.</span>
+    <button class="verify-resend" id="btnResendVerification" type="button">Resend</button>
   </div>
 
   <!-- ═══ AUTH VIEW ═══ -->

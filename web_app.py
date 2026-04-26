@@ -1434,7 +1434,8 @@ def get_dashboard():
             'signup_date': signup_date.strftime('%Y-%m-%d'),
             'trial_days_remaining': trial_days_remaining,
             'status': user['status'],
-            'is_pro': is_pro          # explicit boolean — use this to gate Pro features
+            'is_pro': is_pro,         # explicit boolean — use this to gate Pro features
+            'email_verified': bool(user.get('email_verified', False))  # extension uses this to show verify banner
         },
         'products': [product_to_dict(p) for p in products]
     }), 200

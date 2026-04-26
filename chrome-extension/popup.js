@@ -88,6 +88,8 @@ const headerActions = $('headerActions');
 const userBar       = $('userBar');
 const userEmail     = $('userEmail');
 const userPlan      = $('userPlan');
+const verifyBanner  = $('verifyBanner');
+const btnResendVerification = $('btnResendVerification');
 
 
 // ═══════════════════════════════════════════
@@ -157,13 +159,18 @@ async function apiCall(endpoint, options = {}) {
 
 document.addEventListener('DOMContentLoaded', async () => {
   // Load saved auth from chrome.storage.local (persists across all tabs & browser restarts)
-  const stored = await chrome.storage.local.get(['dn_token', 'dn_email', 'dn_plan']);
+  const stored = await chrome.storage.local.get(['dn_token', 'dn_email', 'dn_plan', 'dn_verified']);
   if (stored.dn_token) {
     currentUser = {
       token: stored.dn_token,
       email: stored.dn_email || '',
-      plan:  stored.dn_plan  || 'free'
+      plan:  stored.dn_plan  || 'free',
+      // Default to verified=true on load so we don't flash the banner before the
+      // background validateSession refreshes the real value. False positives are
+      // worse than briefly missing the banner.
+      verified: stored.dn_verified !== false
     };
+    updateVerifyBanner();
   }
 
   // Get current tab
@@ -219,10 +226,13 @@ async function validateSession() {
     const isPro = data.user.status === 'pro';
     currentUser.email = data.user.email;
     currentUser.plan  = isPro ? 'pro' : 'free';
+    currentUser.verified = !!data.user.email_verified;
     await chrome.storage.local.set({
       dn_email: currentUser.email,
-      dn_plan:  currentUser.plan
+      dn_plan:  currentUser.plan,
+      dn_verified: currentUser.verified
     });
+    updateVerifyBanner();
     return true;
   }
 
@@ -231,12 +241,64 @@ async function validateSession() {
 }
 
 /**
+ * Show or hide the "verify your email" banner based on currentUser.verified.
+ * The banner appears below the user-bar across all logged-in views.
+ */
+function updateVerifyBanner() {
+  if (!verifyBanner) return;
+  if (currentUser && currentUser.verified === false) {
+    verifyBanner.style.display = 'flex';
+  } else {
+    verifyBanner.style.display = 'none';
+  }
+}
+
+/**
+ * Resend the email verification link via the backend. Disables the button
+ * briefly to prevent spam-clicking and gives the user feedback.
+ */
+async function handleResendVerification() {
+  if (!currentUser?.email || !btnResendVerification) return;
+  btnResendVerification.disabled = true;
+  const originalText = btnResendVerification.textContent;
+  btnResendVerification.textContent = 'Sending…';
+
+  try {
+    const res = await fetch(`${API_BASE}/api/resend-verification`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: currentUser.email })
+    });
+    if (res.ok) {
+      btnResendVerification.textContent = 'Sent ✓';
+      setTimeout(() => {
+        btnResendVerification.textContent = originalText;
+        btnResendVerification.disabled = false;
+      }, 4000);
+    } else {
+      btnResendVerification.textContent = 'Failed';
+      setTimeout(() => {
+        btnResendVerification.textContent = originalText;
+        btnResendVerification.disabled = false;
+      }, 3000);
+    }
+  } catch (e) {
+    btnResendVerification.textContent = 'Failed';
+    setTimeout(() => {
+      btnResendVerification.textContent = originalText;
+      btnResendVerification.disabled = false;
+    }, 3000);
+  }
+}
+
+/**
  * Force logout — clears stored credentials and shows auth view with a message.
  */
 async function forceLogout(message) {
-  await chrome.storage.local.remove(['dn_token', 'dn_email', 'dn_plan']);
+  await chrome.storage.local.remove(['dn_token', 'dn_email', 'dn_plan', 'dn_verified']);
   currentUser = null;
   hideLoggedInUI();
+  if (verifyBanner) verifyBanner.style.display = 'none';
   showView('auth');
   if (message) {
     showMessage(authMessage, message, 'error');
@@ -418,6 +480,11 @@ function bindEvents() {
   // Logout
   $('btnLogout').addEventListener('click', () => forceLogout());
 
+  // Resend verification email
+  if (btnResendVerification) {
+    btnResendVerification.addEventListener('click', handleResendVerification);
+  }
+
   // Request store
   $('btnRequestStore').addEventListener('click', handleRequestStore);
 
@@ -522,19 +589,26 @@ async function handleSignup(e) {
     return;
   }
 
-  // Save token
-  currentUser = { token: data.token, email, plan: 'free' };
+  // Save token. Newly signed-up users start as unverified — set the flag so
+  // the verify banner shows immediately without waiting for validateSession.
+  currentUser = { token: data.token, email, plan: 'free', verified: false };
   await chrome.storage.local.set({
     dn_token: data.token,
     dn_email: email,
-    dn_plan: 'free'
+    dn_plan: 'free',
+    dn_verified: false
   });
 
   trackEvent('sign_up', { method: 'email' });
-  showMessage(authMessage, 'Account created! Please check your email to verify.', 'success');
+  hideMessage(authMessage);
 
-  // Show logged-in UI but they'll need to verify before tracking works
+  // Route to the appropriate view (track if on a supported retailer, else
+  // unsupported). The verify banner stays visible across all views as the
+  // persistent "check your email" reminder. Previously this only showed
+  // logged-in header chips on the auth view, which was confusing.
   showLoggedInUI();
+  updateVerifyBanner();
+  await detectAndRoute();
 
   btn.disabled = false;
   btn.textContent = 'Create Free Account';
