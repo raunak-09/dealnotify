@@ -47,8 +47,18 @@ window._dealnotifyLoaded = true;
                  || getText('#priceblock_ourprice')
                  || getText('#priceblock_dealprice')
                  || getText('.a-price-whole');
+      // Scope OOS detection to the availability section text and match specific
+      // OOS phrases. The previous `.a-color-price` class check was too generic —
+      // Amazon's red-text class fires for "Only N left in stock — order soon!"
+      // urgency messaging on IN-STOCK items, causing false-positive Restock tab
+      // auto-selection (e.g. Sony WH-1000XM5 / B09XS7JWHH).
+      const availability = document.querySelector('#availability')
+                        || document.querySelector('#availabilityInsideBuyBox_feature_div');
+      const availText = availability ? availability.innerText.toLowerCase() : '';
       const outOfStock = !!document.querySelector('#outOfStock')
-                      || !!document.querySelector('#availabilityInsideBuyBox_feature_div .a-color-price');
+                      || availText.includes('currently unavailable')
+                      || availText.includes('out of stock')
+                      || availText.includes('temporarily out of stock');
       return { title, price, outOfStock };
     },
 
