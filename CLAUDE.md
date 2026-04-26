@@ -5,6 +5,9 @@
 - TARGET_AFFILIATE_ID: (v2 — leave blank for now)
 - BESTBUY_AFFILIATE_ID: (v2 — leave blank for now)
 
+## Google SSO — Env Vars (added 2026-04-26)
+- GOOGLE_OAUTH_CLIENT_ID: OAuth Client ID from Google Cloud Console (Chrome Extension type). Used by the backend's `/api/auth/google` endpoint as defence-in-depth (audience match check) and by the extension's manifest.json `oauth2` block. See docs/13 - Google SSO Plan.md.
+
 ## Crawl Strategy — Env Vars (added 2026-04-25)
 See docs/11 - Crawl Strategy.md for the full plan.
 - SCRAPER_PROVIDER: "firecrawl" (default) | "scraperapi" | "firecrawl-then-scraperapi"

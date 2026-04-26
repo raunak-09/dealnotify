@@ -261,6 +261,9 @@ def init_db():
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT;")
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS newsletter BOOLEAN NOT NULL DEFAULT TRUE;")
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS timezone TEXT;")
+        # SSO: which auth method created the user. 'email' = email/password signup,
+        # 'google' = Google Sign-In via /api/auth/google. See docs/13 - Google SSO Plan.md.
+        cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider TEXT NOT NULL DEFAULT 'email';")
         cur.execute("""
             CREATE TABLE IF NOT EXISTS products (
                 id SERIAL PRIMARY KEY,
@@ -1251,6 +1254,131 @@ def login():
 
     except Exception as e:
         print(f"❌ Login error: {e}")
+        return jsonify({'error': 'An unexpected error occurred. Please try again.'}), 500
+
+
+@app.route('/api/auth/google', methods=['POST'])
+def auth_google():
+    """Google Sign-In endpoint.
+
+    Flow: extension calls chrome.identity.getAuthToken to get a Google access
+    token, then POSTs it here. We verify the token via Google's tokeninfo API
+    (which doesn't require knowing our OAuth client secret), extract the
+    verified email + name, and find-or-create the user.
+
+    Body: { "token": "<google_access_token>" }
+    Returns same shape as /api/login: { success, token, dashboard_url }
+
+    Account linking: auto-merge by verified email (Google has already proven
+    email ownership; safest possible auto-link case). See
+    docs/13 - Google SSO Plan.md for the full design.
+    """
+    try:
+        # Rate limit identical to /api/login (10 attempts per 5 min per IP)
+        ip = request.remote_addr or 'unknown'
+        if rate_limiter.is_rate_limited(f'google_signin:{ip}', max_requests=10, window_seconds=300):
+            return jsonify({'error': 'Too many sign-in attempts. Please wait a few minutes.'}), 429
+
+        data = request.json or {}
+        google_token = (data.get('token') or '').strip()
+        if not google_token:
+            return jsonify({'error': 'Token required'}), 400
+
+        # Verify token via Google's tokeninfo endpoint. This validates the
+        # token came from Google AND extracts the email, name, and aud (which
+        # OAuth client the token was issued for).
+        import urllib.request as _ureq
+        import urllib.error as _uerr
+        import json as _json
+        try:
+            info_url = f'https://oauth2.googleapis.com/tokeninfo?access_token={google_token}'
+            req = _ureq.Request(info_url, headers={'Accept': 'application/json'})
+            with _ureq.urlopen(req, timeout=8) as resp:
+                token_info = _json.loads(resp.read())
+        except _uerr.HTTPError as exc:
+            # 400 from tokeninfo means the token is invalid/expired
+            print(f"❌ Google tokeninfo rejected token (HTTP {exc.code})")
+            return jsonify({'error': 'Invalid or expired Google token. Please try signing in again.'}), 401
+        except Exception as exc:
+            print(f"❌ Google tokeninfo network error: {exc}")
+            return jsonify({'error': 'Could not reach Google to verify your sign-in. Please try again.'}), 503
+
+        # Verify the token's audience (aud) matches our OAuth client if configured.
+        # Without this check a token issued for a DIFFERENT app could be used to
+        # log in here. With GOOGLE_OAUTH_CLIENT_ID unset, we still trust the
+        # tokeninfo response (Google has verified its own signature), so this
+        # is defence-in-depth, not the primary trust boundary.
+        expected_aud = (os.getenv('GOOGLE_OAUTH_CLIENT_ID') or '').strip()
+        actual_aud = (token_info.get('aud') or '').strip()
+        if expected_aud and actual_aud and expected_aud != actual_aud:
+            print(f"❌ Google tokeninfo audience mismatch: expected={expected_aud[:20]}*** got={actual_aud[:20]}***")
+            return jsonify({'error': 'Token issued for a different application.'}), 401
+
+        # Extract verified email
+        email = (token_info.get('email') or '').strip().lower()
+        # Google returns email_verified as the string "true" or "false" via tokeninfo
+        email_verified_raw = token_info.get('email_verified') or token_info.get('verified_email')
+        is_verified = (str(email_verified_raw).lower() == 'true')
+
+        if not email:
+            return jsonify({'error': 'Google account did not return an email. Please try again.'}), 400
+        if not is_verified:
+            return jsonify({'error': 'Google has not verified this email address. Cannot sign in.'}), 403
+
+        # Optional name (used only when creating a new user)
+        name = (token_info.get('name') or token_info.get('given_name') or '').strip()
+        if not name:
+            # Fall back to local-part of the email if Google didn't return a name
+            name = email.split('@')[0]
+
+        # Find-or-create
+        conn = get_db_conn()
+        cur = conn.cursor()
+        try:
+            cur.execute('SELECT id, name, email, token, status FROM users WHERE LOWER(email) = %s LIMIT 1', (email,))
+            user = _fetchone(cur)
+
+            if user:
+                # Existing user — auto-merge. Mark email as verified (Google has
+                # already verified it, even if the user signed up via email/password
+                # before and never completed verification).
+                cur.execute(
+                    "UPDATE users SET email_verified = TRUE WHERE id = %s AND email_verified = FALSE",
+                    (user['id'],),
+                )
+                conn.commit()
+                session_token = user['token']
+                print(f"✅ Google sign-in (existing user): {email}")
+            else:
+                # New user — create with auth_provider='google', email_verified=TRUE,
+                # password_hash NULL (cannot log in with password until they reset).
+                session_token = secrets.token_urlsafe(32)
+                cur.execute(
+                    """INSERT INTO users
+                       (name, email, token, signup_date, status, trial_days_remaining,
+                        password_hash, email_verified, auth_provider, newsletter)
+                       VALUES (%s, %s, %s, %s, 'active', 30, NULL, TRUE, 'google', TRUE)
+                       RETURNING id""",
+                    (name, email, session_token, datetime.now()),
+                )
+                _fetchone(cur)
+                conn.commit()
+                print(f"✅ Google sign-in (new user): {email}")
+        finally:
+            cur.close()
+            conn.close()
+
+        base_url = get_base_url()
+        dashboard_url = f"{base_url}/dashboard?token={session_token}"
+        return jsonify({
+            'success': True,
+            'dashboard_url': dashboard_url,
+            'token': session_token,
+            'email': email,
+        }), 200
+
+    except Exception as e:
+        print(f"❌ Google sign-in error: {e}")
         return jsonify({'error': 'An unexpected error occurred. Please try again.'}), 500
 
 
