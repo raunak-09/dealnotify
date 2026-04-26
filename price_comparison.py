@@ -134,17 +134,24 @@ def _normalize_product_name(text: str) -> str:
     normalized = re.sub(r'\s{2,}', ' ', normalized).strip(' ,-–—()')
     return normalized
 
+_TRAILING_NOISE_RE = re.compile(r'[\s,.\-–—:;()\[\]/|"\'`]+$')
+
+
 def _build_search_query(identity: dict) -> str:
     # UPC is useful for matching/verification but Walmart text search returns
     # no results for bare UPC strings — use brand+model or title instead.
     brand = identity.get("brand") or ""
     model = identity.get("model") or ""
     if brand and model:
-        return _normalize_product_name(_strip_condition_labels(f"{brand} {model}"))
+        return _TRAILING_NOISE_RE.sub('', _normalize_product_name(_strip_condition_labels(f"{brand} {model}")))
     title = identity.get("title") or ""
     if title:
         cleaned = _normalize_product_name(_strip_condition_labels(title))
-        return " ".join(cleaned.split()[:8])
+        # Take first 8 word-tokens, then strip trailing punctuation/dashes/commas
+        # so queries don't end with "...with Microphone -" or "...4K Projector,"
+        # which retailer search engines treat as malformed and frequently 500 on.
+        truncated = " ".join(cleaned.split()[:8])
+        return _TRAILING_NOISE_RE.sub('', truncated)
     asin = identity.get("asin") or ""
     return asin
 
@@ -336,12 +343,19 @@ def _scrape_via_scraperapi(url: str, render_js: bool = False, retailer: str = ""
     returns raw HTML — downstream parsers in this module also accept HTML.
 
     Requires SCRAPER_API_KEY env var. If not set, returns ('','') so caller can fall through.
+
+    Retries up to 2× (3 attempts total) with 1s+3s backoff on transient errors:
+    - 429 (concurrency / rate limit)
+    - 500/502/503/504 (target site failures, often transient)
+    Retries are free on ScraperAPI's standard billing — they only charge for the
+    final successful response.
     """
     api_key = (os.getenv("SCRAPER_API_KEY") or "").strip()
     if not api_key:
         return '', ''
 
     import urllib.request as _ureq
+    import urllib.error as _uerr
     from urllib.parse import urlencode
 
     params = {
@@ -353,23 +367,58 @@ def _scrape_via_scraperapi(url: str, render_js: bool = False, retailer: str = ""
         params['render'] = 'true'
 
     api_url = f"https://api.scraperapi.com/?{urlencode(params)}"
-    req = _ureq.Request(api_url, headers={'Accept': 'text/html, */*'})
+    # Render adds 5–25s for JS execution — bump timeout proportionally
+    timeout_s = 45 if render_js else 30
 
-    try:
-        _crawl_metrics.inc('scraperapi_calls', retailer)
-        with _ureq.urlopen(req, timeout=30) as resp:
-            html = resp.read().decode('utf-8', errors='replace')
-        if html and len(html) > 800:
-            _crawl_metrics.inc('scraperapi_successes', retailer)
-            # Most parsers in this module read either markdown or html. We don't have
-            # a markdown converter here, so pass html through both slots — markdown-only
-            # parsers will fail and fall through to html parsing where present.
-            return html, html
-        return '', ''
-    except Exception as exc:
-        _crawl_metrics.inc('scraperapi_failures', retailer)
-        logging.warning("ScraperAPI failed for %s: %s", url, exc)
-        return '', ''
+    _RETRYABLE_HTTP = {429, 500, 502, 503, 504}
+    _BACKOFF = [1.0, 3.0]   # delays before retry attempts 2 and 3 — total ≤ 4s wait
+
+    _crawl_metrics.inc('scraperapi_calls', retailer)
+
+    last_err = None
+    for attempt in range(3):
+        if attempt > 0:
+            time.sleep(_BACKOFF[attempt - 1])
+            _crawl_metrics.inc('scraperapi_retries', retailer)
+
+        try:
+            req = _ureq.Request(api_url, headers={'Accept': 'text/html, */*'})
+            with _ureq.urlopen(req, timeout=timeout_s) as resp:
+                html = resp.read().decode('utf-8', errors='replace')
+            if html and len(html) > 800:
+                _crawl_metrics.inc('scraperapi_successes', retailer)
+                # Most parsers in this module read either markdown or html. We don't have
+                # a markdown converter here, so pass html through both slots — markdown-only
+                # parsers will fail and fall through to html parsing where present.
+                return html, html
+            # Empty/junk response — don't retry, fall through cleanly
+            return '', ''
+
+        except _uerr.HTTPError as exc:
+            last_err = exc
+            if exc.code in _RETRYABLE_HTTP and attempt < 2:
+                logging.warning("ScraperAPI %d on %s — retrying in %.0fs (attempt %d/3)",
+                                exc.code, url, _BACKOFF[attempt], attempt + 2)
+                continue
+            _crawl_metrics.inc('scraperapi_failures', retailer)
+            logging.warning("ScraperAPI HTTP %d (final) for %s", exc.code, url)
+            return '', ''
+
+        except Exception as exc:
+            last_err = exc
+            # Network/timeout — retry once more
+            if attempt < 2:
+                logging.warning("ScraperAPI exception on %s (%s) — retrying in %.0fs (attempt %d/3)",
+                                url, exc, _BACKOFF[attempt], attempt + 2)
+                continue
+            _crawl_metrics.inc('scraperapi_failures', retailer)
+            logging.warning("ScraperAPI failed for %s: %s", url, exc)
+            return '', ''
+
+    # All 3 attempts exhausted — record and return empty
+    _crawl_metrics.inc('scraperapi_failures', retailer)
+    logging.warning("ScraperAPI exhausted 3 attempts for %s: %s", url, last_err)
+    return '', ''
 
 
 def _scrape(url: str, formats: list | None = None, wait_for_ms: int = 0,
