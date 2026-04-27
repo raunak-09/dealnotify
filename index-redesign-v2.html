@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Google tag (gtag.js) — same property as existing site -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-QQ2L8EBBV8"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-QQ2L8EBBV8');
+  </script>
+
+  <title>DealNotify — Find the cheapest price. Get notified when it drops.</title>
+  <meta name="description" content="DealNotify finds the same product at Amazon, Walmart, Target, Best Buy, Costco, and eBay — and emails you when the price drops to your target. Use the browser extension or web app. Free for 30 days.">
+  <meta name="author" content="DealNotify">
+  <link rel="canonical" href="https://www.dealnotify.co/">
+  <link rel="icon" href="/dealnotify-logo-440x280.png" type="image/png">
+
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://www.dealnotify.co/">
+  <meta property="og:title" content="DealNotify — Find the cheapest price. Get notified when it drops.">
+  <meta property="og:description" content="Compare prices across 6 retailers. Track them automatically. Save without effort.">
+  <meta property="og:image" content="https://www.dealnotify.co/dealnotify-promo-440x280.png">
+
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="DealNotify — Find the cheapest price">
+  <meta name="twitter:description" content="Compare prices across 6 retailers. Track them automatically.">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --primary: #5b67f8;
+      --primary-dark: #4351d8;
+      --primary-soft: #eef0ff;
+      --navy: #1a1a2e;
+      --green: #27ae60;
+      --text: #1a1a2e;
+      --text-light: #5c5c7a;
+      --text-muted: #8a8aaa;
+      --bg: #ffffff;
+      --bg-soft: #fafbff;
+      --border: #e8eaf3;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      color: var(--text);
+      background: var(--bg);
+      line-height: 1.6;
+      font-size: 16px;
+      -webkit-font-smoothing: antialiased;
+    }
+    h1, h2, h3 { margin: 0; line-height: 1.2; letter-spacing: -0.02em; color: var(--navy); font-weight: 700; }
+    p { margin: 0; }
+    a { color: var(--primary); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .container { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+
+    /* ─── Buttons ─── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 14px 28px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 16px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.15s;
+      text-decoration: none;
+    }
+    .btn-primary { background: var(--primary); color: white; }
+    .btn-primary:hover { background: var(--primary-dark); text-decoration: none; }
+    .btn-secondary { background: white; color: var(--navy); border-color: var(--border); }
+    .btn-secondary:hover { border-color: var(--primary); color: var(--primary); text-decoration: none; }
+    .btn-link { color: var(--text-light); padding: 8px 0; }
+    .btn-link:hover { color: var(--primary); }
+
+    /* ─── Nav ─── */
+    nav {
+      padding: 20px 0;
+      border-bottom: 1px solid var(--border);
+      background: white;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    nav .container { display: flex; align-items: center; justify-content: space-between; }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 700;
+      font-size: 18px;
+      color: var(--navy);
+    }
+    .brand-icon {
+      font-size: 22px;
+    }
+    nav ul { list-style: none; display: flex; gap: 28px; margin: 0; padding: 0; }
+    nav ul a { color: var(--text-light); font-size: 15px; font-weight: 500; }
+    nav ul a:hover { color: var(--navy); text-decoration: none; }
+    .nav-right { display: flex; align-items: center; gap: 16px; }
+    @media (max-width: 720px) {
+      nav ul { display: none; }
+    }
+
+    /* ─── Hero ─── */
+    .hero {
+      padding: 80px 0 60px;
+      text-align: center;
+    }
+    .hero h1 {
+      font-size: clamp(34px, 5vw, 52px);
+      max-width: 760px;
+      margin: 0 auto 20px;
+    }
+    .hero h1 .highlight {
+      color: var(--primary);
+    }
+    .hero .subhead {
+      font-size: clamp(17px, 1.8vw, 19px);
+      color: var(--text-light);
+      max-width: 620px;
+      margin: 0 auto 32px;
+    }
+    .hero .cta-row {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+    .hero .small {
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+    .hero .small a { color: var(--text-light); }
+
+    /* ─── Retailer logos strip ─── */
+    .retailers {
+      padding: 32px 0;
+      background: var(--bg-soft);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    .retailers .label {
+      text-align: center;
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 16px;
+    }
+    .retailers .logos {
+      display: flex;
+      justify-content: center;
+      gap: 40px;
+      flex-wrap: wrap;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-light);
+    }
+
+    /* ─── Section base ─── */
+    section.s {
+      padding: 88px 0;
+    }
+    @media (max-width: 720px) {
+      section.s { padding: 56px 0; }
+    }
+    .s-header {
+      text-align: center;
+      max-width: 680px;
+      margin: 0 auto 56px;
+    }
+    .s-header h2 {
+      font-size: clamp(28px, 4vw, 36px);
+      margin-bottom: 14px;
+    }
+    .s-header p {
+      font-size: 17px;
+      color: var(--text-light);
+    }
+
+    /* ─── 3 simple features ─── */
+    .what {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 40px;
+    }
+    @media (max-width: 720px) {
+      .what { grid-template-columns: 1fr; gap: 32px; }
+    }
+    .what-item {
+      text-align: center;
+    }
+    .what-emoji {
+      font-size: 40px;
+      margin-bottom: 16px;
+      display: block;
+    }
+    .what-item h3 { font-size: 19px; margin-bottom: 8px; }
+    .what-item p { font-size: 15px; color: var(--text-light); max-width: 280px; margin: 0 auto; }
+
+    /* ─── Two ways to use it ─── */
+    section.ways { background: var(--bg-soft); }
+    .ways-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+    @media (max-width: 720px) {
+      .ways-grid { grid-template-columns: 1fr; }
+    }
+    .way-card {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 36px;
+    }
+    .way-card .way-tag {
+      display: inline-block;
+      padding: 4px 12px;
+      background: var(--primary-soft);
+      color: var(--primary-dark);
+      border-radius: 100px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      margin-bottom: 14px;
+    }
+    .way-card h3 { font-size: 22px; margin-bottom: 10px; }
+    .way-card p.way-desc { font-size: 15px; color: var(--text-light); margin-bottom: 20px; }
+    .way-card ul { list-style: none; padding: 0; margin: 0 0 24px; }
+    .way-card ul li {
+      padding: 6px 0;
+      font-size: 15px;
+      color: var(--text);
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+    .way-card ul li::before {
+      content: '✓';
+      color: var(--green);
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .way-card .btn { width: 100%; }
+
+    /* ─── How it works ─── */
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 32px;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    @media (max-width: 720px) {
+      .steps { grid-template-columns: 1fr; gap: 28px; }
+    }
+    .step {
+      text-align: center;
+    }
+    .step-num {
+      display: inline-grid;
+      place-items: center;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: var(--primary-soft);
+      color: var(--primary);
+      font-weight: 700;
+      font-size: 16px;
+      margin-bottom: 14px;
+    }
+    .step h3 { font-size: 17px; margin-bottom: 6px; }
+    .step p { font-size: 14px; color: var(--text-light); max-width: 240px; margin: 0 auto; }
+
+    /* ─── Pricing ─── */
+    section.pricing { background: var(--bg-soft); }
+    .price-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      max-width: 760px;
+      margin: 0 auto;
+    }
+    @media (max-width: 720px) {
+      .price-grid { grid-template-columns: 1fr; }
+    }
+    .price-card {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 32px;
+    }
+    .price-card.featured { border: 2px solid var(--primary); position: relative; }
+    .price-card.featured::before {
+      content: 'POPULAR';
+      position: absolute;
+      top: -12px;
+      right: 24px;
+      background: var(--primary);
+      color: white;
+      padding: 4px 12px;
+      border-radius: 100px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+    }
+    .price-card h3 { font-size: 20px; margin-bottom: 4px; }
+    .price-card .price-tag { font-size: 13px; color: var(--text-muted); margin-bottom: 16px; }
+    .price-amt { font-size: 38px; font-weight: 700; color: var(--navy); margin-bottom: 18px; }
+    .price-amt .price-unit { font-size: 16px; color: var(--text-muted); font-weight: 500; }
+    .price-card ul { list-style: none; padding: 0; margin: 0 0 24px; }
+    .price-card ul li {
+      padding: 7px 0;
+      font-size: 14px;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .price-card ul li::before { content: '✓'; color: var(--green); font-weight: 700; }
+    .price-card .btn { width: 100%; }
+
+    /* ─── FAQ ─── */
+    .faq { max-width: 720px; margin: 0 auto; }
+    .faq details {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      margin-bottom: 12px;
+      transition: border-color 0.15s;
+      background: white;
+    }
+    .faq details[open] { border-color: var(--primary); }
+    .faq summary {
+      padding: 18px 22px;
+      font-weight: 600;
+      font-size: 16px;
+      cursor: pointer;
+      list-style: none;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: var(--navy);
+    }
+    .faq summary::-webkit-details-marker { display: none; }
+    .faq summary::after {
+      content: '+';
+      font-size: 22px;
+      font-weight: 300;
+      color: var(--text-muted);
+    }
+    .faq details[open] summary::after { content: '−'; }
+    .faq-body {
+      padding: 0 22px 18px;
+      font-size: 15px;
+      color: var(--text-light);
+    }
+
+    /* ─── Final CTA ─── */
+    .final {
+      padding: 72px 0;
+      text-align: center;
+      background: linear-gradient(135deg, var(--primary), #7d88ff);
+      color: white;
+    }
+    .final h2 { color: white; font-size: clamp(28px, 4vw, 36px); margin-bottom: 14px; }
+    .final p { font-size: 17px; opacity: 0.9; margin-bottom: 24px; max-width: 480px; margin-left: auto; margin-right: auto; }
+    .final .btn { background: white; color: var(--primary); padding: 16px 36px; }
+    .final .btn:hover { background: rgba(255,255,255,0.92); text-decoration: none; }
+    .final .small { font-size: 13px; opacity: 0.85; margin-top: 12px; }
+
+    /* ─── Footer ─── */
+    footer {
+      padding: 40px 0 30px;
+      background: white;
+      border-top: 1px solid var(--border);
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+    footer .container { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 20px; }
+    footer .links { display: flex; gap: 24px; }
+    footer .links a { color: var(--text-light); }
+    footer .links a:hover { color: var(--primary); text-decoration: none; }
+    @media (max-width: 600px) {
+      footer .container { flex-direction: column; text-align: center; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ─── NAV ─── -->
+  <nav>
+    <div class="container">
+      <a href="#" class="brand"><span class="brand-icon">🔔</span>DealNotify</a>
+      <ul>
+        <li><a href="#what">What it does</a></li>
+        <li><a href="#ways">How to use it</a></li>
+        <li><a href="#pricing">Pricing</a></li>
+        <li><a href="#faq">FAQ</a></li>
+      </ul>
+      <div class="nav-right">
+        <a href="/login" class="btn-link">Log in</a>
+        <a href="/signup" class="btn btn-primary" style="padding:10px 20px;font-size:14px;">Sign up free</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ─── HERO ─── -->
+  <section class="hero">
+    <div class="container">
+      <h1>Find the cheapest price. Get an email when it <span class="highlight">drops.</span></h1>
+      <p class="subhead">DealNotify checks Amazon, Walmart, Target, Best Buy, Costco, and eBay for you — so you stop overpaying. Use the Chrome extension while you shop, or paste any product URL into the web app.</p>
+      <div class="cta-row">
+        <a href="/signup" class="btn btn-primary">Sign up free — no card needed</a>
+      </div>
+      <div class="small">30-day free trial · Cancel anytime · <a href="#install">Or just add the Chrome extension →</a></div>
+    </div>
+  </section>
+
+  <!-- ─── RETAILERS STRIP ─── -->
+  <div class="retailers">
+    <div class="container">
+      <div class="label">We watch prices at:</div>
+      <div class="logos">
+        <span>amazon</span>
+        <span>walmart</span>
+        <span>target</span>
+        <span>Best Buy</span>
+        <span>costco</span>
+        <span>ebay</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── 3 SIMPLE FEATURES (What it does) ─── -->
+  <section class="s" id="what">
+    <div class="container">
+      <div class="s-header">
+        <h2>What DealNotify does</h2>
+        <p>Three simple things to help you stop overpaying online.</p>
+      </div>
+
+      <div class="what">
+        <div class="what-item">
+          <span class="what-emoji">🔍</span>
+          <h3>Compares 6 stores instantly</h3>
+          <p>You're on Amazon. We check Walmart, Target, Best Buy, Costco, and eBay for the same item — automatically.</p>
+        </div>
+
+        <div class="what-item">
+          <span class="what-emoji">🔔</span>
+          <h3>Watches the price for you</h3>
+          <p>Set the price you'd pay, and we'll watch the page 24/7. As soon as it hits your number, you get an email.</p>
+        </div>
+
+        <div class="what-item">
+          <span class="what-emoji">📦</span>
+          <h3>Tells you when it's back in stock</h3>
+          <p>That sold-out toy or console? We'll email you the moment it's available again. No more hitting refresh.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── TWO WAYS TO USE IT ─── -->
+  <section class="s ways" id="ways">
+    <div class="container">
+      <div class="s-header">
+        <h2>Two ways to use it</h2>
+        <p>One account works with both. Use whichever fits your flow.</p>
+      </div>
+
+      <div class="ways-grid">
+        <!-- Chrome extension -->
+        <div class="way-card">
+          <span class="way-tag">Chrome extension</span>
+          <h3>Compare while you shop</h3>
+          <p class="way-desc">Add DealNotify to Chrome. The next time you're on a product page, a small panel slides in showing whether it's cheaper somewhere else.</p>
+          <ul>
+            <li>Comparisons appear automatically — no clicks needed</li>
+            <li>Add a price-drop or restock alert in one click</li>
+            <li>Sign in with Google or email</li>
+          </ul>
+          <a href="#install" class="btn btn-primary">Add to Chrome</a>
+        </div>
+
+        <!-- Web app -->
+        <div class="way-card">
+          <span class="way-tag">Web app</span>
+          <h3>Track from anywhere</h3>
+          <p class="way-desc">Use the dashboard at dealnotify.co. Paste any product URL, set the price you want, and we'll email you when it drops.</p>
+          <ul>
+            <li>Works on any browser, any device</li>
+            <li>See your tracked products and price history</li>
+            <li>Manage all your alerts from one screen</li>
+          </ul>
+          <a href="/signup" class="btn btn-secondary">Open the web app</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── HOW IT WORKS ─── -->
+  <section class="s">
+    <div class="container">
+      <div class="s-header">
+        <h2>Get started in under a minute</h2>
+        <p>You don't need to be technical. If you can copy a URL, you can use DealNotify.</p>
+      </div>
+
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <h3>Sign up free</h3>
+          <p>Use email or your Google account. No credit card. 30-day free trial.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <h3>Add a product</h3>
+          <p>Either install the Chrome extension and visit a product page, or paste a URL into the web app.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <h3>Save when it drops</h3>
+          <p>We email you the moment your target price hits or the item is back in stock. That's it.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── PRICING ─── -->
+  <section class="s pricing" id="pricing">
+    <div class="container">
+      <div class="s-header">
+        <h2>Simple pricing</h2>
+        <p>Start free. Upgrade only if you want to track more or check faster.</p>
+      </div>
+
+      <div class="price-grid">
+        <div class="price-card">
+          <h3>Free Trial</h3>
+          <div class="price-tag">For trying it out</div>
+          <div class="price-amt">$0<span class="price-unit"> / 30 days</span></div>
+          <ul>
+            <li>Up to 3 products</li>
+            <li>Compare across all 6 stores</li>
+            <li>Price-drop and restock alerts</li>
+            <li>Checks every 6 hours</li>
+            <li>No credit card required</li>
+          </ul>
+          <a href="/signup" class="btn btn-secondary">Start free</a>
+        </div>
+
+        <div class="price-card featured">
+          <h3>Pro</h3>
+          <div class="price-tag">For shoppers who track a lot</div>
+          <div class="price-amt">$4.99<span class="price-unit"> / month</span></div>
+          <ul>
+            <li>Unlimited products</li>
+            <li>Compare across all 6 stores</li>
+            <li>Price-drop and restock alerts</li>
+            <li>Checks every 2 hours (3× faster)</li>
+            <li>Cancel anytime</li>
+          </ul>
+          <a href="/signup?plan=pro" class="btn btn-primary">Get Pro</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── FAQ ─── -->
+  <section class="s" id="faq">
+    <div class="container">
+      <div class="s-header">
+        <h2>Common questions</h2>
+      </div>
+
+      <div class="faq">
+        <details>
+          <summary>Do I need the Chrome extension?</summary>
+          <div class="faq-body">No. The web app works on its own — paste any product URL, set a target price, and you'll get email alerts. The extension just makes it easier to track from any product page and shows price comparisons automatically while you shop.</div>
+        </details>
+
+        <details>
+          <summary>How does the price comparison work?</summary>
+          <div class="faq-body">When you're on a supported product page (or paste a URL), DealNotify identifies the product (brand, model, key specs) and searches the same item across the other supported stores. If we find a confident match somewhere cheaper, we show it.</div>
+        </details>
+
+        <details>
+          <summary>How fast are price-drop alerts?</summary>
+          <div class="faq-body">On the free plan, we check every 6 hours. On Pro, every 2 hours. The moment the price hits your target, an email goes out within seconds. For most shoppers, that's well within the window of a typical sale.</div>
+        </details>
+
+        <details>
+          <summary>What if the item isn't sold at all 6 stores?</summary>
+          <div class="faq-body">No problem. We compare against whichever stores carry the item. If a product is exclusive to one retailer, the comparison will simply show no other matches — and you can still set a price-drop or restock alert.</div>
+        </details>
+
+        <details>
+          <summary>Is my browsing data private?</summary>
+          <div class="faq-body">Yes. The extension only sends us the product URL of the page you're on, and only when that page is one of the 6 supported retailers. We don't see other tabs, search history, or anything outside those retailers. Read our <a href="/privacy">privacy policy</a> for details.</div>
+        </details>
+
+        <details>
+          <summary>Can I cancel?</summary>
+          <div class="faq-body">Yes, anytime, from your dashboard. Pro is month-to-month with no contract. If you cancel, your account stays on the free plan and your tracked products keep working — just at the slower 6-hour check interval.</div>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── FINAL CTA ─── -->
+  <section class="final" id="install">
+    <div class="container">
+      <h2>Stop overpaying. Start saving.</h2>
+      <p>30 days free. No credit card. Sign up takes 30 seconds.</p>
+      <a href="/signup" class="btn">Sign up free</a>
+      <div class="small">Or grab the <a href="https://chrome.google.com/webstore/detail/kchogeockmgjejohfkkpnpenkaaoklmj" style="color:white;text-decoration:underline;">Chrome extension</a></div>
+    </div>
+  </section>
+
+  <!-- ─── FOOTER ─── -->
+  <footer>
+    <div class="container">
+      <div>&copy; 2026 DealNotify · <a href="mailto:hello@dealnotify.co" style="color:var(--text-light);">hello@dealnotify.co</a></div>
+      <div class="links">
+        <a href="/blog.html">Blog</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/terms">Terms</a>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>
