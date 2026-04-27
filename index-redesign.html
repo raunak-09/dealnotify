@@ -1,0 +1,1124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Google tag (gtag.js) — same property as existing site -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-QQ2L8EBBV8"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-QQ2L8EBBV8');
+  </script>
+
+  <title>DealNotify — See the cheaper price before you click Buy</title>
+  <meta name="description" content="DealNotify automatically compares prices across Amazon, Walmart, Target, Best Buy, Costco and eBay while you shop. The cheaper price shows up the moment you land on a product page — no extra tabs, no hunting.">
+  <meta name="keywords" content="price comparison, price tracker, amazon vs walmart, deal alert, save money online shopping, chrome extension price tracker, price drop alert, restock alert">
+  <meta name="author" content="DealNotify">
+  <link rel="canonical" href="https://www.dealnotify.co/">
+  <link rel="icon" href="/dealnotify-logo-440x280.png" type="image/png">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://www.dealnotify.co/">
+  <meta property="og:title" content="DealNotify — See the cheaper price before you click Buy">
+  <meta property="og:description" content="Compare prices instantly across 6 major retailers. Track them automatically. Save without effort.">
+  <meta property="og:image" content="https://www.dealnotify.co/dealnotify-promo-440x280.png">
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="DealNotify — See the cheaper price before you click Buy">
+  <meta name="twitter:description" content="Automatic price comparison across 6 retailers. Real savings, in real time.">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    /* ─── Tokens ─── */
+    :root {
+      --primary:        #5b67f8;
+      --primary-dark:   #4351d8;
+      --primary-soft:   #eef0ff;
+      --navy:           #1a1a2e;
+      --green:          #27ae60;
+      --green-soft:     #d8f5e3;
+      --text:           #1a1a2e;
+      --text-light:     #5c5c7a;
+      --text-muted:     #8a8aaa;
+      --bg:             #ffffff;
+      --bg-soft:        #f7f8ff;
+      --bg-elev:        #ffffff;
+      --border:         #e5e7eb;
+      --border-soft:    #f0f1f5;
+      --shadow-sm:      0 1px 2px rgba(26,26,46,0.04);
+      --shadow-md:      0 4px 12px rgba(26,26,46,0.08);
+      --shadow-lg:      0 20px 40px -10px rgba(91,103,248,0.18), 0 8px 16px rgba(26,26,46,0.06);
+      --radius:         12px;
+      --radius-sm:      8px;
+      --radius-pill:    100px;
+    }
+
+    /* ─── Base ─── */
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: var(--text);
+      background: var(--bg);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    h1, h2, h3, h4 { margin: 0; font-weight: 700; line-height: 1.2; letter-spacing: -0.02em; color: var(--navy); }
+    p { margin: 0; }
+    a { color: inherit; text-decoration: none; }
+    img, svg { display: block; max-width: 100%; }
+    .container { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+
+    /* ─── Buttons ─── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 13px 22px;
+      border-radius: var(--radius-sm);
+      font-weight: 600;
+      font-size: 15px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
+      text-align: center;
+      white-space: nowrap;
+    }
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+      box-shadow: var(--shadow-md);
+    }
+    .btn-primary:hover {
+      background: var(--primary-dark);
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-lg);
+    }
+    .btn-secondary {
+      background: white;
+      color: var(--navy);
+      border-color: var(--border);
+    }
+    .btn-secondary:hover { background: var(--bg-soft); border-color: #d8dcff; }
+    .btn-ghost { background: transparent; color: var(--text); padding: 8px 14px; }
+    .btn-ghost:hover { color: var(--primary); }
+    .btn-lg { padding: 16px 28px; font-size: 16px; }
+
+    /* ─── Nav ─── */
+    nav.site-nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(255,255,255,0.92);
+      backdrop-filter: saturate(180%) blur(12px);
+      -webkit-backdrop-filter: saturate(180%) blur(12px);
+      border-bottom: 1px solid var(--border-soft);
+    }
+    nav.site-nav .container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 64px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 800;
+      font-size: 18px;
+      color: var(--navy);
+      letter-spacing: -0.01em;
+    }
+    .brand-bell {
+      width: 28px;
+      height: 28px;
+      background: linear-gradient(135deg, var(--primary), #7d88ff);
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      color: white;
+      font-size: 14px;
+    }
+    nav.site-nav ul { list-style: none; display: flex; gap: 4px; margin: 0; padding: 0; }
+    nav.site-nav ul a {
+      padding: 8px 14px;
+      border-radius: var(--radius-sm);
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-light);
+    }
+    nav.site-nav ul a:hover { color: var(--navy); background: var(--bg-soft); }
+    .nav-cta { display: flex; align-items: center; gap: 8px; }
+    @media (max-width: 720px) {
+      nav.site-nav ul { display: none; }
+    }
+
+    /* ─── Hero ─── */
+    .hero {
+      padding: 80px 0 60px;
+      background:
+        radial-gradient(circle at 0% 0%, rgba(91,103,248,0.06), transparent 50%),
+        radial-gradient(circle at 100% 0%, rgba(39,174,96,0.04), transparent 50%);
+    }
+    .hero .grid {
+      display: grid;
+      grid-template-columns: 1.05fr 1fr;
+      gap: 64px;
+      align-items: center;
+    }
+    @media (max-width: 920px) {
+      .hero { padding: 56px 0 32px; }
+      .hero .grid { grid-template-columns: 1fr; gap: 40px; }
+    }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      background: var(--primary-soft);
+      color: var(--primary-dark);
+      border-radius: var(--radius-pill);
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 20px;
+    }
+    .eyebrow .dot {
+      width: 6px; height: 6px;
+      background: var(--green);
+      border-radius: 50%;
+      box-shadow: 0 0 0 4px rgba(39,174,96,0.2);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    .hero h1 {
+      font-size: clamp(36px, 5vw, 52px);
+      margin-bottom: 20px;
+    }
+    .hero h1 .accent {
+      background: linear-gradient(135deg, var(--primary), #7d88ff);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .hero .lead {
+      font-size: 18px;
+      color: var(--text-light);
+      margin-bottom: 28px;
+      max-width: 540px;
+    }
+    .hero-ctas { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+    .hero-meta {
+      font-size: 13px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .hero-meta svg { width: 14px; height: 14px; vertical-align: -2px; }
+
+    /* ─── Compare panel mockup (Walmart → Costco motor-oil example) ─── */
+    .panel-mockup {
+      background: white;
+      border-radius: 16px;
+      box-shadow: var(--shadow-lg);
+      overflow: hidden;
+      width: 100%;
+      max-width: 460px;
+      margin: 0 auto;
+      transform: rotate(0.5deg);
+      animation: float 6s ease-in-out infinite;
+    }
+    @keyframes float {
+      0%, 100% { transform: rotate(0.5deg) translateY(0); }
+      50% { transform: rotate(-0.3deg) translateY(-6px); }
+    }
+    .panel-mockup__bg {
+      background: var(--bg-soft);
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .panel-mockup__url {
+      font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+      font-size: 11px;
+      color: var(--text-muted);
+      background: white;
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border-soft);
+      margin-top: 6px;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .panel-product {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border-soft);
+    }
+    .panel-product__img {
+      width: 48px;
+      height: 48px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #1a3a8e, #c8102e 60%, #1a3a8e);
+      display: grid;
+      place-items: center;
+      color: white;
+      font-weight: 800;
+      font-size: 13px;
+      flex-shrink: 0;
+      letter-spacing: -0.5px;
+    }
+    .panel-product__title {
+      font-weight: 600;
+      font-size: 13px;
+      line-height: 1.35;
+      color: var(--navy);
+    }
+    .panel-product__brand {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 2px;
+    }
+
+    .panel-header {
+      background: linear-gradient(135deg, #5b67f8, #7d88ff);
+      color: white;
+      padding: 14px 18px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .panel-header__brand { font-weight: 700; font-size: 14px; letter-spacing: -0.01em; }
+    .panel-header__close { opacity: 0.7; font-size: 16px; cursor: pointer; }
+
+    .panel-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      padding: 0 8px;
+      background: white;
+    }
+    .panel-tab {
+      padding: 12px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      border-bottom: 2px solid transparent;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .panel-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+    .panel-tab svg { width: 14px; height: 14px; }
+
+    .panel-row {
+      padding: 16px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-soft);
+    }
+    .panel-row__retailer { font-size: 11px; font-weight: 700; letter-spacing: 1px; color: var(--text-muted); }
+    .panel-row__price { font-weight: 600; }
+    .panel-row__price.strike { text-decoration: line-through; color: var(--text-muted); font-size: 14px; }
+    .panel-row__price.current { font-size: 22px; color: var(--navy); }
+
+    .panel-best {
+      padding: 18px;
+      background: linear-gradient(180deg, #fafbff, #f0f3ff);
+    }
+    .panel-best__top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .panel-best__retailer-wrap { display: flex; flex-direction: column; gap: 2px; }
+    .panel-best__retailer {
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      color: var(--navy);
+    }
+    .panel-best__badge {
+      display: inline-block;
+      padding: 2px 8px;
+      background: var(--primary);
+      color: white;
+      border-radius: var(--radius-pill);
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      width: fit-content;
+    }
+    .panel-best__price { font-size: 26px; font-weight: 800; color: var(--navy); }
+    .panel-best__savings {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      background: var(--green);
+      color: white;
+      border-radius: var(--radius-pill);
+      font-size: 12px;
+      font-weight: 700;
+      margin-left: 10px;
+    }
+    .panel-best__cta {
+      display: block;
+      width: 100%;
+      padding: 12px;
+      background: var(--primary);
+      color: white;
+      border-radius: var(--radius-sm);
+      text-align: center;
+      font-weight: 600;
+      font-size: 14px;
+      border: none;
+      cursor: pointer;
+    }
+
+    /* ─── Trust strip ─── */
+    .trust {
+      padding: 32px 0;
+      border-top: 1px solid var(--border-soft);
+      border-bottom: 1px solid var(--border-soft);
+      background: var(--bg-soft);
+    }
+    .trust__label {
+      text-align: center;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 18px;
+    }
+    .trust__logos {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 36px;
+      flex-wrap: wrap;
+      font-weight: 700;
+      font-size: 18px;
+      color: var(--text-light);
+      letter-spacing: -0.01em;
+    }
+    .trust__logos span {
+      opacity: 0.55;
+      transition: opacity 0.2s;
+    }
+    .trust__logos span:hover { opacity: 1; color: var(--navy); }
+
+    /* ─── Section base ─── */
+    section.s {
+      padding: 96px 0;
+    }
+    @media (max-width: 920px) {
+      section.s { padding: 64px 0; }
+    }
+    .s__head {
+      text-align: center;
+      max-width: 720px;
+      margin: 0 auto 48px;
+    }
+    .s__eyebrow {
+      display: inline-block;
+      padding: 6px 14px;
+      background: var(--primary-soft);
+      color: var(--primary-dark);
+      border-radius: var(--radius-pill);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      margin-bottom: 16px;
+    }
+    .s__title {
+      font-size: clamp(28px, 4vw, 40px);
+      margin-bottom: 14px;
+    }
+    .s__sub {
+      font-size: 17px;
+      color: var(--text-light);
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    /* ─── Compare deep-dive ─── */
+    .compare-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+      margin-bottom: 56px;
+    }
+    @media (max-width: 920px) {
+      .compare-grid { grid-template-columns: 1fr; }
+    }
+    .feature-card {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px;
+      transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+    }
+    .feature-card:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-md);
+      border-color: #d8dcff;
+    }
+    .feature-card__icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      background: var(--primary-soft);
+      color: var(--primary);
+      display: grid;
+      place-items: center;
+      margin-bottom: 18px;
+    }
+    .feature-card__icon svg { width: 24px; height: 24px; }
+    .feature-card h3 { font-size: 18px; margin-bottom: 8px; }
+    .feature-card p { font-size: 15px; color: var(--text-light); }
+
+    .compare-hero-shot {
+      background: var(--navy);
+      border-radius: 20px;
+      padding: 48px 36px;
+      color: white;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .compare-hero-shot::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(circle at 20% 30%, rgba(91,103,248,0.4), transparent 40%),
+        radial-gradient(circle at 80% 70%, rgba(39,174,96,0.2), transparent 40%);
+      pointer-events: none;
+    }
+    .compare-hero-shot > * { position: relative; }
+    .compare-hero-shot h3 {
+      color: white;
+      font-size: 24px;
+      margin-bottom: 8px;
+    }
+    .compare-hero-shot p {
+      color: rgba(255,255,255,0.7);
+      font-size: 15px;
+      margin-bottom: 28px;
+    }
+    .multi-retailer-stack {
+      max-width: 460px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 14px;
+      padding: 6px;
+      color: var(--text);
+      box-shadow: var(--shadow-lg);
+    }
+    .multi-retailer-stack__row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      border-radius: 10px;
+      transition: background 0.15s;
+    }
+    .multi-retailer-stack__row + .multi-retailer-stack__row { margin-top: 2px; }
+    .multi-retailer-stack__row.best {
+      background: linear-gradient(90deg, var(--green-soft), white);
+      border: 1px solid #b9eccd;
+    }
+    .multi-retailer-stack__brand {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      width: 88px;
+      text-align: left;
+    }
+    .multi-retailer-stack__price {
+      font-weight: 700;
+      font-size: 16px;
+      color: var(--navy);
+    }
+    .multi-retailer-stack__tag {
+      padding: 3px 8px;
+      background: var(--green);
+      color: white;
+      border-radius: var(--radius-pill);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+
+    /* ─── Track-and-alert section ─── */
+    .alerts-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 28px;
+    }
+    @media (max-width: 720px) {
+      .alerts-grid { grid-template-columns: 1fr; }
+    }
+    .alert-card {
+      background: var(--bg-soft);
+      border-radius: var(--radius);
+      padding: 32px;
+    }
+    .alert-card__icon {
+      font-size: 32px;
+      margin-bottom: 14px;
+    }
+    .alert-card h3 { font-size: 20px; margin-bottom: 8px; }
+    .alert-card p { font-size: 15px; color: var(--text-light); }
+
+    /* ─── How it works ─── */
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 36px;
+      counter-reset: step;
+    }
+    @media (max-width: 720px) {
+      .steps { grid-template-columns: 1fr; gap: 24px; }
+    }
+    .step {
+      text-align: center;
+      counter-increment: step;
+    }
+    .step__num {
+      display: inline-grid;
+      place-items: center;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: var(--primary);
+      color: white;
+      font-weight: 700;
+      font-size: 17px;
+      margin-bottom: 16px;
+    }
+    .step h3 { font-size: 17px; margin-bottom: 6px; }
+    .step p { font-size: 14px; color: var(--text-light); }
+
+    /* ─── Pricing ─── */
+    section.s.pricing { background: var(--bg-soft); }
+    .price-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    @media (max-width: 720px) {
+      .price-grid { grid-template-columns: 1fr; }
+    }
+    .price-card {
+      background: white;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      padding: 32px;
+    }
+    .price-card.featured {
+      border: 2px solid var(--primary);
+      position: relative;
+      box-shadow: var(--shadow-md);
+    }
+    .price-card.featured::before {
+      content: 'POPULAR';
+      position: absolute;
+      top: -12px;
+      right: 24px;
+      background: var(--primary);
+      color: white;
+      padding: 4px 12px;
+      border-radius: var(--radius-pill);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+    }
+    .price-card h3 { font-size: 20px; margin-bottom: 6px; }
+    .price-card .tag-line { font-size: 13px; color: var(--text-muted); margin-bottom: 18px; }
+    .price-amt { font-size: 40px; font-weight: 800; color: var(--navy); margin-bottom: 4px; }
+    .price-amt .small { font-size: 16px; color: var(--text-muted); font-weight: 500; }
+    .price-card ul {
+      list-style: none;
+      padding: 0;
+      margin: 24px 0;
+    }
+    .price-card ul li {
+      padding: 8px 0;
+      font-size: 14px;
+      color: var(--text-light);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .price-card ul li::before {
+      content: '';
+      width: 18px; height: 18px;
+      background: var(--primary-soft) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235b67f8' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><polyline points='20 6 9 17 4 12'/></svg>") center/12px no-repeat;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .price-card .btn { width: 100%; }
+
+    /* ─── FAQ ─── */
+    .faq {
+      max-width: 760px;
+      margin: 0 auto;
+    }
+    .faq details {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 4px;
+      margin-bottom: 12px;
+      transition: border-color 0.15s;
+    }
+    .faq details[open] { border-color: var(--primary); }
+    .faq summary {
+      padding: 18px 22px;
+      font-weight: 600;
+      font-size: 16px;
+      cursor: pointer;
+      list-style: none;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: var(--navy);
+    }
+    .faq summary::-webkit-details-marker { display: none; }
+    .faq summary::after {
+      content: '+';
+      font-size: 22px;
+      font-weight: 300;
+      color: var(--text-muted);
+      transition: transform 0.2s;
+    }
+    .faq details[open] summary::after { content: '−'; }
+    .faq .faq-body {
+      padding: 0 22px 18px;
+      font-size: 15px;
+      color: var(--text-light);
+      line-height: 1.65;
+    }
+
+    /* ─── Final CTA ─── */
+    .final-cta {
+      background: linear-gradient(135deg, var(--primary), #7d88ff);
+      color: white;
+      padding: 80px 0;
+      text-align: center;
+    }
+    .final-cta h2 { color: white; font-size: clamp(28px, 4vw, 40px); margin-bottom: 14px; }
+    .final-cta p { font-size: 17px; opacity: 0.9; margin-bottom: 28px; max-width: 560px; margin-left: auto; margin-right: auto; }
+    .final-cta .btn { background: white; color: var(--navy); }
+    .final-cta .btn:hover { background: rgba(255,255,255,0.9); transform: translateY(-1px); }
+    .final-cta .meta { margin-top: 16px; font-size: 13px; opacity: 0.85; }
+
+    /* ─── Footer ─── */
+    footer {
+      background: var(--navy);
+      color: rgba(255,255,255,0.6);
+      padding: 56px 0 32px;
+      font-size: 14px;
+    }
+    footer .container { display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr; gap: 32px; margin-bottom: 40px; }
+    @media (max-width: 720px) { footer .container { grid-template-columns: 1fr 1fr; } }
+    footer h4 { color: white; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; font-weight: 700; }
+    footer .brand { color: white; }
+    footer .brand-bell { background: linear-gradient(135deg, var(--primary), #7d88ff); }
+    footer ul { list-style: none; padding: 0; margin: 0; }
+    footer ul li { margin-bottom: 8px; }
+    footer ul a { color: rgba(255,255,255,0.6); transition: color 0.15s; }
+    footer ul a:hover { color: white; }
+    footer .copyright {
+      border-top: 1px solid rgba(255,255,255,0.1);
+      padding-top: 24px;
+      text-align: center;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ─── NAV ─── -->
+  <nav class="site-nav">
+    <div class="container">
+      <a href="#" class="brand"><span class="brand-bell">🔔</span> DealNotify</a>
+      <ul>
+        <li><a href="#compare">Compare</a></li>
+        <li><a href="#how-it-works">How it works</a></li>
+        <li><a href="#pricing">Pricing</a></li>
+        <li><a href="#faq">FAQ</a></li>
+      </ul>
+      <div class="nav-cta">
+        <a href="/login" class="btn btn-ghost">Log in</a>
+        <a href="/signup" class="btn btn-primary">Try free</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ─── HERO ─── -->
+  <section class="hero">
+    <div class="container">
+      <div class="grid">
+        <div>
+          <span class="eyebrow"><span class="dot"></span> New: cross-retailer Compare</span>
+          <h1>See the cheaper price <span class="accent">before you click Buy.</span></h1>
+          <p class="lead">DealNotify scans Walmart, Target, Best Buy, Costco, and eBay while you shop on Amazon. The cheaper price shows up automatically — no extra tabs, no hunting.</p>
+          <div class="hero-ctas">
+            <a href="/signup" class="btn btn-primary btn-lg">Start free — 30 days, no card</a>
+            <a href="#install" class="btn btn-secondary btn-lg">Add to Chrome →</a>
+          </div>
+          <div class="hero-meta">
+            <span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+              Free for 30 days
+            </span>
+            <span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+              No credit card
+            </span>
+            <span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+              Cancel anytime
+            </span>
+          </div>
+        </div>
+
+        <!-- ─── Compare panel mockup (Walmart → Costco motor-oil example) ─── -->
+        <div class="panel-mockup" role="img" aria-label="DealNotify comparison panel showing Mobil 1 motor oil $9 cheaper at Costco than Walmart">
+          <div class="panel-mockup__bg">
+            <span style="font-weight:600;color:#0071dc;">walmart.com</span>
+            <div class="panel-mockup__url">/ip/Mobil-1-High-Mileage-Full-Synthetic-Motor-Oil-5W-30-5-Quart-Pack-of-3</div>
+          </div>
+          <div class="panel-product">
+            <div class="panel-product__img">M1</div>
+            <div>
+              <div class="panel-product__brand">Mobil 1</div>
+              <div class="panel-product__title">High Mileage Full Synthetic Motor Oil 5W-30, 5 Qt (Pack of 3)</div>
+            </div>
+          </div>
+
+          <div class="panel-header">
+            <span class="panel-header__brand">🔔 DealNotify</span>
+            <span class="panel-header__close">✕</span>
+          </div>
+          <div class="panel-tabs">
+            <span class="panel-tab active">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+              Compare
+            </span>
+            <span class="panel-tab">🔔 Price Alert</span>
+            <span class="panel-tab">📦 Restock</span>
+          </div>
+
+          <div class="panel-row">
+            <span class="panel-row__retailer">WALMART</span>
+            <span class="panel-row__price strike">$74.88</span>
+          </div>
+
+          <div class="panel-best">
+            <div class="panel-best__top">
+              <div class="panel-best__retailer-wrap">
+                <span class="panel-best__retailer">COSTCO</span>
+                <span class="panel-best__badge">Best price</span>
+              </div>
+              <div>
+                <span class="panel-best__price">$39.49</span>
+                <span class="panel-best__savings">Save $35.39 (47%)</span>
+              </div>
+            </div>
+            <button class="panel-best__cta">View at Costco →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── TRUST STRIP ─── -->
+  <div class="trust">
+    <div class="container">
+      <div class="trust__label">Works on every major retailer</div>
+      <div class="trust__logos">
+        <span>amazon</span>
+        <span>walmart</span>
+        <span>target</span>
+        <span>Best Buy</span>
+        <span>costco</span>
+        <span>ebay</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── COMPARE DEEP-DIVE ─── -->
+  <section class="s" id="compare">
+    <div class="container">
+      <div class="s__head">
+        <span class="s__eyebrow">Centerpiece</span>
+        <h2 class="s__title">Compare prices in real time, automatically</h2>
+        <p class="s__sub">Open any product on Amazon. DealNotify silently checks every other major retailer and shows you if it's cheaper somewhere else.</p>
+      </div>
+
+      <div class="compare-grid">
+        <div class="feature-card">
+          <div class="feature-card__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          </div>
+          <h3>Sees what you're looking at</h3>
+          <p>DealNotify reads the product you're on — brand, model, specs — and finds the same item at every other retailer we support.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-card__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          </div>
+          <h3>Compares 6 retailers in seconds</h3>
+          <p>Walmart. Target. Best Buy. Costco. eBay. Amazon. All checked in parallel. Results show up before you can finish reading the product description.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-card__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
+          </div>
+          <h3>Shows you the best deal</h3>
+          <p>If it's cheaper somewhere else, you'll see the savings amount, the retailer, and a direct link to buy. If it's not, we tell you straight up.</p>
+        </div>
+      </div>
+
+      <div class="compare-hero-shot">
+        <h3>Mobil 1 Motor Oil — caught $35 cheaper at Costco</h3>
+        <p>A real comparison from a real Walmart product page.</p>
+        <div class="multi-retailer-stack">
+          <div class="multi-retailer-stack__row">
+            <span class="multi-retailer-stack__brand">WALMART</span>
+            <span class="multi-retailer-stack__price">$74.88</span>
+            <span></span>
+          </div>
+          <div class="multi-retailer-stack__row best">
+            <span class="multi-retailer-stack__brand">COSTCO</span>
+            <span class="multi-retailer-stack__price">$39.49</span>
+            <span class="multi-retailer-stack__tag">Save $35.39</span>
+          </div>
+          <div class="multi-retailer-stack__row">
+            <span class="multi-retailer-stack__brand">TARGET</span>
+            <span class="multi-retailer-stack__price">$78.99</span>
+            <span></span>
+          </div>
+          <div class="multi-retailer-stack__row">
+            <span class="multi-retailer-stack__brand">AMAZON</span>
+            <span class="multi-retailer-stack__price">$71.40</span>
+            <span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── ALERTS (secondary) ─── -->
+  <section class="s" style="background:var(--bg-soft);">
+    <div class="container">
+      <div class="s__head">
+        <span class="s__eyebrow">Plus</span>
+        <h2 class="s__title">And when the price still isn't right? Track it.</h2>
+        <p class="s__sub">Set a target price and we'll watch it 24/7. The moment it hits, you get an email — usually within minutes.</p>
+      </div>
+
+      <div class="alerts-grid">
+        <div class="alert-card">
+          <div class="alert-card__icon">🔔</div>
+          <h3>Price drop alerts</h3>
+          <p>Set the price you want. We check every 2 hours (Pro) or 6 hours (Free). When it drops, you'll know within minutes — straight to your inbox.</p>
+        </div>
+        <div class="alert-card">
+          <div class="alert-card__icon">📦</div>
+          <h3>Restock alerts</h3>
+          <p>Out-of-stock item finally back? You'll be the first to know. Especially handy for the toy/console/holiday-gift drops you've been waiting on.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── HOW IT WORKS ─── -->
+  <section class="s" id="how-it-works">
+    <div class="container">
+      <div class="s__head">
+        <span class="s__eyebrow">Setup</span>
+        <h2 class="s__title">Live in 60 seconds</h2>
+        <p class="s__sub">No installs to configure. No browser extensions to fight with. Just visit a product page.</p>
+      </div>
+      <div class="steps">
+        <div class="step">
+          <div class="step__num">1</div>
+          <h3>Sign up free</h3>
+          <p>Create an account in 10 seconds — email or Google. No credit card.</p>
+        </div>
+        <div class="step">
+          <div class="step__num">2</div>
+          <h3>Visit a product page</h3>
+          <p>Open Amazon, Walmart, Target — wherever you shop. The Compare panel appears automatically.</p>
+        </div>
+        <div class="step">
+          <div class="step__num">3</div>
+          <h3>Save (or track)</h3>
+          <p>Click through to the cheaper retailer, or set a target price and we'll email you when it drops.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── PRICING ─── -->
+  <section class="s pricing" id="pricing">
+    <div class="container">
+      <div class="s__head">
+        <span class="s__eyebrow">Pricing</span>
+        <h2 class="s__title">Free to start. Pay nothing until you save more.</h2>
+        <p class="s__sub">Most users save $4.99 their first week. Pro pays for itself.</p>
+      </div>
+
+      <div class="price-grid">
+        <div class="price-card">
+          <h3>Free Trial</h3>
+          <div class="tag-line">Perfect for a quick test drive</div>
+          <div class="price-amt">$0<span class="small"> / 30 days</span></div>
+          <ul>
+            <li>Track up to 3 products</li>
+            <li>Compare across all 6 retailers</li>
+            <li>Price drop &amp; restock alerts</li>
+            <li>Checks every 6 hours</li>
+            <li>No credit card required</li>
+          </ul>
+          <a href="/signup" class="btn btn-secondary">Start free trial</a>
+        </div>
+
+        <div class="price-card featured">
+          <h3>Pro</h3>
+          <div class="tag-line">For serious online shoppers</div>
+          <div class="price-amt">$4.99<span class="small"> / month</span></div>
+          <ul>
+            <li>Unlimited products</li>
+            <li>Compare across all 6 retailers</li>
+            <li>Priority price &amp; restock alerts</li>
+            <li>Checks every 2 hours</li>
+            <li>Cancel anytime</li>
+          </ul>
+          <a href="/signup?plan=pro" class="btn btn-primary">Get Pro</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── FAQ ─── -->
+  <section class="s" id="faq">
+    <div class="container">
+      <div class="s__head">
+        <span class="s__eyebrow">FAQ</span>
+        <h2 class="s__title">Common questions</h2>
+      </div>
+
+      <div class="faq">
+        <details>
+          <summary>How accurate is the price comparison?</summary>
+          <div class="faq-body">We use AI matching to make sure we compare the same product, not a knockoff or wrong size. If we can't confidently identify a match, we say so — we'd rather show you nothing than show you a wrong comparison.</div>
+        </details>
+        <details>
+          <summary>What retailers does Compare work on?</summary>
+          <div class="faq-body">Compare works as a target on Amazon, Walmart, Target, Best Buy, Costco, and eBay. As a source (the page you're on when you trigger Compare), Amazon and Walmart are fully supported, with eBay coming soon.</div>
+        </details>
+        <details>
+          <summary>Does Compare slow down my browsing?</summary>
+          <div class="faq-body">No. Comparisons run in the background; the panel only appears when results are ready (typically 2–5 seconds). If a retailer is slow, we skip it and show you the others — no spinner of doom.</div>
+        </details>
+        <details>
+          <summary>Is my browsing data tracked?</summary>
+          <div class="faq-body">Only the product URL is sent to our servers, only when you're on a supported retailer's product page. We don't see your other tabs, your search history, or anything outside the supported retailers. Read our <a href="/privacy" style="color:var(--primary);">privacy policy</a> for the details.</div>
+        </details>
+        <details>
+          <summary>Do you make money from the affiliate links?</summary>
+          <div class="faq-body">Yes — when you click "View at Walmart" and buy, we may earn a small commission. This never affects which retailer we show you. We always rank by lowest price, period.</div>
+        </details>
+        <details>
+          <summary>Can I sign up with Google?</summary>
+          <div class="faq-body">Yes. The Chrome extension supports Sign in with Google. Your email is auto-verified by Google, so you can start using Compare immediately — no email-verification round-trip required.</div>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── FINAL CTA ─── -->
+  <section class="final-cta" id="install">
+    <div class="container">
+      <h2>Stop overpaying. Today.</h2>
+      <p>30 days free. No credit card. Add to Chrome and the Compare panel appears the moment you land on your next product page.</p>
+      <a href="/signup" class="btn btn-lg">Start saving — it's free</a>
+      <div class="meta">Free for 30 days. $4.99/month after. Cancel anytime.</div>
+    </div>
+  </section>
+
+  <!-- ─── FOOTER ─── -->
+  <footer>
+    <div class="container">
+      <div>
+        <div class="brand"><span class="brand-bell">🔔</span> DealNotify</div>
+        <p style="margin-top:14px;font-size:13px;line-height:1.6;">Never overpay online. Compare prices instantly across 6 major retailers and track them automatically.</p>
+      </div>
+      <div>
+        <h4>Product</h4>
+        <ul>
+          <li><a href="#compare">Compare</a></li>
+          <li><a href="#how-it-works">How it works</a></li>
+          <li><a href="#pricing">Pricing</a></li>
+          <li><a href="/dashboard">Dashboard</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Resources</h4>
+        <ul>
+          <li><a href="/blog.html">Blog</a></li>
+          <li><a href="#faq">FAQ</a></li>
+          <li><a href="/privacy">Privacy</a></li>
+          <li><a href="/terms">Terms</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Get in touch</h4>
+        <ul>
+          <li><a href="mailto:hello@dealnotify.co">hello@dealnotify.co</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="container copyright">
+      &copy; 2026 DealNotify. All rights reserved.
+    </div>
+  </footer>
+
+</body>
+</html>
